@@ -1,9 +1,14 @@
 from pathlib import Path
+from typing import List
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+
+from src.core.domain.models import POI, Coordinates, Itinerary, TimeWindow
+from src.core.solvers.optw import OPTWSolver
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -17,6 +22,25 @@ app = FastAPI(
 static_dir = BASE_DIR / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+solver = OPTWSolver()
+
+
+class OptimizeRequest(BaseModel):
+    start_location: Coordinates
+    end_location: Coordinates
+    window: TimeWindow
+    candidates: List[POI]
+
+
+@app.post("/api/trip/optimize", response_model=Itinerary)
+def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
+    return solver.solve(
+        start_location=req.start_location,
+        end_location=req.end_location,
+        window=req.window,
+        candidates=req.candidates,
+    )
 
 
 @app.get("/health")
