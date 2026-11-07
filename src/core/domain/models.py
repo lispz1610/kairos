@@ -83,6 +83,7 @@ class TripDay(BaseModel):
     base_accommodation: Accommodation
     custom_accommodation: Optional[Accommodation] = None
     previous_day_accommodation: Optional[Accommodation] = None
+    include_luggage_dropoff: bool = False
     availability_window: TimeWindow = Field(
         default_factory=lambda: TimeWindow(start_time=time(9, 0), end_time=time(21, 0))
     )
@@ -197,6 +198,8 @@ class CurationList(BaseModel):
 class Trip(BaseModel):
     id: str
     title: str
+    travelers: int = 1
+    notes: Optional[str] = None
     stages: list[TripStage] = Field(default_factory=list)
     connections: list[InterCityConnection] = Field(default_factory=list)
     preferences: PreferencesProfile = Field(default_factory=PreferencesProfile)

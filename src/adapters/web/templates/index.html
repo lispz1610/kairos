@@ -72,7 +72,7 @@
       overflow: hidden;
     }
     .sidebar {
-      width: 480px;
+      width: 490px;
       background: var(--surface);
       border-right: 1px solid var(--surface-border);
       display: flex;
@@ -184,6 +184,16 @@
       padding: 0.5rem 0.75rem;
       font-size: 0.85rem;
     }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.4rem;
+      font-size: 0.85rem;
+    }
+    .slider-row input[type=range] {
+      width: 140px;
+    }
     /* Modal */
     .modal-overlay {
       display: none;
@@ -249,6 +259,7 @@
       <span style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted); margin-left: 0.5rem;">Traçador Dinâmico</span>
     </div>
     <div class="header-actions">
+      <button class="btn-secondary" id="btnImportLinkModal">🔗 Importar Link / Texto</button>
       <button class="btn-secondary" id="btnExportJson">💾 Backup JSON</button>
       <button class="btn-secondary" id="btnImportJson">📂 Restaurar</button>
       <button id="btnExportMarkdown">📝 Exportar Markdown</button>
@@ -306,9 +317,49 @@
             <span class="card-label">Valor Estimado Diária:</span>
             <span id="hotelDailyRate">R$ 350,00</span>
           </div>
+          <div class="card-row" id="luggageOptionRow" style="display: none; margin-top: 0.5rem;">
+            <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+              <input type="checkbox" id="chkLuggageStop" /> Parada para malas no novo hotel à tarde
+            </label>
+          </div>
           <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
             <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnChangeHotel">Alterar Hotel Deste Dia</button>
             <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnResetBaseHotel">Usar Hotel Padrão</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Perfil de Preferências (0 a 10) -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Perfil de Preferência (0 a 10)</span>
+        </div>
+        <div class="slider-row">
+          <span>☕ Coffee Lover:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngCoffee" value="8" />
+            <span id="valCoffee" style="font-weight: 600; width: 20px; display: inline-block;">8</span>
+          </div>
+        </div>
+        <div class="slider-row">
+          <span>🍷 Wine Lover:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngWine" value="4" />
+            <span id="valWine" style="font-weight: 600; width: 20px; display: inline-block;">4</span>
+          </div>
+        </div>
+        <div class="slider-row">
+          <span>🏛️ Museum Lover:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngMuseum" value="9" />
+            <span id="valMuseum" style="font-weight: 600; width: 20px; display: inline-block;">9</span>
+          </div>
+        </div>
+        <div class="slider-row">
+          <span>🌳 Nature Lover:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngNature" value="5" />
+            <span id="valNature" style="font-weight: 600; width: 20px; display: inline-block;">5</span>
           </div>
         </div>
       </div>
@@ -349,7 +400,7 @@
     </section>
   </main>
 
-  <!-- Modal Genérico / Markdown / Ripple Shift -->
+  <!-- Modal Genérico / Markdown / Ripple Shift / Parser -->
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal">
       <div class="modal-header">
@@ -369,17 +420,17 @@
   <input type="file" id="jsonFileInput" accept=".json" style="display: none;" />
 
   <script>
-    // Inicialização do estado Client-First via LocalStorage
     const STORAGE_KEY = 'kairos_trip_state_v1';
 
     const defaultState = {
       id: "trip-sp-lima",
       title: "Viagem Cultural São Paulo e Lima",
+      travelers: 1,
       preferences: {
         intensities: {
           "Coffee Lover": 8.0,
-          "Museum Lover": 9.0,
           "Wine Lover": 4.0,
+          "Museum Lover": 9.0,
           "Nature Lover": 5.0
         }
       },
@@ -460,7 +511,8 @@
             stage.days.push({
               date: dateStr,
               base_accommodation: stage.base_accommodation,
-              custom_accommodation: null
+              custom_accommodation: null,
+              include_luggage_dropoff: false
             });
           }
         }
@@ -468,7 +520,7 @@
       return state;
     }
 
-    // Inicialização do Mapa Leaflet
+    // Mapa Leaflet
     const map = L.map('map').setView([-23.557, -46.661], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap'
@@ -484,7 +536,18 @@
       document.getElementById('cityDates').innerText = `${stage.start_date} – ${stage.end_date}`;
       document.getElementById('totalStageDays').innerText = `${stage.days.length} dias`;
 
-      // Renderiza pílulas de dias
+      // Sliders
+      const p = tripState.preferences?.intensities || {};
+      ['Coffee', 'Wine', 'Museum', 'Nature'].forEach(k => {
+        const key = `${k} Lover`;
+        const val = p[key] ?? 5;
+        const slider = document.getElementById(`rng${k}`);
+        const label = document.getElementById(`val${k}`);
+        if (slider) slider.value = val;
+        if (label) label.innerText = val;
+      });
+
+      // Pílulas de dias
       const daysNav = document.getElementById('daysNav');
       daysNav.innerHTML = '';
       stage.days.forEach((day, idx) => {
@@ -498,7 +561,7 @@
         daysNav.appendChild(pill);
       });
 
-      // Renderiza Hospedagem do dia ativo
+      // Hospedagem do dia ativo
       const currentDay = stage.days[tripState.currentDayIndex] || stage.days[0];
       const prevDay = tripState.currentDayIndex > 0 ? stage.days[tripState.currentDayIndex - 1] : null;
 
@@ -515,37 +578,48 @@
       const badge = document.getElementById('hotelTransitionBadge');
       badge.style.display = isTransition ? 'inline-flex' : 'none';
 
-      // Atualiza orçamento
+      const luggageRow = document.getElementById('luggageOptionRow');
+      luggageRow.style.display = isTransition ? 'flex' : 'none';
+      const chkLuggage = document.getElementById('chkLuggageStop');
+      chkLuggage.checked = !!currentDay.include_luggage_dropoff;
+      chkLuggage.onchange = (e) => {
+        currentDay.include_luggage_dropoff = e.target.checked;
+        saveState();
+        renderTimeline(currentDay, departureHotel, returnHotel);
+      };
+
       updateBudget();
-
-      // Renderiza Timeline do dia
       renderTimeline(currentDay, departureHotel, returnHotel);
-
-      // Atualiza mapa
-      updateMapMarkers(departureHotel, returnHotel);
+      updateMapMarkers(departureHotel, returnHotel, currentDay);
 
       saveState();
     }
 
-    function updateBudget() {
-      let totalHotel = 0;
-      let totalDays = 0;
-      tripState.stages.forEach(st => {
-        st.days.forEach(d => {
-          const h = d.custom_accommodation || st.base_accommodation;
-          totalHotel += Number(h.real_daily_rate || 350);
-          totalDays++;
+    async function updateBudget() {
+      try {
+        const resp = await fetch('/api/trip/budget', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trip: tripState, food_profile: 'moderate' })
         });
-      });
-      const foodEst = totalDays * 180.0; // Padrão moderado
-      document.getElementById('stageHotelCost').innerText = `R$ ${totalHotel.toFixed(2)}`;
-      document.getElementById('stageFoodCost').innerText = `R$ ${foodEst.toFixed(2)}`;
-      document.getElementById('totalTripCost').innerText = `R$ ${(totalHotel + foodEst).toFixed(2)}`;
+        if (resp.ok) {
+          const b = await resp.json();
+          document.getElementById('stageHotelCost').innerText = `R$ ${b.total_accommodation_cost.toFixed(2)}`;
+          document.getElementById('stageFoodCost').innerText = `R$ ${b.total_dining_cost.toFixed(2)}`;
+          document.getElementById('totalTripCost').innerText = `R$ ${b.total_trip_cost.toFixed(2)}`;
+        }
+      } catch (e) {
+        console.warn("Falha ao calcular orçamento no backend", e);
+      }
     }
 
     function renderTimeline(day, depHotel, retHotel) {
       const timeline = document.getElementById('dailyTimeline');
-      timeline.innerHTML = `
+      const p = tripState.preferences?.intensities || {};
+      const coffeeLover = (p['Coffee Lover'] ?? 0) >= 5;
+      const wineLover = (p['Wine Lover'] ?? 0) >= 5;
+
+      let itemsHtml = `
         <div class="timeline-item">
           <div class="timeline-dot" style="background: #10b981;"></div>
           <div class="timeline-content">
@@ -553,41 +627,95 @@
             <div class="card-label">${depHotel.name}</div>
           </div>
         </div>
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <div class="timeline-content">
-            <strong>10:00 — Museu de Arte de São Paulo (MASP)</strong>
-            <div class="card-label">Permanência: 120 min | Pontuação de Utilidade: 9.5</div>
+      `;
+
+      if (day.itinerary && day.itinerary.stops && day.itinerary.stops.length > 0) {
+        day.itinerary.stops.forEach(stop => {
+          itemsHtml += `
+            <div class="timeline-item">
+              <div class="timeline-dot"></div>
+              <div class="timeline-content">
+                <strong>${stop.arrival_time} – ${stop.departure_time}: ${stop.poi.name}</strong>
+                <div class="card-label">Permanência: ${stop.poi.stay_duration_minutes} min | Utilidade: ${stop.poi.utility_score}</div>
+              </div>
+            </div>
+          `;
+        });
+      } else {
+        itemsHtml += `
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <strong>10:00 — Atração Principal da Manhã</strong>
+              <div class="card-label">Clique em "Otimizar Rota" para preencher via OPTW</div>
+            </div>
           </div>
-        </div>
+        `;
+      }
+
+      // Slot Almoço
+      itemsHtml += `
         <div class="timeline-item">
           <div class="timeline-dot" style="background: #f59e0b;"></div>
           <div class="timeline-content">
             <strong>12:30 — Almoço (Slot Gastronômico)</strong>
-            <div class="card-label">Sugestão: A Baianeira MASP (4.6 ★, $$)</div>
+            <div class="card-label">Recomendação contextual próxima à atração</div>
           </div>
         </div>
-        <div class="timeline-item">
-          <div class="timeline-dot" style="background: #38bdf8;"></div>
-          <div class="timeline-content">
-            <strong>15:30 — Pausa para Café (Coffee Lover)</strong>
-            <div class="card-label">Sugestão: Coffee Lab / Por um Punhado de Dólares</div>
+      `;
+
+      // Pausa para café se coffee lover >= 5
+      if (coffeeLover) {
+        itemsHtml += `
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background: #38bdf8;"></div>
+            <div class="timeline-content">
+              <strong>15:30 — Pausa para Café (Coffee Lover)</strong>
+              <div class="card-label">Cafeteria de especialidade próxima</div>
+            </div>
           </div>
-        </div>
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <div class="timeline-content">
-            <strong>16:45 — Parque Ibirapuera</strong>
-            <div class="card-label">Permanência: 90 min | Pontuação de Utilidade: 8.8</div>
+        `;
+      }
+
+      // Parada de malas se solicitada
+      if (day.is_transition_day && day.include_luggage_dropoff) {
+        itemsHtml += `
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background: #eab308;"></div>
+            <div class="timeline-content">
+              <strong>16:00 — Check-in e Parada de Malas</strong>
+              <div class="card-label">${retHotel.name}</div>
+            </div>
           </div>
-        </div>
+        `;
+      }
+
+      // Wine bar se wine lover >= 5
+      if (wineLover) {
+        itemsHtml += `
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background: #a855f7;"></div>
+            <div class="timeline-content">
+              <strong>18:00 — Degustação / Wine Bar (Wine Lover)</strong>
+              <div class="card-label">Enoteca ou wine bar selecionado</div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Jantar
+      itemsHtml += `
         <div class="timeline-item">
           <div class="timeline-dot" style="background: #8b5cf6;"></div>
           <div class="timeline-content">
             <strong>19:30 — Jantar (Slot Gastronômico)</strong>
-            <div class="card-label">Sugestão: D.O.M. (Michelin 2★, $$$$)</div>
+            <div class="card-label">Restaurante premiado/ranqueado</div>
           </div>
         </div>
+      `;
+
+      // Retorno
+      itemsHtml += `
         <div class="timeline-item">
           <div class="timeline-dot" style="background: #10b981;"></div>
           <div class="timeline-content">
@@ -596,23 +724,182 @@
           </div>
         </div>
       `;
+
+      timeline.innerHTML = itemsHtml;
     }
 
-    function updateMapMarkers(depHotel, retHotel) {
+    function updateMapMarkers(depHotel, retHotel, currentDay) {
       routeLayer.clearLayers();
-      if (depHotel && depHotel.location) {
+      if (depHotel?.location) {
         L.marker([depHotel.location.latitude, depHotel.location.longitude])
-          .bindPopup(`<b>Partida:</b> ${depHotel.name}`)
-          .addTo(routeLayer);
+          .bindPopup(`<b>Partida:</b> ${depHotel.name}`).addTo(routeLayer);
       }
-      if (retHotel && retHotel.location) {
+      if (retHotel?.location) {
         L.marker([retHotel.location.latitude, retHotel.location.longitude])
-          .bindPopup(`<b>Retorno:</b> ${retHotel.name}`)
-          .addTo(routeLayer);
+          .bindPopup(`<b>Retorno:</b> ${retHotel.name}`).addTo(routeLayer);
+      }
+      if (currentDay.itinerary?.stops) {
+        currentDay.itinerary.stops.forEach(s => {
+          L.marker([s.poi.location.latitude, s.poi.location.longitude])
+            .bindPopup(`<b>${s.poi.name}</b><br>${s.arrival_time} - ${s.departure_time}`)
+            .addTo(routeLayer);
+        });
       }
     }
 
-    // Ações de alteração de hotel
+    // Handlers dos Sliders de Preferência
+    ['Coffee', 'Wine', 'Museum', 'Nature'].forEach(k => {
+      const slider = document.getElementById(`rng${k}`);
+      if (slider) {
+        slider.oninput = (e) => {
+          const val = parseFloat(e.target.value);
+          document.getElementById(`val${k}`).innerText = val;
+          if (!tripState.preferences) tripState.preferences = { intensities: {} };
+          tripState.preferences.intensities[`${k} Lover`] = val;
+          saveState();
+          renderUI();
+        };
+      }
+    });
+
+    // Ripple Shift: Ajuste de Dias com Confirmação em Modal
+    async function handleRippleShift(delta) {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const resp = await fetch('/api/trip/ripple-shift/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trip: tripState, target_stage_id: stage.id, delta_days: delta })
+      });
+      if (!resp.ok) {
+        alert("Não foi possível alterar a duração da etapa.");
+        return;
+      }
+      const preview = await resp.json();
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = 'Confirmação de Deslocamento em Cascata';
+      document.getElementById('modalBody').innerHTML = `
+        <p>Você está alterando a permanência em <strong>${stage.city_name}</strong> em <strong>${delta > 0 ? '+' + delta : delta} dia(s)</strong>.</p>
+        <div class="card" style="margin-top: 1rem;">
+          <div class="card-row"><span>Nova data de término de ${stage.city_name}:</span><strong>${preview.new_target_end}</strong></div>
+          ${preview.shifted_stages.map(s => `
+            <div class="card-row" style="margin-top: 0.5rem; border-top: 1px solid var(--surface-border); padding-top: 0.5rem;">
+              <span>${s.city_name}:</span>
+              <strong>${s.new_start} a ${s.new_end} (${s.preserved_days_count} dias preservados)</strong>
+            </div>
+          `).join('')}
+          ${preview.shifted_connections.map(c => `
+            <div class="card-row" style="margin-top: 0.5rem; color: var(--accent);">
+              <span>Conexão Interurbana remarcada para:</span>
+              <strong>${c.new_departure}</strong>
+            </div>
+          `).join('')}
+        </div>
+        <p style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-muted);">
+          Os roteiros das cidades seguintes continuarão preservados intactos. Deseja confirmar?
+        </p>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('modalConfirmBtn').onclick = async () => {
+        const applyResp = await fetch('/api/trip/ripple-shift/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trip: tripState, target_stage_id: stage.id, delta_days: delta })
+        });
+        if (applyResp.ok) {
+          tripState = await applyResp.json();
+          modal.classList.remove('active');
+          renderUI();
+        }
+      };
+    }
+
+    document.getElementById('btnIncDays').onclick = () => handleRippleShift(1);
+    document.getElementById('btnDecDays').onclick = () => handleRippleShift(-1);
+
+    // Otimizar Dia via OPTW
+    document.getElementById('btnOptimizeDay').onclick = async () => {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const currentDay = stage.days[tripState.currentDayIndex];
+      const prevDay = tripState.currentDayIndex > 0 ? stage.days[tripState.currentDayIndex - 1] : null;
+      const depHotel = prevDay ? (prevDay.custom_accommodation || stage.base_accommodation) : (currentDay.custom_accommodation || stage.base_accommodation);
+      const retHotel = currentDay.custom_accommodation || stage.base_accommodation;
+
+      // Busca POIs para a cidade
+      const placesResp = await fetch(`/api/places/search?query=a&city_name=${encodeURIComponent(stage.city_name)}`);
+      const places = placesResp.ok ? await placesResp.json() : [];
+
+      const optResp = await fetch('/api/trip/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_location: depHotel.location,
+          end_location: retHotel.location,
+          window: { start_time: "09:00:00", end_time: "21:00:00" },
+          candidates: places,
+          preferences: tripState.preferences
+        })
+      });
+
+      if (optResp.ok) {
+        currentDay.itinerary = await optResp.json();
+        saveState();
+        renderUI();
+        alert('Roteiro otimizado com sucesso!');
+      }
+    };
+
+    // Modal Importar Link
+    document.getElementById('btnImportLinkModal').onclick = () => {
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = 'Importar Recomendações de Link ou Texto';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <label style="font-size: 0.85rem;">Cole a URL de um artigo/guia turístico:</label>
+          <input type="text" id="importUrlInput" placeholder="https://exemplo.com/guia-sp" style="padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+          <label style="font-size: 0.85rem; margin-top: 0.5rem;">Ou cole diretamente o texto:</label>
+          <textarea id="importTextInput" rows="4" placeholder="Cole trechos de recomendações aqui..." style="padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;"></textarea>
+          <button id="btnFetchPlaces" style="margin-top: 0.5rem;">🔍 Extrair Estabelecimentos</button>
+          <div id="importResultsContainer" style="margin-top: 0.5rem;"></div>
+        </div>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('btnFetchPlaces').onclick = async () => {
+        const url = document.getElementById('importUrlInput').value.trim();
+        const text = document.getElementById('importTextInput').value.trim();
+        const stage = tripState.stages[tripState.currentStageIndex];
+        const resCont = document.getElementById('importResultsContainer');
+        resCont.innerHTML = '<em>Processando conteúdo com proteção SSRF...</em>';
+
+        try {
+          const resp = await fetch('/api/curation/import-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url || null, text: text || null, city_name: stage.city_name })
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            resCont.innerHTML = `<span style="color: #ef4444;">Erro: ${data.detail || 'Falha na importação'}</span>`;
+            return;
+          }
+          if (data.candidates && data.candidates.length > 0) {
+            resCont.innerHTML = `<strong>${data.candidates.length} locais encontrados:</strong>` +
+              data.candidates.map(c => `
+                <div class="card" style="margin-top: 0.3rem;">
+                  <strong>${c.name}</strong> (${c.category}) — Utilidade: ${c.utility_score}
+                </div>
+              `).join('');
+          } else {
+            resCont.innerHTML = '<span>Nenhum local correspondente encontrado.</span>';
+          }
+        } catch (err) {
+          resCont.innerHTML = `<span style="color: #ef4444;">Erro de conexão.</span>`;
+        }
+      };
+    };
+
+    // Alterar hotel
     document.getElementById('btnChangeHotel').onclick = () => {
       const stage = tripState.stages[tripState.currentStageIndex];
       const currentDay = stage.days[tripState.currentDayIndex];

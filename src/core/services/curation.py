@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from src.core.domain.models import POI, Coordinates, CurationList, TimeWindow
+from src.core.domain.models import POI, Coordinates, CurationList
 
 # Catálogo estático curado para modo Offline Replay (São Paulo e Lima) — ADR 0005
 MOCK_CURATED_CATALOG: Dict[str, List[CurationList]] = {
@@ -188,19 +188,5 @@ class CurationService:
                 for item in cl.items:
                     if query_norm in item.name.lower() or query_norm in item.category.lower():
                         results.append(item)
-
-        # Fallback genérico caso nada seja encontrado
-        if not results:
-            from datetime import time
-            results.append(
-                POI(
-                    id=f"custom-place-{abs(hash(query))}",
-                    name=query,
-                    location=Coordinates(latitude=-23.55, longitude=-46.63),
-                    window=TimeWindow(start_time=time(9, 0), end_time=time(20, 0)),
-                    category="custom",
-                    utility_score=7.0,
-                )
-            )
 
         return results[:5]

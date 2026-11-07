@@ -15,10 +15,17 @@ PRICE_TIER_ESTIMATES: Dict[str, float] = {
     "$$$$": 380.0,
 }
 
+HOTEL_TIER_DEFAULTS: Dict[str, float] = {
+    "$": 200.0,
+    "$$": 450.0,
+    "$$$": 750.0,
+    "$$$$": 1000.0,
+}
+
 DAILY_FOOD_PROFILES: Dict[str, float] = {
     "budget": 80.0,
     "moderate": 180.0,
-    "fine_dining": 450.0,
+    "fine_dining": 400.0,
 }
 
 
@@ -50,7 +57,6 @@ class DiningService:
 
         def score_candidate(poi: POI) -> float:
             distance = haversine_distance_km(reference_location, poi.location)
-            # Menor distância com bônus de premiação e nota
             proximity_score = 1.0 / max(0.1, distance)
             award_bonus = 2.0 if poi.awards else 0.0
             rating_bonus = (poi.rating or 4.0) * 0.5
@@ -100,36 +106,49 @@ class DiningService:
     ) -> BudgetSummary:
         daily_food_rate = DAILY_FOOD_PROFILES.get(food_profile.lower(), 180.0)
 
-        total_hotel = 0.0
+        total_accommodation = 0.0
         total_dining = 0.0
         breakdowns: Dict[str, StageBudgetBreakdown] = {}
 
         for stage in trip.stages:
-            stage_hotel = 0.0
+            stage_acc_cost = 0.0
+            stage_dining_cost = 0.0
             stage_days = len(stage.days)
+
             for day in stage.days:
                 hotel = day.custom_accommodation or stage.base_accommodation
                 rate = (
                     hotel.real_daily_rate
                     if hotel.real_daily_rate is not None
-                    else 350.0
+                    else (
+                        day.effective_accommodation.real_daily_rate
+                        if day.effective_accommodation.real_daily_rate is not None
+                        else HOTEL_TIER_DEFAULTS.get(hotel.price_tier, 450.0)
+                    )
                 )
-                stage_hotel += rate
+                stage_acc_cost += rate
 
-            stage_dining = stage_days * daily_food_rate
-            total_hotel += stage_hotel
-            total_dining += stage_dining
+                # Soma o custo das refeições selecionadas no dia ou usa perfil
+                day_dining = sum(
+                    slot.estimated_cost
+                    for slot in day.meal_slots
+                    if slot.estimated_cost is not None
+                )
+                stage_dining_cost += day_dining if day_dining > 0 else daily_food_rate
+
+            total_accommodation += stage_acc_cost
+            total_dining += stage_dining_cost
 
             breakdowns[stage.id] = StageBudgetBreakdown(
-                accommodation_cost=stage_hotel,
-                dining_cost=stage_dining,
-                total_cost=stage_hotel + stage_dining,
+                accommodation_cost=stage_acc_cost,
+                dining_cost=stage_dining_cost,
+                total_cost=stage_acc_cost + stage_dining_cost,
                 days_count=stage_days,
             )
 
         return BudgetSummary(
-            total_accommodation_cost=total_hotel,
+            total_accommodation_cost=total_accommodation,
             total_dining_cost=total_dining,
-            total_trip_cost=total_hotel + total_dining,
+            total_trip_cost=total_accommodation + total_dining,
             stage_breakdowns=breakdowns,
         )

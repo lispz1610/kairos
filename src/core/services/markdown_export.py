@@ -32,8 +32,12 @@ class MarkdownExportService:
             "",
             "> **Kairos Travel Guide** — Itinerário completo gerado dinamicamente com curadoria.",
             "",
+            f"- 👥 **Viajantes**: {trip.travelers} pessoa(s)",
+            "",
             "### 📌 Resumo da Jornada",
         ]
+        if trip.notes:
+            lines.insert(5, f"- 📝 **Notas Pessoais**: {trip.notes}")
         for st in trip.stages:
             s_date = st.start_date.strftime("%d/%m/%Y")
             e_date = st.end_date.strftime("%d/%m/%Y")
@@ -106,7 +110,14 @@ class MarkdownExportService:
             arr = stop.arrival_time.strftime("%H:%M")
             dep = stop.departure_time.strftime("%H:%M")
             dur = stop.poi.stay_duration_minutes
-            result.append(f"  - `{arr} – {dep}`: **{stop.poi.name}** ({dur} min){awards_str}")
+            transit = (
+                f" [Deslocamento: {stop.transit_duration_minutes} min]"
+                if stop.transit_duration_minutes > 0
+                else ""
+            )
+            result.append(
+                f"  - `{arr} – {dep}`: **{stop.poi.name}** ({dur} min){transit}{awards_str}"
+            )
         return result
 
     def _render_meal_slots(self, meal_slots: List[MealSlot]) -> List[str]:

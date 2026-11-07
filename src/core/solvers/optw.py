@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import math
 from datetime import time
-from typing import Any, List, Optional
+from typing import List, Optional, Tuple
 
-from src.core.domain.models import POI, Coordinates, Itinerary, ItineraryStop, TimeWindow
+from src.core.domain.models import (
+    POI,
+    Coordinates,
+    Itinerary,
+    ItineraryStop,
+    PreferencesProfile,
+    TimeWindow,
+)
 
 
 def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
@@ -44,7 +51,8 @@ def time_to_minutes(t: time) -> int:
 class OPTWSolver:
     """Solver heurístico para Orienteering Problem with Time Windows (OPTW).
 
-    Maximiza utilidade acumulada respeitando horários de funcionamento e janela diária.
+    Maximiza utilidade acumulada respeitando horários de funcionamento,
+    janela diária e slots reservados para refeições.
     """
 
     def __init__(self, transit_speed_kmh: float = 25.0) -> None:
@@ -56,19 +64,14 @@ class OPTWSolver:
         end_location: Coordinates,
         window: TimeWindow,
         candidates: List[POI],
-        preferences: Optional[Any] = None,
+        preferences: Optional[PreferencesProfile] = None,
+        reserved_slots: Optional[List[TimeWindow]] = None,
     ) -> Itinerary:
         if not candidates:
             return Itinerary(stops=[], total_utility=0.0, total_duration_minutes=0)
 
-        # Se houver perfil de preferências, pondera a utilidade
-        from src.core.services.preferences import PreferencesService
-
-        effective_candidates = candidates
-        if preferences is not None:
-            effective_candidates = PreferencesService().apply_preference_weights(
-                candidates, preferences
-            )
+        effective_candidates = self._prepare_candidates(candidates, preferences)
+        reserved_ranges = self._convert_reserved_slots(reserved_slots)
 
         window_start_min = time_to_minutes(window.start_time)
         window_end_min = time_to_minutes(window.end_time)
@@ -80,72 +83,133 @@ class OPTWSolver:
         total_utility = 0.0
 
         while remaining_candidates:
-            best_candidate: Optional[POI] = None
-            best_score = -1.0
-            best_arrival_min = 0
-            best_departure_min = 0
-            best_transit_min = 0
-
-            for poi in remaining_candidates:
-                transit_min = estimate_transit_minutes(
-                    current_location, poi.location, self.transit_speed_kmh
-                )
-                arrival_min = current_time_min + transit_min
-
-                poi_open_min = time_to_minutes(poi.window.start_time)
-                poi_close_min = time_to_minutes(poi.window.end_time)
-
-                service_start_min = max(arrival_min, poi_open_min)
-                departure_min = service_start_min + poi.stay_duration_minutes
-
-                # Checagem de viabilidade do POI
-                if departure_min > poi_close_min:
-                    continue
-
-                # Checagem de retorno ao depósito final antes do término da janela
-                return_transit_min = estimate_transit_minutes(
-                    poi.location, end_location, self.transit_speed_kmh
-                )
-                if departure_min + return_transit_min > window_end_min:
-                    continue
-
-                wait_min = max(0, poi_open_min - arrival_min)
-                marginal_cost = transit_min + poi.stay_duration_minutes + wait_min
-                score = poi.utility_score / max(1.0, float(marginal_cost))
-
-                if score > best_score:
-                    best_score = score
-                    best_candidate = poi
-                    best_arrival_min = arrival_min
-                    best_departure_min = departure_min
-                    best_transit_min = transit_min
-
-            if best_candidate is None:
+            best = self._find_best_candidate(
+                current_location=current_location,
+                current_time_min=current_time_min,
+                end_location=end_location,
+                window_end_min=window_end_min,
+                candidates=remaining_candidates,
+                reserved_ranges=reserved_ranges,
+            )
+            if best is None:
                 break
 
+            poi, arr_min, dep_min, transit_min = best
             selected_stops.append(
                 ItineraryStop(
-                    poi=best_candidate,
-                    arrival_time=minutes_to_time(best_arrival_min),
-                    departure_time=minutes_to_time(best_departure_min),
-                    transit_duration_minutes=best_transit_min,
+                    poi=poi,
+                    arrival_time=minutes_to_time(arr_min),
+                    departure_time=minutes_to_time(dep_min),
+                    transit_duration_minutes=transit_min,
                 )
             )
-            total_utility += best_candidate.utility_score
-            current_location = best_candidate.location
-            current_time_min = best_departure_min
-            remaining_candidates.remove(best_candidate)
+            total_utility += poi.utility_score
+            current_location = poi.location
+            current_time_min = dep_min
+            remaining_candidates.remove(poi)
 
-        # Adiciona o retorno final ao cálculo da duração
-        final_transit_min = (
+        final_transit = (
             estimate_transit_minutes(current_location, end_location, self.transit_speed_kmh)
             if selected_stops
             else 0
         )
-        total_duration = (current_time_min + final_transit_min) - window_start_min
+        total_duration = (current_time_min + final_transit) - window_start_min
 
         return Itinerary(
             stops=selected_stops,
             total_utility=total_utility,
             total_duration_minutes=max(0, total_duration),
         )
+
+    def _prepare_candidates(
+        self, candidates: List[POI], preferences: Optional[PreferencesProfile]
+    ) -> List[POI]:
+        if preferences is not None:
+            from src.core.services.preferences import PreferencesService
+            return PreferencesService().apply_preference_weights(candidates, preferences)
+        return candidates
+
+    def _convert_reserved_slots(
+        self, reserved_slots: Optional[List[TimeWindow]]
+    ) -> List[Tuple[int, int]]:
+        if not reserved_slots:
+            return []
+        return [
+            (time_to_minutes(s.start_time), time_to_minutes(s.end_time))
+            for s in reserved_slots
+        ]
+
+    def _find_best_candidate(
+        self,
+        current_location: Coordinates,
+        current_time_min: int,
+        end_location: Coordinates,
+        window_end_min: int,
+        candidates: List[POI],
+        reserved_ranges: List[Tuple[int, int]],
+    ) -> Optional[Tuple[POI, int, int, int]]:
+        best_candidate: Optional[POI] = None
+        best_score = -1.0
+        best_arrival = 0
+        best_departure = 0
+        best_transit = 0
+
+        for poi in candidates:
+            transit_min = estimate_transit_minutes(
+                current_location, poi.location, self.transit_speed_kmh
+            )
+            arr_min = current_time_min + transit_min
+            poi_open = time_to_minutes(poi.window.start_time)
+            poi_close = time_to_minutes(poi.window.end_time)
+
+            srv_start = max(arr_min, poi_open)
+            dep_min = srv_start + poi.stay_duration_minutes
+
+            if not self._is_feasible(
+                dep_min=dep_min,
+                poi_close=poi_close,
+                poi_loc=poi.location,
+                end_loc=end_location,
+                window_end_min=window_end_min,
+                srv_start=srv_start,
+                reserved_ranges=reserved_ranges,
+            ):
+                continue
+
+            wait_min = max(0, poi_open - arr_min)
+            total_time = float(transit_min + poi.stay_duration_minutes + wait_min)
+            score = poi.utility_score / max(1.0, total_time)
+            if score > best_score:
+                best_score = score
+                best_candidate = poi
+                best_arrival = arr_min
+                best_departure = dep_min
+                best_transit = transit_min
+
+        if best_candidate is None:
+            return None
+        return (best_candidate, best_arrival, best_departure, best_transit)
+
+    def _is_feasible(
+        self,
+        dep_min: int,
+        poi_close: int,
+        poi_loc: Coordinates,
+        end_loc: Coordinates,
+        window_end_min: int,
+        srv_start: int,
+        reserved_ranges: List[Tuple[int, int]],
+    ) -> bool:
+        if dep_min > poi_close:
+            return False
+
+        ret_transit = estimate_transit_minutes(poi_loc, end_loc, self.transit_speed_kmh)
+        if dep_min + ret_transit > window_end_min:
+            return False
+
+        # Evita sobreposição com slots reservados de refeição
+        for r_start, r_end in reserved_ranges:
+            if not (dep_min <= r_start or srv_start >= r_end):
+                return False
+
+        return True
