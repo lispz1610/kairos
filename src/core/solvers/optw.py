@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from datetime import time
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from src.core.domain.models import POI, Coordinates, Itinerary, ItineraryStop, TimeWindow
 
@@ -56,16 +56,26 @@ class OPTWSolver:
         end_location: Coordinates,
         window: TimeWindow,
         candidates: List[POI],
+        preferences: Optional[Any] = None,
     ) -> Itinerary:
         if not candidates:
             return Itinerary(stops=[], total_utility=0.0, total_duration_minutes=0)
+
+        # Se houver perfil de preferências, pondera a utilidade
+        from src.core.services.preferences import PreferencesService
+
+        effective_candidates = candidates
+        if preferences is not None:
+            effective_candidates = PreferencesService().apply_preference_weights(
+                candidates, preferences
+            )
 
         window_start_min = time_to_minutes(window.start_time)
         window_end_min = time_to_minutes(window.end_time)
 
         current_location = start_location
         current_time_min = window_start_min
-        remaining_candidates = list(candidates)
+        remaining_candidates = list(effective_candidates)
         selected_stops: List[ItineraryStop] = []
         total_utility = 0.0
 

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -7,7 +7,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from src.core.domain.models import POI, Coordinates, Itinerary, TimeWindow, Trip
+from src.core.domain.models import (
+    POI,
+    Coordinates,
+    Itinerary,
+    PreferencesProfile,
+    TimeWindow,
+    Trip,
+)
 from src.core.services.dining_and_budget import BudgetSummary, DiningService
 from src.core.services.markdown_export import MarkdownExportService
 from src.core.services.schedule import RippleShiftPreview, ScheduleService
@@ -37,6 +44,7 @@ class OptimizeRequest(BaseModel):
     end_location: Coordinates
     window: TimeWindow
     candidates: List[POI]
+    preferences: Optional[PreferencesProfile] = None
 
 
 class RippleShiftRequest(BaseModel):
@@ -63,6 +71,7 @@ def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
         end_location=req.end_location,
         window=req.window,
         candidates=req.candidates,
+        preferences=req.preferences,
     )
 
 
