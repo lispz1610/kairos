@@ -7,7 +7,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from src.core.domain.models import POI, Coordinates, Itinerary, TimeWindow
+from src.core.domain.models import POI, Coordinates, Itinerary, TimeWindow, Trip
+from src.core.services.schedule import RippleShiftPreview, ScheduleService
 from src.core.solvers.optw import OPTWSolver
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -24,6 +25,7 @@ if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 solver = OPTWSolver()
+schedule_service = ScheduleService()
 
 
 class OptimizeRequest(BaseModel):
@@ -33,6 +35,12 @@ class OptimizeRequest(BaseModel):
     candidates: List[POI]
 
 
+class RippleShiftRequest(BaseModel):
+    trip: Trip
+    target_stage_id: str
+    delta_days: int
+
+
 @app.post("/api/trip/optimize", response_model=Itinerary)
 def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
     return solver.solve(
@@ -40,6 +48,24 @@ def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
         end_location=req.end_location,
         window=req.window,
         candidates=req.candidates,
+    )
+
+
+@app.post("/api/trip/ripple-shift/preview", response_model=RippleShiftPreview)
+def preview_ripple_shift(req: RippleShiftRequest) -> RippleShiftPreview:
+    return schedule_service.preview_ripple_shift(
+        trip=req.trip,
+        target_stage_id=req.target_stage_id,
+        delta_days=req.delta_days,
+    )
+
+
+@app.post("/api/trip/ripple-shift/apply", response_model=Trip)
+def apply_ripple_shift(req: RippleShiftRequest) -> Trip:
+    return schedule_service.apply_ripple_shift(
+        trip=req.trip,
+        target_stage_id=req.target_stage_id,
+        delta_days=req.delta_days,
     )
 
 
