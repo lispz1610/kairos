@@ -10,11 +10,13 @@ from pydantic import BaseModel
 from src.core.domain.models import (
     POI,
     Coordinates,
+    CurationList,
     Itinerary,
     PreferencesProfile,
     TimeWindow,
     Trip,
 )
+from src.core.services.curation import CurationService
 from src.core.services.dining_and_budget import BudgetSummary, DiningService
 from src.core.services.markdown_export import MarkdownExportService
 from src.core.services.schedule import RippleShiftPreview, ScheduleService
@@ -37,6 +39,7 @@ solver = OPTWSolver()
 schedule_service = ScheduleService()
 dining_service = DiningService()
 markdown_service = MarkdownExportService()
+curation_service = CurationService()
 
 
 class OptimizeRequest(BaseModel):
@@ -114,6 +117,16 @@ def apply_ripple_shift(req: RippleShiftRequest) -> Trip:
 def export_trip_markdown(trip: Trip) -> dict[str, str]:
     md = markdown_service.export_trip_markdown(trip)
     return {"markdown": md}
+
+
+@app.get("/api/curation/suggested", response_model=List[CurationList])
+def get_suggested_curation(city_name: str) -> List[CurationList]:
+    return curation_service.get_suggested_curation_lists(city_name)
+
+
+@app.get("/api/places/search", response_model=List[POI])
+def search_places(query: str, city_name: Optional[str] = None) -> List[POI]:
+    return curation_service.search_places_autocomplete(query, city_name)
 
 
 @app.get("/health")
