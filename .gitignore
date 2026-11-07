@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+
+# Environment variables & secrets (ADR 0005)
+.env
+.env.local
+*.secret
+
+# SQLite databases & Local Cache (ADR 0003)
+*.db
+*.sqlite3
+cache/
+
+# Testing & Quality (ISO 25010 / ISO 29119)
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/
+.mutmut-cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
