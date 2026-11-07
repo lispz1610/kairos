@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --warning: #f59e0b;
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+    button, .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+    button:hover, .btn:hover { background: var(--primary-dark); }
+    button.btn-secondary { background: var(--surface-border); color: var(--text); }
+    button.btn-secondary:hover { background: #475569; }
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 480px;
+      background: var(--surface);
+      border-right: 1px solid var(--surface-border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .map-container {
+      flex: 1;
+      height: 100%;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      background: #090d16;
+    }
+    .panel {
+      padding: 1rem;
+      border-bottom: 1px solid var(--surface-border);
+    }
+    .panel-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .days-nav {
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+    }
+    .day-pill {
+      background: var(--surface-border);
+      padding: 0.4rem 0.8rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .day-pill.active {
+      background: var(--primary);
+      color: white;
+      font-weight: 600;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-transition {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .card-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+    }
+    .card-label { color: var(--text-muted); }
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .timeline-item {
+      display: flex;
+      gap: 0.75rem;
+      position: relative;
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 18px;
+      bottom: -12px;
+      width: 2px;
+      background: var(--surface-border);
+    }
+    .timeline-item:last-child::before { display: none; }
+    .timeline-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 3px solid var(--surface);
+      flex-shrink: 0;
+      z-index: 1;
+    }
+    .timeline-content {
+      flex: 1;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.375rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.85rem;
+    }
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.75rem;
+      width: 90%;
+      max-width: 650px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .modal-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--surface-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+    }
+    .modal-body {
+      padding: 1.25rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .modal-footer {
+      padding: 0.75rem 1.25rem;
+      border-top: 1px solid var(--surface-border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+    pre.markdown-view {
+      background: #090d16;
+      border: 1px solid var(--surface-border);
+      padding: 1rem;
+      border-radius: 0.375rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <span>🧭</span>
+      <span>Kairos</span>
+      <span style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted); margin-left: 0.5rem;">Traçador Dinâmico</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn-secondary" id="btnExportJson">💾 Backup JSON</button>
+      <button class="btn-secondary" id="btnImportJson">📂 Restaurar</button>
+      <button id="btnExportMarkdown">📝 Exportar Markdown</button>
+    </div>
+  </header>
+
+  <main>
+    <aside class="sidebar">
+      <!-- Visão da Cidade e Etapas -->
+      <div class="panel">
+        <div class="panel-title">
+          <span id="currentCityName">São Paulo</span>
+          <div>
+            <button class="btn-secondary" style="padding: 0.2rem 0.5rem;" id="btnPrevCity">◀</button>
+            <button class="btn-secondary" style="padding: 0.2rem 0.5rem;" id="btnNextCity">▶</button>
+          </div>
+        </div>
+        <div class="card-row">
+          <span class="card-label">Período da Cidade:</span>
+          <span id="cityDates">01/11/2026 – 10/11/2026</span>
+        </div>
+        <div class="card-row" style="margin-top: 0.5rem;">
+          <span class="card-label">Ajustar Dias de Estadia:</span>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <button class="btn-secondary" style="padding: 0.2rem 0.6rem;" id="btnDecDays">-</button>
+            <span id="totalStageDays" style="font-weight: 600;">9 dias</span>
+            <button class="btn-secondary" style="padding: 0.2rem 0.6rem;" id="btnIncDays">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hospedagem & Dias de Viagem -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Dias de Estadia & Hospedagem</span>
+        </div>
+        <div class="days-nav" id="daysNav">
+          <!-- Pílulas de dias preenchidas via JS -->
+        </div>
+
+        <div class="card" id="hotelCard">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong id="activeHotelName">Hotel Base</strong>
+            <span id="hotelTransitionBadge" class="badge badge-transition" style="display: none;">Troca de Hotel</span>
+          </div>
+          <div class="card-row">
+            <span class="card-label">Início da Rota (Partida):</span>
+            <span id="depotStart">Hotel Base</span>
+          </div>
+          <div class="card-row">
+            <span class="card-label">Término da Rota (Retorno):</span>
+            <span id="depotReturn">Hotel Base</span>
+          </div>
+          <div class="card-row">
+            <span class="card-label">Valor Estimado Diária:</span>
+            <span id="hotelDailyRate">R$ 350,00</span>
+          </div>
+          <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
+            <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnChangeHotel">Alterar Hotel Deste Dia</button>
+            <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnResetBaseHotel">Usar Hotel Padrão</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumo Orçamentário -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Estimativa Orçamentária</span>
+        </div>
+        <div class="card-row">
+          <span class="card-label">Hospedagem (Etapa):</span>
+          <span id="stageHotelCost">R$ 3.150,00</span>
+        </div>
+        <div class="card-row">
+          <span class="card-label">Alimentação Estimada:</span>
+          <span id="stageFoodCost">R$ 1.620,00</span>
+        </div>
+        <div class="card-row" style="border-top: 1px solid var(--surface-border); padding-top: 0.5rem; margin-top: 0.5rem; font-weight: 600;">
+          <span>Total Estimado da Viagem:</span>
+          <span id="totalTripCost" style="color: var(--accent);">R$ 4.770,00</span>
+        </div>
+      </div>
+
+      <!-- Timeline do Roteiro Diário -->
+      <div class="panel" style="flex: 1;">
+        <div class="panel-title">
+          <span>Roteiro do Dia</span>
+          <button id="btnOptimizeDay" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">⚡ Otimizar Rota</button>
+        </div>
+        <div class="timeline" id="dailyTimeline">
+          <!-- Itens da linha do tempo preenchidos via JS -->
+        </div>
+      </div>
+    </aside>
+
+    <section class="map-container">
+      <div id="map"></div>
+    </section>
+  </main>
+
+  <!-- Modal Genérico / Markdown / Ripple Shift -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="modalTitle">Título</span>
+        <button class="btn-secondary" id="modalCloseBtn" style="padding: 0.2rem 0.5rem;">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <!-- Conteúdo dinâmico -->
+      </div>
+      <div class="modal-footer" id="modalFooter">
+        <button class="btn-secondary" id="modalCancelBtn">Fechar</button>
+        <button id="modalConfirmBtn">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="jsonFileInput" accept=".json" style="display: none;" />
+
+  <script>
+    // Inicialização do estado Client-First via LocalStorage
+    const STORAGE_KEY = 'kairos_trip_state_v1';
+
+    const defaultState = {
+      id: "trip-sp-lima",
+      title: "Viagem Cultural São Paulo e Lima",
+      preferences: {
+        intensities: {
+          "Coffee Lover": 8.0,
+          "Museum Lover": 9.0,
+          "Wine Lover": 4.0,
+          "Nature Lover": 5.0
+        }
+      },
+      currentStageIndex: 0,
+      currentDayIndex: 0,
+      stages: [
+        {
+          id: "stage-sp",
+          city_name: "São Paulo",
+          start_date: "2026-11-01",
+          end_date: "2026-11-10",
+          base_accommodation: {
+            id: "hotel-sp-base",
+            name: "Hotel Ibis Paulista",
+            location: { latitude: -23.557, longitude: -46.661 },
+            price_tier: "$$",
+            real_daily_rate: 350.0
+          },
+          days: []
+        },
+        {
+          id: "stage-lima",
+          city_name: "Lima",
+          start_date: "2026-11-10",
+          end_date: "2026-11-15",
+          base_accommodation: {
+            id: "hotel-lima-base",
+            name: "Miraflores Park Hotel",
+            location: { latitude: -12.131, longitude: -77.030 },
+            price_tier: "$$$$",
+            real_daily_rate: 900.0
+          },
+          days: []
+        }
+      ],
+      connections: [
+        {
+          id: "conn-1",
+          from_stage_id: "stage-sp",
+          to_stage_id: "stage-lima",
+          mode: "flying",
+          departure_time: "2026-11-10"
+        }
+      ]
+    };
+
+    let tripState = loadState();
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {
+        console.warn("Falha ao ler localStorage", e);
+      }
+      return initDefaultDays(defaultState);
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tripState));
+      } catch (e) {
+        console.error("Falha ao salvar no localStorage", e);
+      }
+    }
+
+    function initDefaultDays(state) {
+      state.stages.forEach(stage => {
+        if (!stage.days || stage.days.length === 0) {
+          const start = new Date(stage.start_date);
+          const end = new Date(stage.end_date);
+          const diffDays = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+          stage.days = [];
+          for (let i = 0; i < diffDays; i++) {
+            const d = new Date(start);
+            d.setDate(d.getDate() + i);
+            const dateStr = d.toISOString().split('T')[0];
+            stage.days.push({
+              date: dateStr,
+              base_accommodation: stage.base_accommodation,
+              custom_accommodation: null
+            });
+          }
+        }
+      });
+      return state;
+    }
+
+    // Inicialização do Mapa Leaflet
+    const map = L.map('map').setView([-23.557, -46.661], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    let routeLayer = L.layerGroup().addTo(map);
+
+    function renderUI() {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      if (!stage) return;
+
+      document.getElementById('currentCityName').innerText = stage.city_name;
+      document.getElementById('cityDates').innerText = `${stage.start_date} – ${stage.end_date}`;
+      document.getElementById('totalStageDays').innerText = `${stage.days.length} dias`;
+
+      // Renderiza pílulas de dias
+      const daysNav = document.getElementById('daysNav');
+      daysNav.innerHTML = '';
+      stage.days.forEach((day, idx) => {
+        const pill = document.createElement('div');
+        pill.className = `day-pill ${idx === tripState.currentDayIndex ? 'active' : ''}`;
+        pill.innerText = `Dia ${idx + 1} (${day.date.split('-')[2]}/${day.date.split('-')[1]})`;
+        pill.onclick = () => {
+          tripState.currentDayIndex = idx;
+          renderUI();
+        };
+        daysNav.appendChild(pill);
+      });
+
+      // Renderiza Hospedagem do dia ativo
+      const currentDay = stage.days[tripState.currentDayIndex] || stage.days[0];
+      const prevDay = tripState.currentDayIndex > 0 ? stage.days[tripState.currentDayIndex - 1] : null;
+
+      const effectiveHotel = currentDay.custom_accommodation || stage.base_accommodation;
+      const departureHotel = prevDay ? (prevDay.custom_accommodation || stage.base_accommodation) : effectiveHotel;
+      const returnHotel = effectiveHotel;
+      const isTransition = departureHotel.id !== returnHotel.id;
+
+      document.getElementById('activeHotelName').innerText = effectiveHotel.name;
+      document.getElementById('depotStart').innerText = departureHotel.name;
+      document.getElementById('depotReturn').innerText = returnHotel.name;
+      document.getElementById('hotelDailyRate').innerText = `R$ ${Number(effectiveHotel.real_daily_rate || 350).toFixed(2)}`;
+
+      const badge = document.getElementById('hotelTransitionBadge');
+      badge.style.display = isTransition ? 'inline-flex' : 'none';
+
+      // Atualiza orçamento
+      updateBudget();
+
+      // Renderiza Timeline do dia
+      renderTimeline(currentDay, departureHotel, returnHotel);
+
+      // Atualiza mapa
+      updateMapMarkers(departureHotel, returnHotel);
+
+      saveState();
+    }
+
+    function updateBudget() {
+      let totalHotel = 0;
+      let totalDays = 0;
+      tripState.stages.forEach(st => {
+        st.days.forEach(d => {
+          const h = d.custom_accommodation || st.base_accommodation;
+          totalHotel += Number(h.real_daily_rate || 350);
+          totalDays++;
+        });
+      });
+      const foodEst = totalDays * 180.0; // Padrão moderado
+      document.getElementById('stageHotelCost').innerText = `R$ ${totalHotel.toFixed(2)}`;
+      document.getElementById('stageFoodCost').innerText = `R$ ${foodEst.toFixed(2)}`;
+      document.getElementById('totalTripCost').innerText = `R$ ${(totalHotel + foodEst).toFixed(2)}`;
+    }
+
+    function renderTimeline(day, depHotel, retHotel) {
+      const timeline = document.getElementById('dailyTimeline');
+      timeline.innerHTML = `
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background: #10b981;"></div>
+          <div class="timeline-content">
+            <strong>09:00 — Partida da Hospedagem</strong>
+            <div class="card-label">${depHotel.name}</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-content">
+            <strong>10:00 — Museu de Arte de São Paulo (MASP)</strong>
+            <div class="card-label">Permanência: 120 min | Pontuação de Utilidade: 9.5</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background: #f59e0b;"></div>
+          <div class="timeline-content">
+            <strong>12:30 — Almoço (Slot Gastronômico)</strong>
+            <div class="card-label">Sugestão: A Baianeira MASP (4.6 ★, $$)</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background: #38bdf8;"></div>
+          <div class="timeline-content">
+            <strong>15:30 — Pausa para Café (Coffee Lover)</strong>
+            <div class="card-label">Sugestão: Coffee Lab / Por um Punhado de Dólares</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-content">
+            <strong>16:45 — Parque Ibirapuera</strong>
+            <div class="card-label">Permanência: 90 min | Pontuação de Utilidade: 8.8</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background: #8b5cf6;"></div>
+          <div class="timeline-content">
+            <strong>19:30 — Jantar (Slot Gastronômico)</strong>
+            <div class="card-label">Sugestão: D.O.M. (Michelin 2★, $$$$)</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background: #10b981;"></div>
+          <div class="timeline-content">
+            <strong>21:30 — Retorno para Hospedagem</strong>
+            <div class="card-label">${retHotel.name}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateMapMarkers(depHotel, retHotel) {
+      routeLayer.clearLayers();
+      if (depHotel && depHotel.location) {
+        L.marker([depHotel.location.latitude, depHotel.location.longitude])
+          .bindPopup(`<b>Partida:</b> ${depHotel.name}`)
+          .addTo(routeLayer);
+      }
+      if (retHotel && retHotel.location) {
+        L.marker([retHotel.location.latitude, retHotel.location.longitude])
+          .bindPopup(`<b>Retorno:</b> ${retHotel.name}`)
+          .addTo(routeLayer);
+      }
+    }
+
+    // Ações de alteração de hotel
+    document.getElementById('btnChangeHotel').onclick = () => {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const currentDay = stage.days[tripState.currentDayIndex];
+      const newName = prompt("Nome do novo hotel para este dia:", "Hotel Emiliano");
+      if (newName) {
+        currentDay.custom_accommodation = {
+          id: `hotel-custom-${Date.now()}`,
+          name: newName,
+          location: { latitude: -23.565, longitude: -46.666 },
+          price_tier: "$$$$",
+          real_daily_rate: 850.0
+        };
+        renderUI();
+      }
+    };
+
+    document.getElementById('btnResetBaseHotel').onclick = () => {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      stage.days[tripState.currentDayIndex].custom_accommodation = null;
+      renderUI();
+    };
+
+    // Alternar cidades
+    document.getElementById('btnNextCity').onclick = () => {
+      if (tripState.currentStageIndex < tripState.stages.length - 1) {
+        tripState.currentStageIndex++;
+        tripState.currentDayIndex = 0;
+        renderUI();
+      }
+    };
+    document.getElementById('btnPrevCity').onclick = () => {
+      if (tripState.currentStageIndex > 0) {
+        tripState.currentStageIndex--;
+        tripState.currentDayIndex = 0;
+        renderUI();
+      }
+    };
+
+    // Modal e Exportação Markdown
+    const modal = document.getElementById('modalOverlay');
+    document.getElementById('modalCloseBtn').onclick = () => modal.classList.remove('active');
+    document.getElementById('modalCancelBtn').onclick = () => modal.classList.remove('active');
+
+    document.getElementById('btnExportMarkdown').onclick = async () => {
+      const resp = await fetch('/api/trip/export-markdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tripState)
+      });
+      const data = await resp.json();
+      document.getElementById('modalTitle').innerText = 'Exportação de Itinerário em Markdown';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="margin-bottom: 0.75rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+          <button id="btnCopyMd" class="btn-secondary" style="font-size: 0.8rem;">📋 Copiar Markdown</button>
+          <button id="btnDownloadMd" style="font-size: 0.8rem;">📥 Baixar .md</button>
+        </div>
+        <pre class="markdown-view" id="mdContent">${data.markdown}</pre>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('btnCopyMd').onclick = () => {
+        navigator.clipboard.writeText(data.markdown);
+        alert('Markdown copiado para a área de transferência!');
+      };
+      document.getElementById('btnDownloadMd').onclick = () => {
+        const blob = new Blob([data.markdown], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'viagem-kairos.md';
+        a.click();
+      };
+    };
+
+    // Backup e restauração JSON
+    document.getElementById('btnExportJson').onclick = () => {
+      const blob = new Blob([JSON.stringify(tripState, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'viagem-kairos.json';
+      a.click();
+    };
+
+    document.getElementById('btnImportJson').onclick = () => {
+      document.getElementById('jsonFileInput').click();
+    };
+
+    document.getElementById('jsonFileInput').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target.result);
+          tripState = parsed;
+          renderUI();
+          alert('Plano de viagem restaurado com sucesso!');
+        } catch (err) {
+          alert('Arquivo JSON inválido.');
+        }
+      };
+      reader.readAsText(file);
+    };
+
+    // Inicialização
+    renderUI();
+  </script>
+</body>
+</html>
