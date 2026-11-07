@@ -18,6 +18,7 @@ from src.core.domain.models import (
 )
 from src.core.services.curation import CurationService
 from src.core.services.dining_and_budget import BudgetSummary, DiningService
+from src.core.services.link_parser import LinkParserService, SSRFValidationError
 from src.core.services.markdown_export import MarkdownExportService
 from src.core.services.schedule import RippleShiftPreview, ScheduleService
 from src.core.solvers.optw import OPTWSolver
@@ -40,6 +41,7 @@ schedule_service = ScheduleService()
 dining_service = DiningService()
 markdown_service = MarkdownExportService()
 curation_service = CurationService()
+link_parser_service = LinkParserService()
 
 
 class OptimizeRequest(BaseModel):
@@ -127,6 +129,33 @@ def get_suggested_curation(city_name: str) -> List[CurationList]:
 @app.get("/api/places/search", response_model=List[POI])
 def search_places(query: str, city_name: Optional[str] = None) -> List[POI]:
     return curation_service.search_places_autocomplete(query, city_name)
+
+
+class ImportLinkRequest(BaseModel):
+    url: Optional[str] = None
+    text: Optional[str] = None
+    city_name: Optional[str] = None
+
+
+@app.post("/api/curation/import-link")
+def import_curation_link(req: ImportLinkRequest) -> dict[str, List[POI]]:
+    content = req.text or ""
+    if req.url:
+        try:
+            content = link_parser_service.fetch_url_content(req.url)
+        except SSRFValidationError as err:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail=str(err))
+        except Exception as err:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail=f"Erro ao acessar URL: {err}")
+
+    if not content:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Forneça uma 'url' ou 'text' para importação.")
+
+    candidates = link_parser_service.extract_places_from_text(content, req.city_name)
+    return {"candidates": candidates}
 
 
 @app.get("/health")
