@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from src.core.domain.models import POI, Coordinates, Itinerary, TimeWindow, Trip
 from src.core.services.dining_and_budget import BudgetSummary, DiningService
+from src.core.services.markdown_export import MarkdownExportService
 from src.core.services.schedule import RippleShiftPreview, ScheduleService
 from src.core.solvers.optw import OPTWSolver
 
@@ -28,6 +29,7 @@ if static_dir.exists():
 solver = OPTWSolver()
 schedule_service = ScheduleService()
 dining_service = DiningService()
+markdown_service = MarkdownExportService()
 
 
 class OptimizeRequest(BaseModel):
@@ -97,6 +99,12 @@ def apply_ripple_shift(req: RippleShiftRequest) -> Trip:
         target_stage_id=req.target_stage_id,
         delta_days=req.delta_days,
     )
+
+
+@app.post("/api/trip/export-markdown")
+def export_trip_markdown(trip: Trip) -> dict[str, str]:
+    md = markdown_service.export_trip_markdown(trip)
+    return {"markdown": md}
 
 
 @app.get("/health")
