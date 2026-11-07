@@ -30,6 +30,8 @@ Toda a concepção do sistema foi refinada através de *Grilling* e registrada e
 - **[ADR 0004: Viagens Multicidades e Decomposição em Etapas Urbanas](./adr/0004-arquitetura-viagens-multicidades.md)**: Suporte a projetos multicidades (ex: São Paulo a Lima conectados por `flying`). Otimização urbana isolada conectada por limites temporais de voo, com suporte a alerta e ajuste em cascata caso um atraso urbano ameace a conexão interurbana.
 - **[ADR 0005: Isolamento de Credenciais e Modo Offline Replay](./adr/0005-modo-offline-replay-credenciais.md)**: Proteção de chave de API privada (.env ignorado). Se executado sem chave (por exemplo, pela banca avaliadora), o sistema entra automaticamente em modo Replay com fixtures locais em SQLite para cidades de demonstração.
 - **[ADR 0006: Navegação em Duas Camadas: Mapa Macro Geodésico e Detalhe Urbano](./adr/0006-navegacao-macro-mapa-e-detalhe-urbano.md)**: Visão macro na home (mapa com cidades interligadas apenas por retas/arcos geodésicos sem curvas de trânsito) e visão micro ao clicar na cidade (duas colunas: timeline com gatilhos de contingência à esquerda e mapa Leaflet à direita).
+- **[ADR 0007: Gestão de Hospedagens, Curadoria Enriquecida e Estado Client-Side](./adr/0007-gestao-de-hospedagens-curadoria-e-estado-client-side.md)**: Decomposição em Dias de Viagem, hospedagem dinâmica por dia, slots contextuais de refeição/café, curadoria híbrida com parser seguro de links, ripple shift de calendário com confirmação, persistência local e emissão de Markdown estruturado.
+- **[Especificação de Requisitos Funcionais](./especificacao-requisitos-funcionais.md)**: Detalhamento formal dos requisitos RF01 a RF08 alinhados às normas ISO/IEC 25010 e 29119.
 
 ---
 

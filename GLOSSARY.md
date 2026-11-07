@@ -11,8 +11,16 @@ Planejamento global composto por uma sequência ordenada de Etapas de Viagem int
 _Avoid_: Roteiro global, itinerário completo, projeto de viagem
 
 **Etapa de Viagem**:
-Subconjunto temporal e geográfico de uma Viagem restrito a uma cidade ou região delimitada, contendo sua própria Janela de Disponibilidade e Pontos de Interesse elegíveis.
-_Avoid_: Set, bloco de cidade, dia de viagem, trecho urbano
+Subconjunto temporal e geográfico de uma Viagem restrito a uma cidade ou região delimitada, decomposta em Dias de Viagem e Pontos de Interesse elegíveis.
+_Avoid_: Set, bloco de cidade, trecho urbano
+
+**Dia de Viagem**:
+Unidade diária que compõe uma Etapa de Viagem, associada a uma data de calendário, a uma Hospedagem e a um Roteiro urbano dedicado.
+_Avoid_: Diária, dia de passeio, bloco diário
+
+**Hospedagem**:
+Estabelecimento hoteleiro ou residencial que atua como Ponto de Partida/Retorno obrigatório para os Roteiros de um ou mais Dias de Viagem.
+_Avoid_: Hotel, base, pousada, dormitório
 
 **Conexão Interurbana**:
 Transição de longa distância conectando o término de uma Etapa de Viagem ao início da etapa subsequente, operando sob modais intermunicipais (como aéreo `flying` ou rodoviário).
@@ -28,12 +36,16 @@ _Avoid_: Tipo de locomoção, meio de transporte
 Local geográfico delimitado com relevância turística, cultural ou de lazer elegível para visitação, dotado de coordenadas e horário de funcionamento.
 _Avoid_: Atração, parada, local turístico, parada turística
 
+**Lista de Curadoria**:
+Catálogo temático de estabelecimentos e atrações chancelados por premiações públicas, guias especializados ou curadoria personalizada do usuário, que confere bonificação à Pontuação de Utilidade.
+_Avoid_: Lista de recomendações, ranking, lista de favoritos
+
 **Roteiro**:
-Sequência cronológica ordenada de visitas a Pontos de Interesse programadas para ocorrer dentro da Janela de Disponibilidade de uma Etapa de Viagem.
+Sequência cronológica ordenada de visitas a Pontos de Interesse programadas para ocorrer dentro da Janela de Disponibilidade de um Dia de Viagem.
 _Avoid_: Itinerário, percurso, plano de viagem
 
 **Ponto de Partida/Retorno**:
-Coordenada geográfica fixa (como hotel, aeroporto ou estação) onde o Roteiro de uma Etapa de Viagem deve obrigatoriamente se iniciar e encerrar.
+Coordenada geográfica fixa (geralmente a Hospedagem daquele dia, ou aeroporto/estação em dias de trânsito) onde o Roteiro deve obrigatoriamente se iniciar e encerrar.
 _Avoid_: Base, hotel, início da viagem
 
 **Deslocamento**:
@@ -47,7 +59,7 @@ _Avoid_: Matriz de distâncias, tabela de custos
 ### Janelas e Políticas Temporais
 
 **Janela de Disponibilidade**:
-Intervalo contínuo de horário de início e fim no qual o usuário está disponível para executar o Roteiro de uma Etapa de Viagem.
+Intervalo contínuo de horário de início e fim no qual o usuário está disponível para executar o Roteiro de um Dia de Viagem.
 _Avoid_: Janela de tempo, tempo livre, tempo disponível
 
 **Janela de Funcionamento**:
@@ -58,12 +70,20 @@ _Avoid_: Horário de abertura, horário comercial
 Duração estimada ou configurada que o visitante despende no interior de um Ponto de Interesse.
 _Avoid_: Tempo de visita, duração, estadia
 
+**Slot de Refeição**:
+Janela temporal reservada no Roteiro dedicada a pausas alimentares (como almoço, café ou jantar), associada a recomendações contextuais de estabelecimentos e estimativa de gastos.
+_Avoid_: Horário de almoço, parada para comer, intervalo de refeição
+
+**Estimativa de Gastos**:
+Projeção financeira calculada com base na categoria de custo da Hospedagem e no padrão orçamentário selecionado para os Slots de Refeição e deslocamentos.
+_Avoid_: Orçamento, previsão de custo, gasto diário
+
 **Pontuação de Utilidade**:
 Métrica numérica que quantifica o valor de atratividade de um Ponto de Interesse para o usuário com base no Perfil de Preferência e avaliações.
 _Avoid_: Score, relevância, peso do ponto
 
 **Perfil de Preferência**:
-Conjunto de categorias temáticas e pesos atribuídos pelo usuário para ranquear e selecionar Pontos de Interesse.
+Conjunto de categorias temáticas e intensidades numéricas (escala de 0 a 10) atribuídas pelo usuário para modular a Pontuação de Utilidade e disparar slots temáticos no Roteiro.
 _Avoid_: Filtros, tags de usuário, estilo de viagem
 
 ### Adaptação Dinâmica
@@ -75,3 +95,7 @@ _Avoid_: Imprevisto, erro de percurso, incidente
 **Replanejamento**:
 Recálculo algorítmico do Roteiro restante a partir da coordenada e horário atuais após a ocorrência de um Evento de Contingência.
 _Avoid_: Re-roteamento, reajuste, recalcular tudo
+
+**Deslocamento em Cascata**:
+Propagação automática de alterações na duração de uma Etapa de Viagem sobre o calendário das etapas e Conexões Interurbanas subsequentes, preservando suas durações relativas.
+_Avoid_: Efeito dominó, shift de datas, replanejamento global
