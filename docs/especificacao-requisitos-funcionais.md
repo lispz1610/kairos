@@ -100,6 +100,17 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
      - **Caderno Diário**: Cronograma horário detalhado dia a dia, com hospedagens, paradas em POIs (com tempo de permanência), tempos de deslocamento e slots de refeição com sugestões curadas e faixas de preço;
      - **Apêndice de Curadoria**: Relação de estabelecimentos premiados e notas do usuário.
 
+### RF09 — Conexão Interurbana: Departure Datetime e Margem de Embarque
+- **Descrição**: O sistema deve representar a *Conexão Interurbana* com partida obrigatória com data e hora e um limite de embarque configurável por modal, alinhado ao modelo temporal do Dia de Viagem.
+- **Comportamento**:
+  1. `InterCityConnection` (Conexão Interurbana): campo obrigatório `departure_datetime: datetime` (partida com data e hora).
+  2. `boarding_cutoff_minutes: int` (Margem de Embarque): padrão `120` para modal `flying`, `30` para modal `driving` e `transit`.
+  3. `ScheduleService`: valida que o Roteiro do Dia de Viagem respeita os Horários de Funcionamento dos Pontos de Interesse e permanece dentro da Janela de Disponibilidade, reportando desvios quando houver.
+  4. Testes unitários de contrato (ISO/IEC/IEEE 29119):
+     - Padrão do modal: `boarding_cutoff_minutes` padrão `120` (modal `flying`) e `30` (modais `driving`/`transit`).
+     - Visita fora do horário de funcionamento (desvio reportado): `ScheduleService` reporta o desvio.
+     - Janela de Disponibilidade violada (desvio reportado): `ScheduleService` reporta o desvio.
+
 ---
 
 ## 3. Diretrizes de Qualidade e Casos de Teste (ISO/IEC 25010 & 29119)
