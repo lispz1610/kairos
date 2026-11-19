@@ -72,7 +72,8 @@ class DiningService:
             proximity_score = 1.0 / max(0.1, distance)
             award_bonus = 2.0 if poi.awards else 0.0
             rating_bonus = (poi.rating or 4.0) * 0.5
-            return proximity_score + award_bonus + rating_bonus
+            utility_bonus = (poi.utility_score or 1.0) * 0.2
+            return proximity_score + award_bonus + rating_bonus + utility_bonus
 
         sorted_candidates = sorted(candidates, key=score_candidate, reverse=True)
         return sorted_candidates[:limit]

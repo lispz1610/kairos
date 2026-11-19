@@ -57,6 +57,7 @@ class OptimizeRequest(BaseModel):
     candidates: List[POI]
     preferences: Optional[PreferencesProfile] = None
     reserved_slots: Optional[List[TimeWindow]] = None
+    curation_lists: Optional[List[CurationList]] = None
 
 
 class RippleShiftRequest(BaseModel):
@@ -69,6 +70,7 @@ class DiningRecommendRequest(BaseModel):
     reference_location: Coordinates
     candidates: List[POI]
     limit: int = 3
+    curation_lists: Optional[List[CurationList]] = None
 
 
 class ContextualDiningRequest(BaseModel):
@@ -79,6 +81,7 @@ class ContextualDiningRequest(BaseModel):
     preferences: Optional[PreferencesProfile] = None
     cafe_candidates: Optional[List[POI]] = None
     wine_candidates: Optional[List[POI]] = None
+    curation_lists: Optional[List[CurationList]] = None
 
 
 class BudgetRequest(BaseModel):
@@ -88,11 +91,16 @@ class BudgetRequest(BaseModel):
 
 @app.post("/api/trip/optimize", response_model=Itinerary)
 def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
+    candidates = req.candidates
+    if req.curation_lists:
+        candidates = curation_service.apply_curation_boost(
+            candidates, req.curation_lists
+        )
     return solver.solve(
         start_location=req.start_location,
         end_location=req.end_location,
         window=req.window,
-        candidates=req.candidates,
+        candidates=candidates,
         preferences=req.preferences,
         reserved_slots=req.reserved_slots,
     )
@@ -100,23 +108,43 @@ def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
 
 @app.post("/api/dining/recommend", response_model=List[POI])
 def recommend_dining(req: DiningRecommendRequest) -> List[POI]:
+    candidates = req.candidates
+    if req.curation_lists:
+        candidates = curation_service.apply_curation_boost(
+            candidates, req.curation_lists
+        )
     return dining_service.recommend_meal_places(
         reference_location=req.reference_location,
-        candidates=req.candidates,
+        candidates=candidates,
         limit=req.limit,
     )
 
 
 @app.post("/api/dining/contextual-slots", response_model=List[MealSlot])
 def get_contextual_meal_slots(req: ContextualDiningRequest) -> List[MealSlot]:
+    restaurants = req.restaurant_candidates
+    cafes = req.cafe_candidates
+    wines = req.wine_candidates
+    if req.curation_lists:
+        restaurants = curation_service.apply_curation_boost(
+            restaurants, req.curation_lists
+        )
+        if cafes:
+            cafes = curation_service.apply_curation_boost(
+                cafes, req.curation_lists
+            )
+        if wines:
+            wines = curation_service.apply_curation_boost(
+                wines, req.curation_lists
+            )
     return dining_service.create_contextual_meal_slots(
         departure_location=req.departure_location,
         return_location=req.return_location,
-        restaurant_candidates=req.restaurant_candidates,
+        restaurant_candidates=restaurants,
         itinerary=req.itinerary,
         preferences=req.preferences,
-        cafe_candidates=req.cafe_candidates,
-        wine_candidates=req.wine_candidates,
+        cafe_candidates=cafes,
+        wine_candidates=wines,
     )
 
 

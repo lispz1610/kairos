@@ -249,6 +249,18 @@
       max-height: 50vh;
       overflow-y: auto;
     }
+    .ac-item {
+      padding: 0.5rem 0.75rem;
+      cursor: pointer;
+      border-bottom: 1px solid var(--surface-border);
+      font-size: 0.82rem;
+    }
+    .ac-item:hover {
+      background: rgba(56, 189, 248, 0.15);
+    }
+    .ac-item:last-child {
+      border-bottom: none;
+    }
   </style>
 </head>
 <body>
@@ -259,6 +271,7 @@
       <span style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted); margin-left: 0.5rem;">Traçador Dinâmico</span>
     </div>
     <div class="header-actions">
+      <button class="btn-secondary" id="btnHeaderCuration">⭐ Curadoria & Listas</button>
       <button class="btn-secondary" id="btnImportLinkModal">🔗 Importar Link / Texto</button>
       <button class="btn-secondary" id="btnExportJson">💾 Backup JSON</button>
       <button class="btn-secondary" id="btnImportJson">📂 Restaurar</button>
@@ -364,6 +377,32 @@
         </div>
       </div>
 
+      <!-- Listas de Curadoria (Sugeridas e Personalizadas) -->
+      <div class="panel" id="curationPanel">
+        <div class="panel-title">
+          <span>⭐ Listas de Curadoria</span>
+          <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" id="btnOpenCurationManager">Gerenciar</button>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+          Ative listas para bonificar utilidade no roteiro e refeições.
+        </div>
+
+        <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--accent); margin-bottom: 0.35rem; display: flex; justify-content: space-between; align-items: center;">
+          <span>Listas Sugeridas (<span id="curationCityName">São Paulo</span>)</span>
+        </div>
+        <div id="suggestedListsContainer" style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <!-- Carregado via GET /api/curation/suggested -->
+        </div>
+
+        <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--accent); margin-top: 0.75rem; margin-bottom: 0.35rem; display: flex; justify-content: space-between; align-items: center;">
+          <span>Minhas Listas Customizadas</span>
+          <button class="btn-secondary" style="font-size: 0.7rem; padding: 0.15rem 0.4rem;" id="btnNewCustomListInline">+ Nova</button>
+        </div>
+        <div id="customListsContainer" style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <!-- Inserido dinamicamente via JS -->
+        </div>
+      </div>
+
       <!-- Resumo Orçamentário -->
       <div class="panel">
         <div class="panel-title">
@@ -426,6 +465,7 @@
       id: "trip-sp-lima",
       title: "Viagem Cultural São Paulo e Lima",
       travelers: 1,
+      curation_lists: [],
       preferences: {
         intensities: {
           "Coffee Lover": 8.0,
@@ -482,7 +522,11 @@
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (!parsed.curation_lists) parsed.curation_lists = [];
+          return parsed;
+        }
       } catch (e) {
         console.warn("Falha ao ler localStorage", e);
       }
@@ -498,6 +542,7 @@
     }
 
     function initDefaultDays(state) {
+      if (!state.curation_lists) state.curation_lists = [];
       state.stages.forEach(stage => {
         if (!stage.days || stage.days.length === 0) {
           const start = new Date(stage.start_date);
@@ -592,6 +637,7 @@
       updateBudget();
       renderTimeline(currentDay, departureHotel, returnHotel);
       updateMapMarkers(departureHotel, returnHotel, currentDay);
+      renderCurationPanel(stage.city_name);
 
       saveState();
     }
@@ -985,7 +1031,8 @@
           window: { start_time: "09:00:00", end_time: "21:00:00" },
           candidates: places,
           preferences: tripState.preferences,
-          reserved_slots: reservedSlots
+          reserved_slots: reservedSlots,
+          curation_lists: tripState.curation_lists || []
         })
       });
 
@@ -1002,7 +1049,8 @@
             return_location: retHotel.location,
             restaurant_candidates: places,
             itinerary: itinerary,
-            preferences: tripState.preferences
+            preferences: tripState.preferences,
+            curation_lists: tripState.curation_lists || []
           })
         });
 
@@ -1015,6 +1063,370 @@
         alert('Roteiro otimizado com sucesso!');
       }
     };
+
+    // Curadoria de Listas (Sugeridas e Personalizadas)
+    let currentSuggestedLists = [];
+
+    async function renderCurationPanel(cityName) {
+      const cityLabel = document.getElementById('curationCityName');
+      if (cityLabel) cityLabel.innerText = cityName;
+
+      const suggContainer = document.getElementById('suggestedListsContainer');
+      const customContainer = document.getElementById('customListsContainer');
+      if (!suggContainer || !customContainer) return;
+
+      renderCustomLists(customContainer);
+
+      try {
+        const resp = await fetch(`/api/curation/suggested?city_name=${encodeURIComponent(cityName)}`);
+        if (resp.ok) {
+          currentSuggestedLists = await resp.json();
+          renderSuggestedLists(suggContainer, currentSuggestedLists);
+        } else {
+          suggContainer.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">Nenhuma lista sugerida para esta cidade.</span>';
+        }
+      } catch (e) {
+        suggContainer.innerHTML = '<span style="font-size:0.75rem; color:#ef4444;">Erro ao carregar listas sugeridas.</span>';
+      }
+    }
+
+    function renderSuggestedLists(container, lists) {
+      if (!lists || lists.length === 0) {
+        container.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">Nenhuma lista sugerida para esta cidade.</span>';
+        return;
+      }
+
+      container.innerHTML = lists.map(l => {
+        const isActive = (tripState.curation_lists || []).some(cl => cl.id === l.id && cl.is_active !== false);
+        return `
+          <div class="card" style="margin: 0; padding: 0.45rem 0.6rem; display: flex; align-items: start; gap: 0.5rem; background: ${isActive ? 'rgba(56,189,248,0.1)' : 'rgba(15,23,42,0.6)'}; border: 1px solid ${isActive ? 'var(--accent)' : 'var(--surface-border)'};">
+            <input type="checkbox" id="chk_sugg_${l.id}" style="margin-top: 0.2rem; cursor: pointer;" ${isActive ? 'checked' : ''} onchange="toggleSuggestedList('${l.id}')" />
+            <div style="flex: 1;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="chk_sugg_${l.id}" style="font-weight: 600; font-size: 0.8rem; cursor: pointer; color: ${isActive ? 'var(--accent)' : 'white'};">${l.title}</label>
+                <span class="badge" style="font-size: 0.65rem;">${(l.items || []).length} locais</span>
+              </div>
+              ${l.description ? `<div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">${l.description}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleSuggestedList(listId) {
+      if (!tripState.curation_lists) tripState.curation_lists = [];
+      const sugg = currentSuggestedLists.find(l => l.id === listId);
+      if (!sugg) return;
+
+      const idx = tripState.curation_lists.findIndex(cl => cl.id === listId);
+      if (idx !== -1) {
+        tripState.curation_lists.splice(idx, 1);
+      } else {
+        tripState.curation_lists.push({
+          id: sugg.id,
+          title: sugg.title,
+          description: sugg.description,
+          items: sugg.items || [],
+          is_active: true,
+          is_custom: false
+        });
+      }
+      saveState();
+      renderUI();
+    }
+
+    function renderCustomLists(container) {
+      if (!tripState.curation_lists) tripState.curation_lists = [];
+      const customLists = tripState.curation_lists.filter(cl => cl.is_custom === true);
+
+      if (customLists.length === 0) {
+        container.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">Nenhuma lista customizada. Clique em "+ Nova" para criar.</span>';
+        return;
+      }
+
+      container.innerHTML = customLists.map(l => {
+        const isActive = l.is_active !== false;
+        return `
+          <div class="card" style="margin: 0; padding: 0.45rem 0.6rem; display: flex; align-items: start; gap: 0.5rem; background: ${isActive ? 'rgba(16,185,129,0.1)' : 'rgba(15,23,42,0.6)'}; border: 1px solid ${isActive ? 'var(--success)' : 'var(--surface-border)'};">
+            <input type="checkbox" id="chk_cust_${l.id}" style="margin-top: 0.2rem; cursor: pointer;" ${isActive ? 'checked' : ''} onchange="toggleCustomListActive('${l.id}')" />
+            <div style="flex: 1;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="chk_cust_${l.id}" style="font-weight: 600; font-size: 0.8rem; cursor: pointer; color: ${isActive ? '#34d399' : 'white'};">${l.title}</label>
+                <div style="display: flex; align-items: center; gap: 0.25rem;">
+                  <span class="badge" style="font-size: 0.65rem;">${(l.items || []).length} locais</span>
+                  <button class="btn-secondary" style="font-size: 0.65rem; padding: 0.1rem 0.35rem;" onclick="openAddPlaceModal('${l.id}')" title="Adicionar Local">+ Local</button>
+                  <button class="btn-secondary" style="font-size: 0.65rem; padding: 0.1rem 0.3rem;" onclick="renameCustomList('${l.id}')" title="Renomear">✏️</button>
+                  <button class="btn-secondary" style="font-size: 0.65rem; padding: 0.1rem 0.3rem; color: #ef4444;" onclick="deleteCustomList('${l.id}')" title="Excluir">🗑️</button>
+                </div>
+              </div>
+              ${l.description ? `<div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">${l.description}</div>` : ''}
+              ${(l.items && l.items.length > 0) ? `
+                <div style="margin-top: 0.35rem; font-size: 0.72rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.15rem;">
+                  ${l.items.slice(0, 3).map(it => `<div>• <strong>${it.name}</strong> (${it.category})${it.notes ? ` — <em>${it.notes}</em>` : ''}</div>`).join('')}
+                  ${l.items.length > 3 ? `<div>... e mais ${l.items.length - 3} local(is)</div>` : ''}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleCustomListActive(id) {
+      const l = (tripState.curation_lists || []).find(cl => cl.id === id);
+      if (l) {
+        l.is_active = !(l.is_active !== false);
+        saveState();
+        renderUI();
+      }
+    }
+
+    function renameCustomList(id) {
+      const l = (tripState.curation_lists || []).find(cl => cl.id === id);
+      if (!l) return;
+      const newTitle = prompt("Novo nome para a lista:", l.title);
+      if (newTitle && newTitle.trim()) {
+        l.title = newTitle.trim();
+        saveState();
+        renderUI();
+      }
+    }
+
+    function deleteCustomList(id) {
+      const l = (tripState.curation_lists || []).find(cl => cl.id === id);
+      if (!l) return;
+      if (!confirm(`Excluir a lista "${l.title}"?`)) return;
+      tripState.curation_lists = (tripState.curation_lists || []).filter(cl => cl.id !== id);
+      saveState();
+      renderUI();
+    }
+
+    function createNewCustomList(title, description = '') {
+      if (!title || !title.trim()) return null;
+      if (!tripState.curation_lists) tripState.curation_lists = [];
+      const newList = {
+        id: `custom-list-${Date.now()}`,
+        title: title.trim(),
+        description: description ? description.trim() : null,
+        items: [],
+        is_active: true,
+        is_custom: true
+      };
+      tripState.curation_lists.push(newList);
+      saveState();
+      renderUI();
+      return newList;
+    }
+
+    function removePlaceFromList(listId, itemIdx) {
+      const list = (tripState.curation_lists || []).find(cl => cl.id === listId);
+      if (list && list.items) {
+        list.items.splice(itemIdx, 1);
+        saveState();
+        renderUI();
+      }
+    }
+
+    // Modal de Adicionar Local com Autocomplete
+    function openAddPlaceModal(listId) {
+      const list = (tripState.curation_lists || []).find(cl => cl.id === listId);
+      if (!list) return;
+
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = `Adicionar Local a: ${list.title}`;
+
+      document.getElementById('modalBody').innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div style="font-size: 0.85rem; color: var(--text-muted);">
+            Busque locais para <strong>${stage.city_name}</strong>. Ao selecionar, coordenadas, categoria e horários são vinculados.
+          </div>
+          <div style="position: relative;">
+            <label style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 0.25rem;">Buscar Local (Autocompletar):</label>
+            <input type="text" id="acPlaceInput" placeholder="Comece a digitar (ex: Coffee Lab, MASP, D.O.M., Central)..." style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" autocomplete="off" />
+            <div id="acSuggestionsBox" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 180px; overflow-y: auto; background: #0f172a; border: 1px solid var(--surface-border); border-radius: 0.375rem; z-index: 1000; display: none;"></div>
+          </div>
+          <div id="selectedPlaceContainer" style="display: none;" class="card">
+            <!-- Detalhes do local selecionado -->
+          </div>
+          <div>
+            <label style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 0.25rem;">Notas / Observações:</label>
+            <input type="text" id="placeNotesInput" placeholder="Ex: Dica de amigos, prato imperdível..." style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+          </div>
+          <button id="btnConfirmAddPlace" style="margin-top: 0.5rem; background: var(--primary); color: white; padding: 0.55rem; font-weight: 600; border: none; border-radius: 0.375rem; cursor: pointer; display: none;">
+            ✓ Adicionar à Lista
+          </button>
+        </div>
+      `;
+      modal.classList.add('active');
+
+      const input = document.getElementById('acPlaceInput');
+      const box = document.getElementById('acSuggestionsBox');
+      const preview = document.getElementById('selectedPlaceContainer');
+      const btnAdd = document.getElementById('btnConfirmAddPlace');
+      let selectedPlace = null;
+      let debounceTimer = null;
+
+      input.oninput = () => {
+        clearTimeout(debounceTimer);
+        const query = input.value.trim();
+        if (query.length < 1) {
+          box.style.display = 'none';
+          box.innerHTML = '';
+          return;
+        }
+        debounceTimer = setTimeout(async () => {
+          try {
+            const resp = await fetch(`/api/places/search?query=${encodeURIComponent(query)}&city_name=${encodeURIComponent(stage.city_name)}`);
+            if (resp.ok) {
+              const places = await resp.json();
+              if (places.length > 0) {
+                box.innerHTML = places.map((p, idx) => `
+                  <div class="ac-item" data-idx="${idx}">
+                    <strong>${p.name}</strong> <span style="color:var(--accent); font-size:0.75rem;">(${p.category})</span>
+                    <div style="font-size:0.72rem; color:var(--text-muted);">
+                      ⭐ ${p.rating || 4.5} • Preço: ${p.price_tier || '$$'} ${p.awards && p.awards.length ? '• ' + p.awards.join(', ') : ''}
+                    </div>
+                  </div>
+                `).join('');
+                box.style.display = 'block';
+
+                box.querySelectorAll('.ac-item').forEach(item => {
+                  item.onclick = () => {
+                    const idx = parseInt(item.getAttribute('data-idx'));
+                    selectedPlace = places[idx];
+                    input.value = selectedPlace.name;
+                    box.style.display = 'none';
+
+                    const winStr = selectedPlace.window ? `${selectedPlace.window.start_time.slice(0,5)} – ${selectedPlace.window.end_time.slice(0,5)}` : '09:00 – 18:00';
+                    preview.innerHTML = `
+                      <div style="font-size: 0.82rem;">
+                        <strong>Local Selecionado:</strong> ${selectedPlace.name}
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                          Categoria: <strong>${selectedPlace.category}</strong> |
+                          Coordenadas: <strong>${selectedPlace.location.latitude.toFixed(4)}, ${selectedPlace.location.longitude.toFixed(4)}</strong>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">
+                          Horário: ${winStr} |
+                          Permanência: ${selectedPlace.stay_duration_minutes || 60} min | Utilidade: ${selectedPlace.utility_score}
+                        </div>
+                      </div>
+                    `;
+                    preview.style.display = 'block';
+                    btnAdd.style.display = 'block';
+                  };
+                });
+              } else {
+                box.innerHTML = '<div style="padding:0.5rem; font-size:0.8rem; color:var(--text-muted);">Nenhum local correspondente encontrado.</div>';
+                box.style.display = 'block';
+              }
+            }
+          } catch (e) {
+            console.error("Erro na busca de locais:", e);
+          }
+        }, 200);
+      };
+
+      btnAdd.onclick = () => {
+        if (!selectedPlace) return;
+        const notes = document.getElementById('placeNotesInput').value.trim();
+        const poiToAdd = {
+          ...selectedPlace,
+          notes: notes || null
+        };
+        if (!list.items) list.items = [];
+        if (!list.items.some(it => it.id === poiToAdd.id)) {
+          list.items.push(poiToAdd);
+        }
+        saveState();
+        renderUI();
+        alert(`"${poiToAdd.name}" adicionado à lista "${list.title}"!`);
+        modal.classList.remove('active');
+      };
+    }
+
+    // Modal Gerenciador Completo de Curadoria
+    function openCurationManagerModal() {
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = 'Gerenciador de Listas de Curadoria';
+      const customLists = (tripState.curation_lists || []).filter(l => l.is_custom === true);
+
+      document.getElementById('modalBody').innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="card" style="margin: 0;">
+            <strong style="font-size: 0.9rem;">Criar Nova Lista Personalizada</strong>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+              <input type="text" id="newListNameInput" placeholder="Nome da Lista (ex: Dicas de Amigos, Restaurantes Favoritos)" style="padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+              <input type="text" id="newListDescInput" placeholder="Descrição opcional (ex: Dicas recebidas de amigos locais)" style="padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+              <button id="btnCreateCustomList" style="padding: 0.5rem; background: var(--primary); color: white; font-weight: 600; border: none; border-radius: 0.375rem; cursor: pointer;">
+                + Criar Lista
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <strong style="font-size: 0.9rem;">Listas Personalizadas Criadas (${customLists.length}):</strong>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; max-height: 250px; overflow-y: auto;">
+              ${customLists.length === 0 ? '<span style="font-size:0.8rem; color:var(--text-muted);">Nenhuma lista criada ainda.</span>' : customLists.map(l => `
+                <div class="card" style="margin: 0; padding: 0.6rem;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong>${l.title}</strong>
+                    <div style="display: flex; gap: 0.3rem;">
+                      <button class="btn-secondary" style="font-size:0.75rem; padding: 0.2rem 0.5rem;" onclick="openAddPlaceModal('${l.id}')">+ Local</button>
+                      <button class="btn-secondary" style="font-size:0.75rem; padding: 0.2rem 0.4rem;" onclick="renameCustomList('${l.id}'); openCurationManagerModal();">✏️</button>
+                      <button class="btn-secondary" style="font-size:0.75rem; padding: 0.2rem 0.4rem; color:#ef4444;" onclick="deleteCustomList('${l.id}'); openCurationManagerModal();">🗑️</button>
+                    </div>
+                  </div>
+                  ${l.description ? `<div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">${l.description}</div>` : ''}
+                  <div style="margin-top: 0.4rem; font-size: 0.78rem;">
+                    <strong>Itens (${(l.items || []).length}):</strong>
+                    ${(l.items && l.items.length > 0) ? `
+                      <ul style="margin: 0.25rem 0 0 1rem; padding: 0;">
+                        ${l.items.map((it, idx) => `
+                          <li>
+                            ${it.name} (${it.category}) ${it.notes ? `— <em>${it.notes}</em>` : ''}
+                            <button onclick="removePlaceFromList('${l.id}', ${idx}); openCurationManagerModal();" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 0.7rem; margin-left: 0.3rem;">[✕]</button>
+                          </li>
+                        `).join('')}
+                      </ul>
+                    ` : '<span style="color:var(--text-muted); margin-left:0.3rem;">Nenhum local na lista.</span>'}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('btnCreateCustomList').onclick = () => {
+        const name = document.getElementById('newListNameInput').value.trim();
+        const desc = document.getElementById('newListDescInput').value.trim();
+        if (!name) {
+          alert('Informe um nome para a lista.');
+          return;
+        }
+        createNewCustomList(name, desc);
+        openCurationManagerModal();
+      };
+    }
+
+    const btnOpenCur = document.getElementById('btnOpenCurationManager');
+    if (btnOpenCur) btnOpenCur.onclick = openCurationManagerModal;
+
+    const btnHeaderCur = document.getElementById('btnHeaderCuration');
+    if (btnHeaderCur) btnHeaderCur.onclick = openCurationManagerModal;
+
+    const btnQuickAddCust = document.getElementById('btnNewCustomListInline');
+    if (btnQuickAddCust) {
+      btnQuickAddCust.onclick = () => {
+        const title = prompt("Nome da nova lista customizada (ex: Dicas de Amigos, Restaurantes Favoritos):");
+        if (title && title.trim()) {
+          const desc = prompt("Descrição opcional:") || '';
+          createNewCustomList(title, desc);
+        }
+      };
+    }
 
     // Modal Importar Link
     document.getElementById('btnImportLinkModal').onclick = () => {
@@ -1051,12 +1463,104 @@
             return;
           }
           if (data.candidates && data.candidates.length > 0) {
-            resCont.innerHTML = `<strong>${data.candidates.length} locais encontrados:</strong>` +
-              data.candidates.map(c => `
-                <div class="card" style="margin-top: 0.3rem;">
-                  <strong>${c.name}</strong> (${c.category}) — Utilidade: ${c.utility_score}
-                </div>
-              `).join('');
+            const customLists = (tripState.curation_lists || []).filter(l => l.is_custom === true);
+            let selectHtml = `
+              <div style="margin-top: 0.75rem; margin-bottom: 0.5rem;">
+                <label style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 0.25rem;">Salvar estabelecimentos na lista:</label>
+                <select id="importTargetListSelect" style="width: 100%; padding: 0.45rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;">
+                  ${customLists.map(l => `<option value="${l.id}">${l.title} (${(l.items || []).length} itens)</option>`).join('')}
+                  <option value="__new__">+ Criar nova lista com estes itens</option>
+                </select>
+              </div>
+            `;
+
+            let candidatesHtml = `
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                <strong>${data.candidates.length} locais encontrados:</strong>
+                <span style="font-size: 0.75rem; color: var(--text-muted);">Marque os que deseja importar</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 200px; overflow-y: auto; margin-top: 0.4rem;">
+                ${data.candidates.map((c, idx) => `
+                  <div class="card" style="margin: 0; padding: 0.4rem 0.6rem; display: flex; align-items: center; gap: 0.6rem;">
+                    <input type="checkbox" id="import_cand_${idx}" class="import-cand-checkbox" data-idx="${idx}" checked style="cursor: pointer;" />
+                    <label for="import_cand_${idx}" style="flex: 1; cursor: pointer; font-size: 0.82rem;">
+                      <strong>${c.name}</strong> (${c.category})
+                      <div style="font-size: 0.72rem; color: var(--text-muted);">
+                        Utilidade: ${c.utility_score} • Coord: ${c.location.latitude.toFixed(4)}, ${c.location.longitude.toFixed(4)}
+                      </div>
+                    </label>
+                  </div>
+                `).join('')}
+              </div>
+              <button id="btnConfirmImportPlaces" style="margin-top: 0.85rem; width: 100%; background: var(--success); color: white; padding: 0.55rem; font-weight: 600; border: none; border-radius: 0.375rem; cursor: pointer;">
+                ✓ Confirmar Importação
+              </button>
+            `;
+
+            resCont.innerHTML = selectHtml + candidatesHtml;
+
+            document.getElementById('btnConfirmImportPlaces').onclick = () => {
+              const checkboxes = document.querySelectorAll('.import-cand-checkbox');
+              const selectedPois = [];
+              checkboxes.forEach(cb => {
+                if (cb.checked) {
+                  const idx = parseInt(cb.getAttribute('data-idx'));
+                  selectedPois.push(data.candidates[idx]);
+                }
+              });
+
+              if (selectedPois.length === 0) {
+                alert('Selecione pelo menos um estabelecimento para importar.');
+                return;
+              }
+
+              const targetSelect = document.getElementById('importTargetListSelect');
+              const targetVal = targetSelect ? targetSelect.value : '__new__';
+
+              if (!tripState.curation_lists) tripState.curation_lists = [];
+
+              let targetList;
+              if (targetVal === '__new__' || customLists.length === 0) {
+                let listTitle = 'Importados via Artigo';
+                if (url) {
+                  try {
+                    listTitle = 'Importados de ' + new URL(url).hostname;
+                  } catch (_) {
+                    listTitle = 'Importados via Link';
+                  }
+                }
+                targetList = {
+                  id: `custom-list-${Date.now()}`,
+                  title: listTitle,
+                  description: `Importado de ${url || 'texto'} em ${new Date().toLocaleDateString()}`,
+                  items: [],
+                  is_active: true,
+                  is_custom: true
+                };
+                tripState.curation_lists.push(targetList);
+              } else {
+                targetList = tripState.curation_lists.find(l => l.id === targetVal);
+              }
+
+              if (targetList) {
+                if (!targetList.items) targetList.items = [];
+                const existingIds = new Set(targetList.items.map(p => p.id));
+                let addedCount = 0;
+                selectedPois.forEach(poi => {
+                  if (!existingIds.has(poi.id)) {
+                    targetList.items.push(poi);
+                    existingIds.add(poi.id);
+                    addedCount++;
+                  }
+                });
+                targetList.is_active = true;
+
+                saveState();
+                renderUI();
+                alert(`${addedCount} estabelecimento(s) adicionado(s) com sucesso à lista "${targetList.title}"!`);
+                modal.classList.remove('active');
+              }
+            };
           } else {
             resCont.innerHTML = '<span>Nenhum local correspondente encontrado.</span>';
           }

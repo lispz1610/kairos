@@ -101,6 +101,30 @@ def test_apply_curation_boost_to_matching_pois() -> None:
     assert b_dom.utility_score == 15.0
     assert b_reg.utility_score == 5.0
 
+    # Inactive curation list should not boost POIs
+    inactive_list = CurationList(
+        id="cl-inactive",
+        title="Lista Desativada",
+        items=[poi_michelin],
+        is_active=False,
+    )
+    unboosted = service.apply_curation_boost(
+        [poi_michelin, poi_regular], [inactive_list]
+    )
+    u_dom = next(p for p in unboosted if p.id == "dom")
+    assert u_dom.utility_score == 10.0
+
+    # Custom list with notes and lowercase name matching
+    poi_named = POI(
+        id="different-id",
+        name="d.o.m.",
+        location=Coordinates(latitude=-23.56, longitude=-46.66),
+        utility_score=6.0,
+        notes="Dica do chef",
+    )
+    boosted_named = service.apply_curation_boost([poi_named], [custom_list])
+    assert boosted_named[0].utility_score == 9.0
+
 
 def test_offline_replay_adapter_curated_lists() -> None:
     adapter = OfflineReplayPlacesAdapter()
