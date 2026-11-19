@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -5,8 +7,8 @@ from src.adapters.web.app import app
 client = TestClient(app)
 
 
-def test_ripple_shift_preview_and_apply_endpoints() -> None:
-    trip_payload = {
+def _sample_trip_payload() -> Dict[str, Any]:
+    return {
         "id": "trip-sp-lima",
         "title": "SP & Lima",
         "stages": [
@@ -64,7 +66,9 @@ def test_ripple_shift_preview_and_apply_endpoints() -> None:
         ],
     }
 
-    # 1. Preview
+
+def test_ripple_shift_preview_endpoint() -> None:
+    trip_payload = _sample_trip_payload()
     resp = client.post(
         "/api/trip/ripple-shift/preview",
         json={"trip": trip_payload, "target_stage_id": "st-sp", "delta_days": 1},
@@ -76,7 +80,9 @@ def test_ripple_shift_preview_and_apply_endpoints() -> None:
     assert len(preview["shifted_stages"]) == 1
     assert preview["shifted_stages"][0]["new_start"] == "2026-11-11"
 
-    # 2. Apply
+
+def test_ripple_shift_apply_endpoint() -> None:
+    trip_payload = _sample_trip_payload()
     resp_apply = client.post(
         "/api/trip/ripple-shift/apply",
         json={"trip": trip_payload, "target_stage_id": "st-sp", "delta_days": 1},

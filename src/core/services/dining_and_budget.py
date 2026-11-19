@@ -64,6 +64,7 @@ class DiningService:
         candidates: List[POI],
         limit: int = 3,
     ) -> List[POI]:
+        """Classifica e recomenda os melhores estabelecimentos por proximidade e premiações."""
         if not candidates:
             return []
 
@@ -263,6 +264,7 @@ class DiningService:
         reference_location: Coordinates,
         restaurant_candidates: List[POI],
     ) -> List[MealSlot]:
+        """Cria slots de refeição padrão (almoço e jantar) para uma coordenada de referência."""
         return self.create_contextual_meal_slots(
             departure_location=reference_location,
             return_location=reference_location,
@@ -293,6 +295,7 @@ class DiningService:
     def calculate_trip_budget(
         self, trip: Trip, food_profile: FoodProfile | str = FoodProfile.MODERATE
     ) -> BudgetSummary:
+        """Consolida os custos estimados de hospedagem e alimentação por etapa e globais."""
         profile_key = getattr(food_profile, "value", str(food_profile)).lower()
         daily_food_rate = DAILY_FOOD_PROFILES.get(profile_key, 180.0)
         num_travelers = max(1, getattr(trip, "travelers", 1) or 1)

@@ -36,14 +36,18 @@ class RippleShiftPreview(BaseModel):
 class ScheduleService:
     """Gerencia a integridade temporal de jornadas multicidades com Deslocamento em Cascata."""
 
+    def _find_stage_index(self, trip: Trip, target_stage_id: str) -> int:
+        """Localiza o índice de uma etapa na viagem pelo seu identificador único."""
+        for idx, stage in enumerate(trip.stages):
+            if stage.id == target_stage_id:
+                return idx
+        raise ValueError(f"Etapa com ID '{target_stage_id}' não encontrada na viagem.")
+
     def preview_ripple_shift(
         self, trip: Trip, target_stage_id: str, delta_days: int
     ) -> RippleShiftPreview:
-        stage_idx = next(
-            (i for i, st in enumerate(trip.stages) if st.id == target_stage_id), -1
-        )
-        if stage_idx == -1:
-            raise ValueError(f"Etapa com ID '{target_stage_id}' não encontrada na viagem.")
+        """Calcula e retorna a prévia do impacto temporal do deslocamento em cascata."""
+        stage_idx = self._find_stage_index(trip, target_stage_id)
 
         target_stage = trip.stages[stage_idx]
         new_target_end = target_stage.end_date + timedelta(days=delta_days)
@@ -88,14 +92,11 @@ class ScheduleService:
     def apply_ripple_shift(
         self, trip: Trip, target_stage_id: str, delta_days: int
     ) -> Trip:
+        """Aplica o deslocamento em cascata à etapa informada e propaga para as seguintes."""
         if delta_days == 0:
             return trip
 
-        stage_idx = next(
-            (i for i, st in enumerate(trip.stages) if st.id == target_stage_id), -1
-        )
-        if stage_idx == -1:
-            raise ValueError(f"Etapa com ID '{target_stage_id}' não encontrada.")
+        stage_idx = self._find_stage_index(trip, target_stage_id)
 
         target_stage = trip.stages[stage_idx]
         new_end = target_stage.end_date + timedelta(days=delta_days)
