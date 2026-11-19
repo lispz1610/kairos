@@ -41,7 +41,7 @@ def estimate_transit_minutes(
 
 
 def minutes_to_time(minutes_since_midnight: int) -> time:
-    """Converte minutos decorridos a partir da meia-noite em um objeto time."""
+    """Calcular o objeto time correspondente aos minutos decorridos desde a meia-noite."""
     normalized = minutes_since_midnight % (24 * 60)
     hours = normalized // 60
     minutes = normalized % 60
@@ -49,7 +49,7 @@ def minutes_to_time(minutes_since_midnight: int) -> time:
 
 
 def time_to_minutes(t: time) -> int:
-    """Converte um objeto time na quantidade de minutos decorridos desde a meia-noite."""
+    """Calcular os minutos decorridos desde a meia-noite a partir de um objeto time."""
     return t.hour * 60 + t.minute
 
 
@@ -79,6 +79,7 @@ class OPTWSolver:
     """
 
     def __init__(self, transit_speed_kmh: float = 25.0) -> None:
+        """Inicializar o solver com a velocidade média usada nos Deslocamentos urbanos."""
         self.transit_speed_kmh = transit_speed_kmh
 
     def solve(
