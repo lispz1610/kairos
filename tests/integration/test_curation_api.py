@@ -63,3 +63,146 @@ def test_cache_persistence_and_offline_replay() -> None:
         cached = places_adapter._read_cache("search:fabrique:são paulo")
         assert cached is not None
         assert "Fabrique" in cached
+
+
+def test_optimize_endpoint_applies_curation_boost() -> None:
+    hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
+    # Two candidates: poi-a has base utility 10.0, poi-b has base utility 12.0
+    # Candidate time window allows only 1 attraction
+    candidates = [
+        {
+            "id": "poi-a",
+            "name": "Museu Menor Curado",
+            "location": {"latitude": -23.5520, "longitude": -46.6320},
+            "stay_duration_minutes": 180,
+            "utility_score": 10.0,
+        },
+        {
+            "id": "poi-b",
+            "name": "Parque Maior Padrao",
+            "location": {"latitude": -23.5530, "longitude": -46.6330},
+            "stay_duration_minutes": 180,
+            "utility_score": 12.0,
+        },
+    ]
+
+    base_payload = {
+        "start_location": hotel_loc,
+        "end_location": hotel_loc,
+        "window": {"start_time": "14:00:00", "end_time": "18:00:00"},
+        "candidates": candidates,
+    }
+
+    # Without curation list, poi-b (utility 12) is picked over poi-a (utility 10)
+    resp_unboosted = client.post("/api/trip/optimize", json=base_payload)
+    assert resp_unboosted.status_code == 200
+    it_unboosted = resp_unboosted.json()
+    assert len(it_unboosted["stops"]) == 1
+    assert it_unboosted["stops"][0]["poi"]["id"] == "poi-b"
+
+    # With curation list containing poi-a, poi-a utility becomes 10 * 1.5 = 15.0 > 12.0
+    curation_list = {
+        "id": "cl-favorites",
+        "title": "Meus Favoritos",
+        "items": [candidates[0]],
+        "is_active": True,
+    }
+    boosted_payload = {
+        **base_payload,
+        "curation_lists": [curation_list],
+    }
+    resp_boosted = client.post("/api/trip/optimize", json=boosted_payload)
+    assert resp_boosted.status_code == 200
+    it_boosted = resp_boosted.json()
+    assert len(it_boosted["stops"]) == 1
+    assert it_boosted["stops"][0]["poi"]["id"] == "poi-a"
+    assert it_boosted["stops"][0]["poi"]["utility_score"] == 15.0
+
+
+def test_optimize_endpoint_respects_inactive_curation_list() -> None:
+    hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
+    candidates = [
+        {
+            "id": "poi-x",
+            "name": "Local X",
+            "location": {"latitude": -23.5520, "longitude": -46.6320},
+            "stay_duration_minutes": 180,
+            "utility_score": 10.0,
+        },
+        {
+            "id": "poi-y",
+            "name": "Local Y",
+            "location": {"latitude": -23.5530, "longitude": -46.6330},
+            "stay_duration_minutes": 180,
+            "utility_score": 12.0,
+        },
+    ]
+
+    inactive_list = {
+        "id": "cl-off",
+        "title": "Desativada",
+        "items": [candidates[0]],
+        "is_active": False,
+    }
+
+    payload = {
+        "start_location": hotel_loc,
+        "end_location": hotel_loc,
+        "window": {"start_time": "14:00:00", "end_time": "18:00:00"},
+        "candidates": candidates,
+        "curation_lists": [inactive_list],
+    }
+
+    resp = client.post("/api/trip/optimize", json=payload)
+    assert resp.status_code == 200
+    it = resp.json()
+    assert len(it["stops"]) == 1
+    # When inactive, poi-x remains at 10.0 and poi-y (12.0) is picked
+    assert it["stops"][0]["poi"]["id"] == "poi-y"
+
+
+def test_dining_recommend_with_curation_boost() -> None:
+    ref_loc = {"latitude": -23.5600, "longitude": -46.6500}
+    # Two restaurants at similar proximity (~0.3 km)
+    # rest-normal has slightly higher rating (4.8 vs 4.6)
+    # rest-curated has base utility 10.0, will be boosted to 15.0
+    r_normal = {
+        "id": "rest-normal",
+        "name": "Restaurante Normal",
+        "location": {"latitude": -23.5620, "longitude": -46.6520},
+        "category": "restaurant",
+        "rating": 4.8,
+        "price_tier": "$$",
+        "utility_score": 1.0,
+    }
+    r_curated = {
+        "id": "rest-curated",
+        "name": "Bistrô Especial da Curadoria",
+        "location": {"latitude": -23.5620, "longitude": -46.6520},
+        "category": "restaurant",
+        "rating": 4.6,
+        "price_tier": "$$",
+        "utility_score": 5.0,
+    }
+
+    curation_list = {
+        "id": "cl-gourmet",
+        "title": "Guia Gastronômico",
+        "items": [r_curated],
+        "is_active": True,
+    }
+
+    payload = {
+        "reference_location": ref_loc,
+        "candidates": [r_normal, r_curated],
+        "limit": 2,
+        "curation_lists": [curation_list],
+    }
+
+    resp = client.post("/api/dining/recommend", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    # Curated restaurant utility gets boosted to 7.5, raising its ranking to first
+    assert data[0]["id"] == "rest-curated"
+    assert data[0]["utility_score"] == 7.5

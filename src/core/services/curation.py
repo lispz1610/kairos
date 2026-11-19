@@ -25,6 +25,27 @@ class CurationService:
     ) -> List[POI]:
         return self.places_port.search_places(query, city_name)
 
+    def _extract_curated_keys(
+        self, curation_lists: List[CurationList]
+    ) -> tuple[set[str], set[str]]:
+        curated_ids = {item.id for cl in curation_lists for item in cl.items}
+        curated_names = {item.name.lower() for cl in curation_lists for item in cl.items}
+        return curated_ids, curated_names
+
+    def _boost_poi(
+        self,
+        poi: POI,
+        curated_ids: set[str],
+        curated_names: set[str],
+        boost_multiplier: float,
+    ) -> POI:
+        is_curated = poi.id in curated_ids or poi.name.lower() in curated_names
+        if not is_curated:
+            return poi
+        return poi.model_copy(
+            update={"utility_score": poi.utility_score * boost_multiplier}
+        )
+
     def apply_curation_boost(
         self,
         candidates: List[POI],
@@ -34,25 +55,15 @@ class CurationService:
         if not active_curation_lists:
             return candidates
 
-        # Conjunto de IDs e nomes curados
-        curated_ids = {
-            item.id for cl in active_curation_lists for item in cl.items
-        }
-        curated_names = {
-            item.name.lower() for cl in active_curation_lists for item in cl.items
-        }
+        effective_lists = [
+            cl for cl in active_curation_lists if getattr(cl, "is_active", True)
+        ]
+        if not effective_lists:
+            return candidates
 
-        boosted_list: List[POI] = []
-        for poi in candidates:
-            is_curated = (
-                poi.id in curated_ids or poi.name.lower() in curated_names
-            )
-            if is_curated:
-                boosted_poi = poi.model_copy(
-                    update={"utility_score": poi.utility_score * boost_multiplier}
-                )
-                boosted_list.append(boosted_poi)
-            else:
-                boosted_list.append(poi)
+        curated_ids, curated_names = self._extract_curated_keys(effective_lists)
 
-        return boosted_list
+        return [
+            self._boost_poi(poi, curated_ids, curated_names, boost_multiplier)
+            for poi in candidates
+        ]

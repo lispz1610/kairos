@@ -67,6 +67,7 @@ class POI(BaseModel):
     rating: Optional[float] = None
     price_tier: Optional[PriceTier] = None
     awards: list[str] = Field(default_factory=list)
+    notes: Optional[str] = None
 
 
 class MealSlot(BaseModel):
@@ -212,6 +213,7 @@ class CurationList(BaseModel):
     title: str
     description: Optional[str] = None
     items: list[POI] = Field(default_factory=list)
+    is_active: bool = True
 
 
 class Trip(BaseModel):
