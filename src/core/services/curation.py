@@ -1,9 +1,24 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from src.core.domain.models import POI, CurationList
 from src.core.ports.places import PlacesPort
+
+_default_places_port_factory: Optional[Callable[[], PlacesPort]] = None
+
+
+def set_default_places_port_factory(
+    factory: Optional[Callable[[], PlacesPort]],
+) -> None:
+    """Registra uma fábrica padrão para criar instâncias de PlacesPort sem acoplar o Core."""
+    global _default_places_port_factory
+    _default_places_port_factory = factory
+
+
+def get_default_places_port_factory() -> Optional[Callable[[], PlacesPort]]:
+    """Retorna a fábrica padrão registrada para PlacesPort."""
+    return _default_places_port_factory
 
 
 class CurationService:
@@ -12,10 +27,12 @@ class CurationService:
     def __init__(self, places_port: Optional[PlacesPort] = None) -> None:
         if places_port is not None:
             self.places_port = places_port
+        elif _default_places_port_factory is not None:
+            self.places_port = _default_places_port_factory()
         else:
-            from src.adapters.places import create_places_adapter
-
-            self.places_port = create_places_adapter()
+            raise ValueError(
+                "places_port é obrigatório ou uma fábrica padrão deve ser configurada."
+            )
 
     def get_suggested_curation_lists(self, city_name: str) -> List[CurationList]:
         """Retorna listas de curadoria sugeridas para a cidade especificada."""

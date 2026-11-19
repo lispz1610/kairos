@@ -27,12 +27,13 @@ PRICE_TIER_ESTIMATES: Dict[str, float] = {
     PriceTier.LUXURY: 380.0,
 }
 
-HOTEL_TIER_DEFAULTS: Dict[str, float] = {
+ACCOMMODATION_TIER_DEFAULTS: Dict[str, float] = {
     PriceTier.BUDGET: 200.0,
-    PriceTier.MODERATE: 450.0,
-    PriceTier.COMFORT: 750.0,
+    PriceTier.MODERATE: 300.0,
+    PriceTier.COMFORT: 450.0,
     PriceTier.LUXURY: 1000.0,
 }
+HOTEL_TIER_DEFAULTS = ACCOMMODATION_TIER_DEFAULTS
 
 DAILY_FOOD_PROFILES: Dict[str, float] = {
     FoodProfile.BUDGET: 80.0,
@@ -274,12 +275,12 @@ class DiningService:
     def _get_day_accommodation_rate(
         self, day: TripDay, base_accommodation: Accommodation
     ) -> float:
-        hotel = day.custom_accommodation or base_accommodation
-        if hotel.real_daily_rate is not None:
-            return hotel.real_daily_rate
+        accommodation = day.custom_accommodation or base_accommodation
+        if accommodation.real_daily_rate is not None:
+            return accommodation.real_daily_rate
         if day.effective_accommodation.real_daily_rate is not None:
             return day.effective_accommodation.real_daily_rate
-        return HOTEL_TIER_DEFAULTS.get(hotel.price_tier, 450.0)
+        return ACCOMMODATION_TIER_DEFAULTS.get(accommodation.price_tier, 450.0)
 
     def _get_day_dining_cost(
         self, day: TripDay, daily_food_rate: float, num_travelers: int = 1

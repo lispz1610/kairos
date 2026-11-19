@@ -80,11 +80,11 @@ class MarkdownExportService:
         for st in stages:
             s_date = st.start_date.strftime("%d/%m/%Y")
             e_date = st.end_date.strftime("%d/%m/%Y")
-            hotel = st.base_accommodation
+            accommodation = st.base_accommodation
             lines.append(f"\n### 📍 {st.city_name}")
             lines.append(
                 f"**Período**: {s_date} a {e_date} | "
-                f"**Hospedagem Base**: {hotel.name} ({hotel.price_tier})"
+                f"**Hospedagem Base**: {accommodation.name} ({accommodation.price_tier})"
             )
             for idx, day in enumerate(st.days):
                 lines.append(self._render_day(day, idx + 1))

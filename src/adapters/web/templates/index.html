@@ -711,8 +711,14 @@
         });
         if (resp.ok) {
           const b = await resp.json();
-          document.getElementById('stageHotelCost').innerText = `R$ ${b.total_accommodation_cost.toFixed(2)}`;
-          document.getElementById('stageFoodCost').innerText = `R$ ${b.total_dining_cost.toFixed(2)}`;
+          const currStageBreakdown = (b.stage_breakdowns && b.stage_breakdowns[tripState.currentStageIndex]) || null;
+          if (currStageBreakdown) {
+            document.getElementById('stageHotelCost').innerText = `R$ ${currStageBreakdown.accommodation_cost.toFixed(2)}`;
+            document.getElementById('stageFoodCost').innerText = `R$ ${currStageBreakdown.dining_cost.toFixed(2)}`;
+          } else {
+            document.getElementById('stageHotelCost').innerText = `R$ ${b.total_accommodation_cost.toFixed(2)}`;
+            document.getElementById('stageFoodCost').innerText = `R$ ${b.total_dining_cost.toFixed(2)}`;
+          }
           document.getElementById('totalTripCost').innerText = `R$ ${b.total_trip_cost.toFixed(2)}`;
         }
       } catch (e) {
