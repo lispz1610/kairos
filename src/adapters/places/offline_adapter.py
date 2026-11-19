@@ -16,12 +16,14 @@ class OfflineReplayPlacesAdapter(PlacesPort):
         catalog: Optional[Dict[str, List[CurationList]]] = None,
         fixtures_path: Optional[Path | str] = None,
     ) -> None:
+        """Implementa a Porta PlacesPort carregando o catálogo de fixtures do Offline Replay."""
         if catalog is not None:
             self._catalog = catalog
         else:
             self._catalog = load_mock_catalog(fixtures_path)
 
     def get_curated_lists(self, city_name: str) -> List[CurationList]:
+        """Retorna do catálogo local as listas de curadoria da cidade informada."""
         target = city_name.strip().lower()
         for city, lists in self._catalog.items():
             if city.lower() == target:
@@ -37,6 +39,7 @@ class OfflineReplayPlacesAdapter(PlacesPort):
     def search_places(
         self, query: str, city_name: Optional[str] = None
     ) -> List[POI]:
+        """Pesquisa até cinco Pontos de Interesse no catálogo local por nome ou categoria."""
         query_norm = query.strip().lower()
         if not query_norm:
             return []

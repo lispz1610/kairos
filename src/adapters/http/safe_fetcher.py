@@ -25,6 +25,7 @@ class PinnedIPBackend(httpcore.SyncBackend):
     """Network backend que direciona conexões TCP diretamente ao IP já validado."""
 
     def __init__(self, pinned_ip: str) -> None:
+        """Inicializa o backend fixando o endereço IP alvo das conexões TCP."""
         super().__init__()
         self.pinned_ip = pinned_ip
 
@@ -36,6 +37,7 @@ class PinnedIPBackend(httpcore.SyncBackend):
         local_address: Optional[str] = None,
         socket_options: Optional[Iterable[httpcore.SOCKET_OPTION]] = None,
     ) -> httpcore.NetworkStream:
+        """Conecta no IP fixado em vez do hostname, prevenindo DNS rebinding."""
         return super().connect_tcp(
             host=self.pinned_ip,
             port=port,
@@ -49,6 +51,7 @@ class PinnedIPTransport(httpx.HTTPTransport):
     """Transporte HTTP com pinning de endereço IP para prevenir TOCTOU / DNS rebinding."""
 
     def __init__(self, pinned_ip: str, **kwargs: object) -> None:
+        """Inicializa o transporte substituindo o pool padrão por um backend com IP fixado."""
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self._pool = httpcore.ConnectionPool(
             ssl_context=self._pool._ssl_context,
@@ -65,6 +68,7 @@ class SafeHttpFetcher(UrlFetcherPort):
         max_content_bytes: int = 1_000_000,
         user_agent: str = "Kairos-Curation-Bot/1.0",
     ) -> None:
+        """Configura timeout, limite de conteúdo e user-agent da porta UrlFetcherPort anti-SSRF."""
         self.timeout = timeout
         self.max_content_bytes = max_content_bytes
         self.user_agent = user_agent
