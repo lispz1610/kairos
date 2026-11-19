@@ -38,8 +38,9 @@ def test_markdown_export_service_structure() -> None:
         end_date=date(2026, 11, 3),  # 2 days
         base_accommodation=hotel_sp,
     )
-    # Day 2 has custom boutique hotel
+    # Day 2 has custom boutique hotel and luggage dropoff
     stage_sp.override_accommodation(day_index=1, accommodation=hotel_boutique)
+    stage_sp.days[1].include_luggage_dropoff = True
 
     masp = POI(
         id="masp",
@@ -105,3 +106,44 @@ def test_markdown_export_service_structure() -> None:
     assert "A Baianeira MASP" in md_content
     assert "Bib Gourmand Michelin" in md_content
     assert "Troca de Hospedagem" in md_content
+    assert "Check-in e Parada de Malas" in md_content
+
+
+def test_markdown_export_relinks_deserialized_trip_accommodations() -> None:
+    import json
+
+    base_hotel = Accommodation(
+        id="h-base",
+        name="Hotel Base",
+        location=Coordinates(latitude=-23.55, longitude=-46.66),
+    )
+    custom_hotel = Accommodation(
+        id="h-custom",
+        name="Hotel Custom",
+        location=Coordinates(latitude=-23.56, longitude=-46.67),
+    )
+    stage = TripStage.create(
+        id="st-test",
+        city_name="Curitiba",
+        start_date=date(2026, 12, 1),
+        end_date=date(2026, 12, 4),
+        base_accommodation=base_hotel,
+    )
+    stage.override_accommodation(day_index=1, accommodation=custom_hotel)
+    stage.days[1].include_luggage_dropoff = True
+
+    trip = Trip(id="trip-deser", title="Viagem Deserializada", stages=[stage])
+
+    # Simulate deserialization from JSON where previous_day_accommodation was omitted/null
+    data = json.loads(trip.model_dump_json())
+    for s in data["stages"]:
+        for d in s["days"]:
+            d["previous_day_accommodation"] = None
+
+    restored_trip = Trip.model_validate(data)
+    service = MarkdownExportService()
+    md = service.export_trip_markdown(restored_trip)
+
+    assert "Troca de Hospedagem" in md
+    assert "Check-in e Parada de Malas" in md
+    assert "Hotel Custom" in md

@@ -130,7 +130,55 @@ def test_trip_full_json_serialization_round_trip() -> None:
     json_data = trip.model_dump_json()
     restored_trip = Trip.model_validate_json(json_data)
 
+    assert restored_trip == trip
     assert restored_trip.id == trip.id
     assert len(restored_trip.stages) == 2
     assert restored_trip.stages[0].days[0].effective_accommodation.name == "Hotel SP"
     assert restored_trip.stages[1].days[0].effective_accommodation.name == "Hotel Lima"
+
+    # Test idempotence with dict round-trip
+    import json
+
+    assert Trip.model_validate(json.loads(trip.model_dump_json())) == trip
+
+
+def test_deserialized_trip_relinks_previous_day_accommodations_for_transition_detection() -> None:
+    import json
+
+    hotel_a = Accommodation(
+        id="h-a",
+        name="Hotel A",
+        location=Coordinates(latitude=-23.5, longitude=-46.6),
+    )
+    hotel_b = Accommodation(
+        id="h-b",
+        name="Hotel B",
+        location=Coordinates(latitude=-23.6, longitude=-46.7),
+    )
+    stage = TripStage.create(
+        id="stage-relink",
+        city_name="Belo Horizonte",
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, 4),
+        base_accommodation=hotel_a,
+    )
+    stage.override_accommodation(day_index=1, accommodation=hotel_b)
+    stage.days[1].include_luggage_dropoff = True
+
+    trip = Trip(id="trip-relink", title="Viagem Relink", stages=[stage])
+
+    raw_dict = json.loads(trip.model_dump_json())
+    # Omit previous_day_accommodation as happens in minimal external JSON
+    for s in raw_dict["stages"]:
+        for d in s["days"]:
+            d["previous_day_accommodation"] = None
+
+    restored = Trip.model_validate(raw_dict)
+    assert not restored.stages[0].days[0].is_transition_day
+    assert restored.stages[0].days[1].is_transition_day
+    assert restored.stages[0].days[1].departure_accommodation.id == "h-a"
+    assert restored.stages[0].days[1].return_accommodation.id == "h-b"
+    assert restored.stages[0].days[1].include_luggage_dropoff
+    assert restored.stages[0].days[2].is_transition_day  # switches back to base hotel_a
+    assert restored.stages[0].days[2].departure_accommodation.id == "h-b"
+    assert restored.stages[0].days[2].return_accommodation.id == "h-a"

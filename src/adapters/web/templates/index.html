@@ -569,6 +569,7 @@
       const departureHotel = prevDay ? (prevDay.custom_accommodation || stage.base_accommodation) : effectiveHotel;
       const returnHotel = effectiveHotel;
       const isTransition = departureHotel.id !== returnHotel.id;
+      currentDay.is_transition_day = isTransition;
 
       document.getElementById('activeHotelName').innerText = effectiveHotel.name;
       document.getElementById('depotStart').innerText = departureHotel.name;
@@ -678,7 +679,8 @@
       }
 
       // Parada de malas se solicitada
-      if (day.is_transition_day && day.include_luggage_dropoff) {
+      const isTransition = (depHotel && retHotel && depHotel.id !== retHotel.id) || !!day.is_transition_day;
+      if (isTransition && day.include_luggage_dropoff) {
         itemsHtml += `
           <div class="timeline-item">
             <div class="timeline-dot" style="background: #eab308;"></div>
@@ -807,7 +809,14 @@
           body: JSON.stringify({ trip: tripState, target_stage_id: stage.id, delta_days: delta })
         });
         if (applyResp.ok) {
-          tripState = await applyResp.json();
+          const prevStage = tripState.currentStageIndex ?? 0;
+          const prevDay = tripState.currentDayIndex ?? 0;
+          const updatedTrip = await applyResp.json();
+          const safeStage = Math.min(prevStage, Math.max(0, (updatedTrip.stages?.length || 1) - 1));
+          const stageDays = updatedTrip.stages?.[safeStage]?.days || [];
+          const safeDay = Math.min(prevDay, Math.max(0, stageDays.length - 1));
+          tripState = { ...tripState, ...updatedTrip, currentStageIndex: safeStage, currentDayIndex: safeDay };
+          saveState();
           modal.classList.remove('active');
           renderUI();
         }
@@ -903,22 +912,63 @@
     document.getElementById('btnChangeHotel').onclick = () => {
       const stage = tripState.stages[tripState.currentStageIndex];
       const currentDay = stage.days[tripState.currentDayIndex];
-      const newName = prompt("Nome do novo hotel para este dia:", "Hotel Emiliano");
-      if (newName) {
+      const currentHotel = currentDay.custom_accommodation || stage.base_accommodation;
+
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = 'Personalizar Hospedagem do Dia';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+          <div>
+            <label style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Nome da Hospedagem:</label>
+            <input type="text" id="hotelNameInput" value="${currentHotel.name || ''}" placeholder="Ex: Hotel Fasano" style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+          </div>
+          <div>
+            <label style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Faixa de Preço:</label>
+            <select id="hotelTierSelect" style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;">
+              <option value="$" ${currentHotel.price_tier === '$' ? 'selected' : ''}>$ (Econômico)</option>
+              <option value="$$" ${currentHotel.price_tier === '$$' || !currentHotel.price_tier ? 'selected' : ''}>$$ (Moderado)</option>
+              <option value="$$$" ${currentHotel.price_tier === '$$$' ? 'selected' : ''}>$$$ (Conforto / Alto Padrão)</option>
+              <option value="$$$$" ${currentHotel.price_tier === '$$$$' ? 'selected' : ''}>$$$$ (Luxo)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Diária Real Estimada (R$):</label>
+            <input type="number" id="hotelDailyRateInput" value="${currentHotel.real_daily_rate ?? 350.0}" step="10" min="0" style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+          </div>
+        </div>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('modalConfirmBtn').onclick = () => {
+        const nameInput = document.getElementById('hotelNameInput');
+        const tierSelect = document.getElementById('hotelTierSelect');
+        const rateInput = document.getElementById('hotelDailyRateInput');
+        const name = nameInput ? nameInput.value.trim() : '';
+        const tier = tierSelect ? tierSelect.value : '$$';
+        const rateVal = rateInput ? parseFloat(rateInput.value) : NaN;
+
+        if (!name) {
+          alert('Por favor, informe o nome da hospedagem.');
+          return;
+        }
+
         currentDay.custom_accommodation = {
           id: `hotel-custom-${Date.now()}`,
-          name: newName,
-          location: { latitude: -23.565, longitude: -46.666 },
-          price_tier: "$$$$",
-          real_daily_rate: 850.0
+          name: name,
+          location: currentHotel.location || stage.base_accommodation?.location || { latitude: -23.565, longitude: -46.666 },
+          price_tier: tier,
+          real_daily_rate: isNaN(rateVal) ? 350.0 : Math.max(0, rateVal)
         };
+        modal.classList.remove('active');
+        saveState();
         renderUI();
-      }
+      };
     };
 
     document.getElementById('btnResetBaseHotel').onclick = () => {
       const stage = tripState.stages[tripState.currentStageIndex];
       stage.days[tripState.currentDayIndex].custom_accommodation = null;
+      saveState();
       renderUI();
     };
 
@@ -995,11 +1045,38 @@
       reader.onload = (event) => {
         try {
           const parsed = JSON.parse(event.target.result);
-          tripState = parsed;
+          if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            typeof parsed.id !== 'string' ||
+            !parsed.id.trim() ||
+            typeof parsed.title !== 'string' ||
+            !parsed.title.trim() ||
+            !Array.isArray(parsed.stages) ||
+            parsed.stages.length === 0
+          ) {
+            alert('Arquivo JSON inválido: a viagem deve conter id, título e ao menos uma etapa.');
+            e.target.value = '';
+            return;
+          }
+
+          const hasInvalidStage = parsed.stages.some(st => !st.id || !st.city_name || !st.base_accommodation);
+          if (hasInvalidStage) {
+            alert('Arquivo JSON inválido: as etapas da viagem devem conter identificador, cidade e hospedagem base.');
+            e.target.value = '';
+            return;
+          }
+
+          parsed.currentStageIndex = parsed.currentStageIndex ?? 0;
+          parsed.currentDayIndex = parsed.currentDayIndex ?? 0;
+          tripState = initDefaultDays(parsed);
+          saveState();
           renderUI();
           alert('Plano de viagem restaurado com sucesso!');
         } catch (err) {
-          alert('Arquivo JSON inválido.');
+          alert('Arquivo JSON inválido ou corrompido.');
+        } finally {
+          e.target.value = '';
         }
       };
       reader.readAsText(file);
