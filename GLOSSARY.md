@@ -23,8 +23,12 @@ Estabelecimento hoteleiro ou residencial que atua como Ponto de Partida/Retorno 
 _Avoid_: Hotel, base, pousada, dormitório
 
 **Conexão Interurbana**:
-Transição de longa distância conectando o término de uma Etapa de Viagem ao início da etapa subsequente, operando sob modais intermunicipais (como aéreo `flying` ou rodoviário).
+Transição de longa distância conectando o término de uma Etapa de Viagem ao início da etapa subsequente, operando sob modais intermunicipais (como aéreo `flying` ou rodoviário), com horário de partida e limite operacional (Margem de Embarque e teto de replanejamento).
 _Avoid_: Voo, viagem entre cidades, transição
+
+**Margem de Embarque**:
+Margem operacional usada pelas Conexões Interurbanas, derivada do `departure_datetime` e do `boarding_cutoff_minutes` do modal; diferença entre o horário efetivo de embarque da Conexão Interurbana e o horário de partida, que define o limite operacional do ponto de partida.
+_Avoid_: Janela de partida, tempo de espera, intervalo de embarque
 
 **Modal de Transporte**:
 Meio físico utilizado para locomoção, distinguindo-se entre transporte urbano (`walking`, `driving`) e interurbano (`flying`, `transit`).
@@ -89,7 +93,7 @@ _Avoid_: Filtros, tags de usuário, estilo de viagem
 ### Adaptação Dinâmica
 
 **Evento de Contingência**:
-Ocorrência imprevista em tempo de execução (como atraso, fechamento prematuro ou cancelamento voluntário) que invalida a programação temporal restante do Roteiro.
+Ocorrência imprevista em tempo de execução (como atraso, fechamento prematuro ou cancelamento voluntário) ou *ajuste de permanência* (alteração da duração do Ponto de Interesse atual ou futuro) que invalida a programação temporal restante do Roteiro.
 _Avoid_: Imprevisto, erro de percurso, incidente
 
 **Replanejamento**:
