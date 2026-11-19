@@ -15,6 +15,9 @@ class MarkdownExportService:
     def export_trip_markdown(
         self, trip: Trip, budget: Optional[BudgetSummary] = None
     ) -> str:
+        for stage in trip.stages:
+            stage._relink_accommodations()
+
         if budget is None:
             budget = self.dining_service.calculate_trip_budget(trip)
 
@@ -97,6 +100,10 @@ class MarkdownExportService:
             "**Cronograma de Visitas & Refeições:**",
         ]
         lines.extend(self._render_itinerary_stops(day.itinerary))
+        if day.is_transition_day and day.include_luggage_dropoff:
+            lines.append(
+                f"  - 🧳 `16:00`: **Check-in e Parada de Malas** ({day.return_accommodation.name})"
+            )
         lines.extend(self._render_meal_slots(day.meal_slots))
         return "\n".join(lines)
 

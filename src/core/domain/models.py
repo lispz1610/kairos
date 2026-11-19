@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import date, time, timedelta
 from enum import Enum
-from typing import Optional
+from typing import Optional, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Coordinates(BaseModel):
@@ -169,6 +169,12 @@ class TripStage(BaseModel):
             else:
                 self.days[i].previous_day_accommodation = None
 
+    @model_validator(mode="after")
+    def _relink_on_init(self) -> Self:
+        if self.days:
+            self._relink_accommodations()
+        return self
+
 
 class InterCityConnection(BaseModel):
     id: str
@@ -204,3 +210,9 @@ class Trip(BaseModel):
     connections: list[InterCityConnection] = Field(default_factory=list)
     preferences: PreferencesProfile = Field(default_factory=PreferencesProfile)
     curation_lists: list[CurationList] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _relink_stages_on_init(self) -> Self:
+        for stage in self.stages:
+            stage._relink_accommodations()
+        return self
