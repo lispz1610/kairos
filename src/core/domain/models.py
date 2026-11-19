@@ -23,10 +23,10 @@ Coordinates = tuple[float, float]
 """Coordenada geográfica (latitude, longitude)."""
 
 __all__ = [
+    "POI",
     "Coordinates",
     "InterCityConnection",
     "Itinerary",
-    "POI",
     "RouteStop",
     "TimeWindow",
 ]
@@ -44,7 +44,7 @@ class TimeWindow(BaseModel):
     end: time = Field(description="Horário de término do intervalo.")
 
     @model_validator(mode="after")
-    def _validate_interval(self):
+    def _validate_interval(self) -> TimeWindow:
         """A Janela deve terminar no ou após seu início."""
         if self.start > self.end:
             raise ValueError("Janela de intervalo inválida: início após término.")
@@ -64,6 +64,10 @@ class POI(BaseModel):
     )
     operating_window: TimeWindow = Field(
         description="Janela de Funcionamento do Ponto de Interesse."
+    )
+    utility_score: float = Field(
+        default=1.0,
+        description="Pontuação de Utilidade do Ponto de Interesse.",
     )
 
 
