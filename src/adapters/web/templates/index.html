@@ -614,121 +614,244 @@
       }
     }
 
+    function renderMealSlotCard(slot) {
+      const isSelected = (cand) => slot.selected_place && slot.selected_place.id === cand.id;
+      const timeStr = `${slot.window.start_time.slice(0, 5)} – ${slot.window.end_time.slice(0, 5)}`;
+
+      let recsHtml = '';
+      if (slot.recommended_places && slot.recommended_places.length > 0) {
+        recsHtml = `
+          <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">TOP 3 SUGESTÕES PRÓXIMAS:</span>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem;">
+              ${slot.recommended_places.map(p => {
+                const selected = isSelected(p);
+                const badges = (p.awards || []).map(a => `<span style="font-size: 0.65rem; background: rgba(56,189,248,0.2); color: var(--accent); padding: 1px 4px; border-radius: 3px;">${a}</span>`).join(' ');
+                return `
+                  <div style="background: ${selected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${selected ? 'var(--success)' : 'var(--surface-border)'}; border-radius: 0.375rem; padding: 0.5rem; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                      <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <strong style="font-size: 0.82rem; color: ${selected ? '#34d399' : 'white'};">${p.name}</strong>
+                        <span style="font-size: 0.75rem; color: #fbbf24; font-weight: bold;">⭐ ${p.rating || 4.5}</span>
+                      </div>
+                      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                        Preço: <strong style="color: var(--accent);">${p.price_tier || '$$'}</strong>
+                        ${badges ? `<div style="margin-top: 0.25rem;">${badges}</div>` : ''}
+                      </div>
+                    </div>
+                    <button onclick="selectMealPlace('${slot.id}', '${p.id}')" style="margin-top: 0.4rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 0.25rem; background: ${selected ? 'var(--success)' : 'var(--primary)'}; border: none; cursor: pointer; color: white;">
+                      ${selected ? '✓ Fixado' : 'Fixar Escolha'}
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        recsHtml = `<div class="card-label">Clique em "Otimizar Rota" para carregar recomendações contextuais</div>`;
+      }
+
+      const dotColor = slot.id.includes('lunch') ? '#f59e0b' : (slot.id.includes('coffee') ? '#38bdf8' : (slot.id.includes('wine') ? '#a855f7' : '#8b5cf6'));
+
+      return `
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background: ${dotColor};"></div>
+          <div class="timeline-content" style="width: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <strong>${timeStr} — ${slot.name}</strong>
+              ${slot.selected_place ? `<span style="font-size: 0.75rem; background: rgba(16,185,129,0.2); color: #34d399; padding: 2px 6px; border-radius: 4px;">Fixado: ${slot.selected_place.name} (${slot.selected_place.price_tier || '$$'})</span>` : ''}
+            </div>
+            ${recsHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    function timeToMinutes(tStr) {
+      if (!tStr) return 0;
+      const parts = tStr.split(':');
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    }
+
     function renderTimeline(day, depHotel, retHotel) {
       const timeline = document.getElementById('dailyTimeline');
       const p = tripState.preferences?.intensities || {};
       const coffeeLover = (p['Coffee Lover'] ?? 0) >= 5;
       const wineLover = (p['Wine Lover'] ?? 0) >= 5;
 
-      let itemsHtml = `
-        <div class="timeline-item">
-          <div class="timeline-dot" style="background: #10b981;"></div>
-          <div class="timeline-content">
-            <strong>09:00 — Partida da Hospedagem</strong>
-            <div class="card-label">${depHotel.name}</div>
-          </div>
-        </div>
-      `;
+      const timelineEntries = [];
 
+      // 09:00 — Partida
+      timelineEntries.push({
+        timeMin: 540,
+        html: `
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background: #10b981;"></div>
+            <div class="timeline-content">
+              <strong>09:00 — Partida da Hospedagem</strong>
+              <div class="card-label">${depHotel.name}</div>
+            </div>
+          </div>
+        `
+      });
+
+      // Stops do itinerário
       if (day.itinerary && day.itinerary.stops && day.itinerary.stops.length > 0) {
         day.itinerary.stops.forEach(stop => {
-          itemsHtml += `
+          timelineEntries.push({
+            timeMin: timeToMinutes(stop.arrival_time),
+            html: `
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div class="timeline-content">
+                  <strong>${stop.arrival_time.slice(0, 5)} – ${stop.departure_time.slice(0, 5)}: ${stop.poi.name}</strong>
+                  <div class="card-label">Permanência: ${stop.poi.stay_duration_minutes} min | Utilidade: ${stop.poi.utility_score}</div>
+                </div>
+              </div>
+            `
+          });
+        });
+      } else {
+        timelineEntries.push({
+          timeMin: 600,
+          html: `
             <div class="timeline-item">
               <div class="timeline-dot"></div>
               <div class="timeline-content">
-                <strong>${stop.arrival_time} – ${stop.departure_time}: ${stop.poi.name}</strong>
-                <div class="card-label">Permanência: ${stop.poi.stay_duration_minutes} min | Utilidade: ${stop.poi.utility_score}</div>
+                <strong>10:00 — Atração Principal da Manhã</strong>
+                <div class="card-label">Clique em "Otimizar Rota" para preencher via OPTW</div>
               </div>
             </div>
-          `;
+          `
         });
-      } else {
-        itemsHtml += `
-          <div class="timeline-item">
-            <div class="timeline-dot"></div>
-            <div class="timeline-content">
-              <strong>10:00 — Atração Principal da Manhã</strong>
-              <div class="card-label">Clique em "Otimizar Rota" para preencher via OPTW</div>
-            </div>
-          </div>
-        `;
       }
 
-      // Slot Almoço
-      itemsHtml += `
-        <div class="timeline-item">
-          <div class="timeline-dot" style="background: #f59e0b;"></div>
-          <div class="timeline-content">
-            <strong>12:30 — Almoço (Slot Gastronômico)</strong>
-            <div class="card-label">Recomendação contextual próxima à atração</div>
-          </div>
-        </div>
-      `;
-
-      // Pausa para café se coffee lover >= 5
-      if (coffeeLover) {
-        itemsHtml += `
-          <div class="timeline-item">
-            <div class="timeline-dot" style="background: #38bdf8;"></div>
-            <div class="timeline-content">
-              <strong>15:30 — Pausa para Café (Coffee Lover)</strong>
-              <div class="card-label">Cafeteria de especialidade próxima</div>
+      // Slots de refeição / pausas experienciais
+      if (day.meal_slots && day.meal_slots.length > 0) {
+        day.meal_slots.forEach(slot => {
+          timelineEntries.push({
+            timeMin: timeToMinutes(slot.window.start_time),
+            html: renderMealSlotCard(slot)
+          });
+        });
+      } else {
+        // Fallback default slots
+        timelineEntries.push({
+          timeMin: 750,
+          html: `
+            <div class="timeline-item">
+              <div class="timeline-dot" style="background: #f59e0b;"></div>
+              <div class="timeline-content">
+                <strong>12:30 — Almoço (Slot Gastronômico)</strong>
+                <div class="card-label">Recomendação contextual próxima à atração</div>
+              </div>
             </div>
-          </div>
-        `;
+          `
+        });
+        if (coffeeLover) {
+          timelineEntries.push({
+            timeMin: 930,
+            html: `
+              <div class="timeline-item">
+                <div class="timeline-dot" style="background: #38bdf8;"></div>
+                <div class="timeline-content">
+                  <strong>15:30 — Pausa para Café (Coffee Lover)</strong>
+                  <div class="card-label">Cafeteria de especialidade próxima</div>
+                </div>
+              </div>
+            `
+          });
+        }
+        if (wineLover) {
+          timelineEntries.push({
+            timeMin: 1080,
+            html: `
+              <div class="timeline-item">
+                <div class="timeline-dot" style="background: #a855f7;"></div>
+                <div class="timeline-content">
+                  <strong>18:00 — Degustação / Wine Bar (Wine Lover)</strong>
+                  <div class="card-label">Enoteca ou wine bar selecionado</div>
+                </div>
+              </div>
+            `
+          });
+        }
+        timelineEntries.push({
+          timeMin: 1170,
+          html: `
+            <div class="timeline-item">
+              <div class="timeline-dot" style="background: #8b5cf6;"></div>
+              <div class="timeline-content">
+                <strong>19:30 — Jantar (Slot Gastronômico)</strong>
+                <div class="card-label">Restaurante premiado/ranqueado</div>
+              </div>
+            </div>
+          `
+        });
       }
 
       // Parada de malas se solicitada
       const isTransition = (depHotel && retHotel && depHotel.id !== retHotel.id) || !!day.is_transition_day;
       if (isTransition && day.include_luggage_dropoff) {
-        itemsHtml += `
+        timelineEntries.push({
+          timeMin: 960,
+          html: `
+            <div class="timeline-item">
+              <div class="timeline-dot" style="background: #eab308;"></div>
+              <div class="timeline-content">
+                <strong>16:00 — Check-in e Parada de Malas</strong>
+                <div class="card-label">${retHotel.name}</div>
+              </div>
+            </div>
+          `
+        });
+      }
+
+      // Retorno
+      timelineEntries.push({
+        timeMin: 1290,
+        html: `
           <div class="timeline-item">
-            <div class="timeline-dot" style="background: #eab308;"></div>
+            <div class="timeline-dot" style="background: #10b981;"></div>
             <div class="timeline-content">
-              <strong>16:00 — Check-in e Parada de Malas</strong>
+              <strong>21:30 — Retorno para Hospedagem</strong>
               <div class="card-label">${retHotel.name}</div>
             </div>
           </div>
-        `;
-      }
+        `
+      });
 
-      // Wine bar se wine lover >= 5
-      if (wineLover) {
-        itemsHtml += `
-          <div class="timeline-item">
-            <div class="timeline-dot" style="background: #a855f7;"></div>
-            <div class="timeline-content">
-              <strong>18:00 — Degustação / Wine Bar (Wine Lover)</strong>
-              <div class="card-label">Enoteca ou wine bar selecionado</div>
-            </div>
-          </div>
-        `;
-      }
-
-      // Jantar
-      itemsHtml += `
-        <div class="timeline-item">
-          <div class="timeline-dot" style="background: #8b5cf6;"></div>
-          <div class="timeline-content">
-            <strong>19:30 — Jantar (Slot Gastronômico)</strong>
-            <div class="card-label">Restaurante premiado/ranqueado</div>
-          </div>
-        </div>
-      `;
-
-      // Retorno
-      itemsHtml += `
-        <div class="timeline-item">
-          <div class="timeline-dot" style="background: #10b981;"></div>
-          <div class="timeline-content">
-            <strong>21:30 — Retorno para Hospedagem</strong>
-            <div class="card-label">${retHotel.name}</div>
-          </div>
-        </div>
-      `;
-
-      timeline.innerHTML = itemsHtml;
+      timelineEntries.sort((a, b) => a.timeMin - b.timeMin);
+      timeline.innerHTML = timelineEntries.map(e => e.html).join('');
     }
+
+    window.selectMealPlace = function(slotId, poiId) {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const currentDay = stage.days[tripState.currentDayIndex];
+      if (!currentDay || !currentDay.meal_slots) return;
+
+      const slot = currentDay.meal_slots.find(s => s.id === slotId);
+      if (!slot) return;
+
+      const candidate = (slot.recommended_places || []).find(p => p.id === poiId);
+      if (!candidate) return;
+
+      slot.selected_place = candidate;
+      const tierEstimates = { "$": 45.0, "$$": 95.0, "$$$": 190.0, "$$$$": 380.0 };
+      if (slotId === 'slot-coffee') {
+        slot.estimated_cost = 35.0;
+      } else if (slotId === 'slot-wine') {
+        slot.estimated_cost = 120.0;
+      } else {
+        const tier = candidate.price_tier || (slotId === 'slot-lunch' ? '$$' : '$$$');
+        slot.estimated_cost = tierEstimates[tier] || (slotId === 'slot-lunch' ? 95.0 : 190.0);
+      }
+
+      saveState();
+      updateBudget();
+      renderUI();
+    };
 
     function updateMapMarkers(depHotel, retHotel, currentDay) {
       routeLayer.clearLayers();
@@ -834,6 +957,21 @@
       const depHotel = prevDay ? (prevDay.custom_accommodation || stage.base_accommodation) : (currentDay.custom_accommodation || stage.base_accommodation);
       const retHotel = currentDay.custom_accommodation || stage.base_accommodation;
 
+      const p = tripState.preferences?.intensities || {};
+      const coffeeLover = (p['Coffee Lover'] ?? 0) >= 5;
+      const wineLover = (p['Wine Lover'] ?? 0) >= 5;
+
+      const reservedSlots = [
+        { start_time: "12:30:00", end_time: "14:00:00" },
+        { start_time: "19:30:00", end_time: "21:00:00" }
+      ];
+      if (coffeeLover) {
+        reservedSlots.push({ start_time: "15:30:00", end_time: "16:15:00" });
+      }
+      if (wineLover) {
+        reservedSlots.push({ start_time: "18:00:00", end_time: "19:15:00" });
+      }
+
       // Busca POIs para a cidade
       const placesResp = await fetch(`/api/places/search?query=a&city_name=${encodeURIComponent(stage.city_name)}`);
       const places = placesResp.ok ? await placesResp.json() : [];
@@ -846,12 +984,32 @@
           end_location: retHotel.location,
           window: { start_time: "09:00:00", end_time: "21:00:00" },
           candidates: places,
-          preferences: tripState.preferences
+          preferences: tripState.preferences,
+          reserved_slots: reservedSlots
         })
       });
 
       if (optResp.ok) {
-        currentDay.itinerary = await optResp.json();
+        const itinerary = await optResp.json();
+        currentDay.itinerary = itinerary;
+
+        // Atualiza meal_slots com Top 3 contextuais
+        const diningResp = await fetch('/api/dining/contextual-slots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            departure_location: depHotel.location,
+            return_location: retHotel.location,
+            restaurant_candidates: places,
+            itinerary: itinerary,
+            preferences: tripState.preferences
+          })
+        });
+
+        if (diningResp.ok) {
+          currentDay.meal_slots = await diningResp.json();
+        }
+
         saveState();
         renderUI();
         alert('Roteiro otimizado com sucesso!');

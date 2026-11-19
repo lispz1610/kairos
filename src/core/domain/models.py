@@ -1,10 +1,23 @@
 from __future__ import annotations
 
 from datetime import date, time, timedelta
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Optional, Self
 
 from pydantic import BaseModel, Field, model_validator
+
+
+class PriceTier(StrEnum):
+    BUDGET = "$"
+    MODERATE = "$$"
+    COMFORT = "$$$"
+    LUXURY = "$$$$"
+
+
+class FoodProfile(StrEnum):
+    BUDGET = "budget"
+    MODERATE = "moderate"
+    FINE_DINING = "fine_dining"
 
 
 class Coordinates(BaseModel):
@@ -37,7 +50,7 @@ class Accommodation(BaseModel):
     id: str
     name: str
     location: Coordinates
-    price_tier: str = "$$"
+    price_tier: PriceTier = PriceTier.MODERATE
     real_daily_rate: Optional[float] = None
 
 
@@ -52,7 +65,7 @@ class POI(BaseModel):
     utility_score: float = 1.0
     category: str = "attraction"
     rating: Optional[float] = None
-    price_tier: Optional[str] = None
+    price_tier: Optional[PriceTier] = None
     awards: list[str] = Field(default_factory=list)
 
 
