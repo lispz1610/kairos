@@ -18,6 +18,10 @@ class LinkParserService:
         curation_service: Optional[CurationService] = None,
         places_port: Optional[PlacesPort] = None,
     ) -> None:
+        """Inicializar o analisador com o buscador e o serviço de curadoria informados.
+
+        Quando não há serviço informado, cria um a partir da porta de lugares ou do padrão.
+        """
         self.fetcher = fetcher
         if curation_service is not None:
             self.curation_service = curation_service
@@ -41,6 +45,7 @@ class LinkParserService:
     def extract_places_from_text(
         self, text: str, city_name: Optional[str] = None
     ) -> List[POI]:
+        """Extrair até oito Pontos de Interesse citados no texto, deduplicados por identificador."""
         candidates: List[POI] = []
         found_ids: set[str] = set()
 
