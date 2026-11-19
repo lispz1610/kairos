@@ -1,0 +1,218 @@
+{
+  "São Paulo": [
+    {
+      "id": "sp-michelin",
+      "title": "Guia Michelin (Estrelas & Bib Gourmand)",
+      "description": "Seleção oficial do Guia Michelin em São Paulo.",
+      "items": [
+        {
+          "id": "sp-dom",
+          "name": "D.O.M. (Alex Atala)",
+          "location": {
+            "latitude": -23.5658,
+            "longitude": -46.6672
+          },
+          "window": {
+            "start_time": "09:00:00",
+            "end_time": "18:00:00"
+          },
+          "stay_duration_minutes": 60,
+          "utility_score": 10.0,
+          "category": "restaurant",
+          "rating": 4.7,
+          "price_tier": "$$$$",
+          "awards": [
+            "Michelin 2 Estrelas"
+          ]
+        },
+        {
+          "id": "sp-mani",
+          "name": "Maní (Helena Rizzo)",
+          "location": {
+            "latitude": -23.5684,
+            "longitude": -46.6853
+          },
+          "window": {
+            "start_time": "09:00:00",
+            "end_time": "18:00:00"
+          },
+          "stay_duration_minutes": 60,
+          "utility_score": 9.5,
+          "category": "restaurant",
+          "rating": 4.6,
+          "price_tier": "$$$$",
+          "awards": [
+            "Michelin 1 Estrela"
+          ]
+        },
+        {
+          "id": "sp-baianeira",
+          "name": "A Baianeira MASP",
+          "location": {
+            "latitude": -23.5615,
+            "longitude": -46.6559
+          },
+          "window": {
+            "start_time": "09:00:00",
+            "end_time": "18:00:00"
+          },
+          "stay_duration_minutes": 60,
+          "utility_score": 9.0,
+          "category": "restaurant",
+          "rating": 4.8,
+          "price_tier": "$$",
+          "awards": [
+            "Bib Gourmand Michelin"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sp-coffee",
+      "title": "Cafeterias Especiais & Specialty Coffee",
+      "description": "Os melhores grãos e métodos artesanais da capital paulista.",
+      "items": [
+        {
+          "id": "sp-coffeelab",
+          "name": "Coffee Lab (Vila Madalena)",
+          "location": {
+            "latitude": -23.5552,
+            "longitude": -46.6908
+          },
+          "window": {
+            "start_time": "09:00:00",
+            "end_time": "18:00:00"
+          },
+          "stay_duration_minutes": 60,
+          "utility_score": 9.5,
+          "category": "Coffee Lover",
+          "rating": 4.8,
+          "price_tier": "$$",
+          "awards": [
+            "Melhor Cafeteria SP"
+          ]
+        },
+        {
+          "id": "sp-dolares",
+          "name": "Por um Punhado de Dólares (República)",
+          "location": {
+            "latitude": -23.5492,
+            "longitude": -46.6475
+          },
+          "window": {
+            "start_time": "09:00:00",
+            "end_time": "18:00:00"
+          },
+          "stay_duration_minutes": 60,
+          "utility_score": 8.5,
+          "category": "Coffee Lover",
+          "rating": 4.6,
+          "price_tier": "$",
+          "awards": []
+        }
+      ]
+    },
+    {
+      "id": "sp-bakeries",
+      "title": "Padarias & Docerias Artesanais",
+      "description": "Pães de fermentação natural e confeitarias de destaque.",
+      "items": [
+        {
+          "id": "sp-fabrique",
+          "name": "Fabrique Pão e Café",
+          "location": {
+            "latitude": -23.5358,
+            "longitude": -46.6575
+          },
+          "window": {
+            "start_time": "09:00:00",
+            "end_time": "18:00:00"
+          },
+          "stay_duration_minutes": 60,
+          "utility_score": 8.8,
+          "category": "bakery",
+          "rating": 4.7,
+          "price_tier": "$$",
+          "awards": []
+        }
+      ]
+    }
+  ],
+  "Lima": [
+    {
+      "id": "lima-50best",
+      "title": "Latin America's 50 Best Restaurants",
+      "description": "Ícones da alta gastronomia peruana em Lima.",
+      "items": [
+        {
+          "id": "lima-central",
+          "name": "Central (Virgilio Martínez)",
+          "location": {
+            "latitude": -12.1528,
+            "longitude": -77.0227
+          },
+          "window": {
+            "start_time": "09:00:00",
+            "end_time": "18:00:00"
+          },
+          "stay_duration_minutes": 60,
+          "utility_score": 10.0,
+          "category": "restaurant",
+          "rating": 4.9,
+          "price_tier": "$$$$",
+          "awards": [
+            "The World's Best 2023",
+            "50 Best"
+          ]
+        },
+        {
+          "id": "lima-maido",
+          "name": "Maido (Mitsuharu Tsumura)",
+          "location": {
+            "latitude": -12.1264,
+            "longitude": -77.0298
+          },
+          "window": {
+            "start_time": "09:00:00",
+            "end_time": "18:00:00"
+          },
+          "stay_duration_minutes": 60,
+          "utility_score": 9.8,
+          "category": "restaurant",
+          "rating": 4.8,
+          "price_tier": "$$$$",
+          "awards": [
+            "50 Best Nikkei"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lima-coffee",
+      "title": "Especialidades de Café em Miraflores & Barranco",
+      "description": "Cafés de origem única cultivados nos Andes e na Amazônia peruana.",
+      "items": [
+        {
+          "id": "lima-origen",
+          "name": "Origen Tostadores de Café",
+          "location": {
+            "latitude": -12.112,
+            "longitude": -77.038
+          },
+          "window": {
+            "start_time": "09:00:00",
+            "end_time": "18:00:00"
+          },
+          "stay_duration_minutes": 60,
+          "utility_score": 9.0,
+          "category": "Coffee Lover",
+          "rating": 4.7,
+          "price_tier": "$$",
+          "awards": [
+            "Campeão Barista Peru"
+          ]
+        }
+      ]
+    }
+  ]
+}

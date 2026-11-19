@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import httpx
 
 from src.core.domain.models import POI
+from src.core.ports.places import PlacesPort
 from src.core.services.curation import CurationService
 
 
@@ -21,8 +22,17 @@ class SSRFValidationError(Exception):
 class LinkParserService:
     """Valida URLs com proteção estrita contra SSRF e extrai estabelecimentos citados."""
 
-    def __init__(self) -> None:
-        self.curation_service = CurationService()
+    def __init__(
+        self,
+        curation_service: Optional[CurationService] = None,
+        places_port: Optional[PlacesPort] = None,
+    ) -> None:
+        if curation_service is not None:
+            self.curation_service = curation_service
+        elif places_port is not None:
+            self.curation_service = CurationService(places_port=places_port)
+        else:
+            self.curation_service = CurationService()
 
     def validate_url_safety(self, url: str) -> None:
         parsed = urlparse(url)
