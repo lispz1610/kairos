@@ -14,6 +14,7 @@ from src.core.domain.models import (
     Coordinates,
     CurationList,
     Itinerary,
+    MealSlot,
     PreferencesProfile,
     TimeWindow,
     Trip,
@@ -55,6 +56,7 @@ class OptimizeRequest(BaseModel):
     window: TimeWindow
     candidates: List[POI]
     preferences: Optional[PreferencesProfile] = None
+    reserved_slots: Optional[List[TimeWindow]] = None
 
 
 class RippleShiftRequest(BaseModel):
@@ -67,6 +69,16 @@ class DiningRecommendRequest(BaseModel):
     reference_location: Coordinates
     candidates: List[POI]
     limit: int = 3
+
+
+class ContextualDiningRequest(BaseModel):
+    departure_location: Coordinates
+    return_location: Coordinates
+    restaurant_candidates: List[POI]
+    itinerary: Optional[Itinerary] = None
+    preferences: Optional[PreferencesProfile] = None
+    cafe_candidates: Optional[List[POI]] = None
+    wine_candidates: Optional[List[POI]] = None
 
 
 class BudgetRequest(BaseModel):
@@ -82,6 +94,7 @@ def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
         window=req.window,
         candidates=req.candidates,
         preferences=req.preferences,
+        reserved_slots=req.reserved_slots,
     )
 
 
@@ -91,6 +104,19 @@ def recommend_dining(req: DiningRecommendRequest) -> List[POI]:
         reference_location=req.reference_location,
         candidates=req.candidates,
         limit=req.limit,
+    )
+
+
+@app.post("/api/dining/contextual-slots", response_model=List[MealSlot])
+def get_contextual_meal_slots(req: ContextualDiningRequest) -> List[MealSlot]:
+    return dining_service.create_contextual_meal_slots(
+        departure_location=req.departure_location,
+        return_location=req.return_location,
+        restaurant_candidates=req.restaurant_candidates,
+        itinerary=req.itinerary,
+        preferences=req.preferences,
+        cafe_candidates=req.cafe_candidates,
+        wine_candidates=req.wine_candidates,
     )
 
 

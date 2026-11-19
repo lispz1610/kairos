@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from datetime import time
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
-from src.core.domain.models import POI, Coordinates, MealSlot, PreferencesProfile, TimeWindow
+from src.core.domain.models import (
+    POI,
+    Coordinates,
+    Itinerary,
+    MealSlot,
+    PreferencesProfile,
+    TimeWindow,
+)
 from src.core.services.dining_and_budget import DiningService
 
 CATEGORY_SYNONYMS: Dict[str, Set[str]] = {
@@ -58,18 +65,27 @@ class PreferencesService:
         reference_location: Coordinates,
         cafe_candidates: List[POI],
         wine_candidates: List[POI],
+        itinerary: Optional[Itinerary] = None,
+        departure_location: Optional[Coordinates] = None,
+        return_location: Optional[Coordinates] = None,
     ) -> List[MealSlot]:
         slots: List[MealSlot] = []
+        dep_loc = departure_location or reference_location
+        ret_loc = return_location or reference_location
 
         if profile.get_intensity("Coffee Lover") >= 5.0:
+            c_win = TimeWindow(start_time=time(15, 30), end_time=time(16, 15))
+            c_loc = self.dining_service.get_contextual_location_for_slot(
+                c_win, dep_loc, ret_loc, itinerary, fallback_to_return=False
+            )
             top_cafes = self.dining_service.recommend_meal_places(
-                reference_location, cafe_candidates, limit=3
+                c_loc, cafe_candidates, limit=3
             )
             slots.append(
                 MealSlot(
                     id="slot-coffee",
                     name="Pausa para Café",
-                    window=TimeWindow(start_time=time(15, 30), end_time=time(16, 15)),
+                    window=c_win,
                     recommended_places=top_cafes,
                     selected_place=top_cafes[0] if top_cafes else None,
                     estimated_cost=35.0,
@@ -77,14 +93,18 @@ class PreferencesService:
             )
 
         if profile.get_intensity("Wine Lover") >= 5.0:
+            w_win = TimeWindow(start_time=time(18, 0), end_time=time(19, 15))
+            w_loc = self.dining_service.get_contextual_location_for_slot(
+                w_win, dep_loc, ret_loc, itinerary, fallback_to_return=True
+            )
             top_wine_bars = self.dining_service.recommend_meal_places(
-                reference_location, wine_candidates, limit=3
+                w_loc, wine_candidates, limit=3
             )
             slots.append(
                 MealSlot(
                     id="slot-wine",
                     name="Degustação / Wine Bar",
-                    window=TimeWindow(start_time=time(18, 0), end_time=time(19, 15)),
+                    window=w_win,
                     recommended_places=top_wine_bars,
                     selected_place=top_wine_bars[0] if top_wine_bars else None,
                     estimated_cost=120.0,
