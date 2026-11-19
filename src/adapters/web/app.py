@@ -1,12 +1,13 @@
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from src.adapters.http.safe_fetcher import SafeHttpFetcher
 from src.core.domain.models import (
     POI,
     Coordinates,
@@ -41,7 +42,7 @@ schedule_service = ScheduleService()
 dining_service = DiningService()
 markdown_service = MarkdownExportService()
 curation_service = CurationService()
-link_parser_service = LinkParserService()
+link_parser_service = LinkParserService(fetcher=SafeHttpFetcher())
 
 
 class OptimizeRequest(BaseModel):
@@ -144,14 +145,11 @@ def import_curation_link(req: ImportLinkRequest) -> dict[str, List[POI]]:
         try:
             content = link_parser_service.fetch_url_content(req.url)
         except SSRFValidationError as err:
-            from fastapi import HTTPException
             raise HTTPException(status_code=400, detail=str(err))
         except Exception as err:
-            from fastapi import HTTPException
             raise HTTPException(status_code=400, detail=f"Erro ao acessar URL: {err}")
 
     if not content:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Forneça uma 'url' ou 'text' para importação.")
 
     candidates = link_parser_service.extract_places_from_text(content, req.city_name)
