@@ -5,6 +5,7 @@ from src.core.services.schedule import ScheduleService
 
 
 def test_ripple_shift_extends_stage_and_shifts_subsequent_stages_and_connections() -> None:
+    """Verifica o Deslocamento em Cascata sobre Etapas e Conexões Interurbanas."""
     hotel_sp = Accommodation(
         id="h-sp", name="Hotel SP", location=Coordinates(latitude=-23.5, longitude=-46.6)
     )

@@ -18,6 +18,7 @@ from src.core.services.dining_and_budget import DiningService
 
 def test_dining_service_proximity_recommendations() -> None:
     # Reference POI (e.g. visited at morning)
+    """Verifica que as recomendações priorizam restaurantes proximos e bem avaliados."""
     masp_location = Coordinates(latitude=-23.5615, longitude=-46.6559)
 
     # 3 restaurant candidates at different distances
@@ -64,6 +65,7 @@ def test_dining_service_proximity_recommendations() -> None:
 
 
 def test_budget_calculation_consolidates_lodging_and_food() -> None:
+    """Verifica a Estimativa de Gastos consolidada de hospedagem e alimentação."""
     hotel_sp = Accommodation(
         id="h-sp",
         name="Hotel SP",
@@ -105,6 +107,7 @@ def test_budget_calculation_consolidates_lodging_and_food() -> None:
 def test_budget_calculation_varies_by_food_profile(
     profile: FoodProfile | str, expected_daily_food: float
 ) -> None:
+    """Verifica a Estimativa de Gastos para cada perfil alimentar."""
     hotel = Accommodation(
         id="h-sp",
         name="Hotel SP",
@@ -130,6 +133,7 @@ def test_budget_calculation_varies_by_food_profile(
 
 @pytest.mark.parametrize("travelers", [1, 2, 4])
 def test_budget_calculation_varies_by_travelers_count(travelers: int) -> None:
+    """Verifica a Estimativa de Gastos para diferentes números de viajantes."""
     hotel = Accommodation(
         id="h-sp",
         name="Hotel SP",
@@ -158,6 +162,7 @@ def test_budget_calculation_varies_by_travelers_count(travelers: int) -> None:
 
 @pytest.mark.parametrize("travelers", [1, 2, 4])
 def test_budget_calculation_scales_meal_slots_by_travelers(travelers: int) -> None:
+    """Verifica que os custos dos Slots de Refeição escalam com os viajantes."""
     hotel = Accommodation(
         id="h-sp",
         name="Hotel SP",

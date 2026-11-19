@@ -16,6 +16,7 @@ from src.core.services.markdown_export import MarkdownExportService
 
 
 def test_markdown_export_service_structure() -> None:
+    """Verifica a estrutura completa do Markdown exportado de uma Viagem."""
     hotel_sp = Accommodation(
         id="h-sp",
         name="Hotel Fasano SP",
@@ -124,6 +125,7 @@ def test_markdown_export_service_structure() -> None:
 
 
 def test_markdown_export_relinks_deserialized_trip_accommodations() -> None:
+    """Verifica que a exportação reconhece dias de troca após desserialização."""
     import json
 
     base_hotel = Accommodation(

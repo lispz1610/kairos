@@ -15,6 +15,7 @@ def test_preference_monotonicity_property(
     weight_low: float,
     weight_high: float,
 ) -> None:
+    """Invariante: maior intensidade no Perfil de Preferência não reduz a Utilidade."""
     service = PreferencesService()
     poi = POI(
         id="poi-test",

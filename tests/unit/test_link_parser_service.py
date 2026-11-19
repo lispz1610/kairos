@@ -18,6 +18,7 @@ from src.core.services.link_parser import LinkParserService
 
 
 def test_link_parser_service_requires_fetcher_for_network_calls() -> None:
+    """Verifica que operações de rede falham sem um buscador configurado."""
     parser = LinkParserService(fetcher=None)
 
     with pytest.raises(RuntimeError, match="Fetcher não configurado"):
@@ -28,6 +29,7 @@ def test_link_parser_service_requires_fetcher_for_network_calls() -> None:
 
 
 def test_link_parser_service_delegates_to_fetcher_port() -> None:
+    """Verifica que o serviço delega validação e busca à porta de busca."""
     mock_fetcher = MagicMock(spec=UrlFetcherPort)
     mock_fetcher.fetch_url.return_value = "<html>Content with Coffee Lab</html>"
 
@@ -73,6 +75,7 @@ def test_link_parser_service_delegates_to_fetcher_port() -> None:
 def test_ssrf_validator_blocks_forbidden_urls(
     invalid_url: str, expected_error_fragment: str
 ) -> None:
+    """Verifica que o validador SSRF rejeita URLs proibidas com a mensagem esperada."""
     fetcher = SafeHttpFetcher()
     parser = LinkParserService(fetcher=fetcher)
 
@@ -103,6 +106,7 @@ def test_ssrf_validator_blocks_forbidden_urls(
 def test_fetch_url_content_valid_simulation(
     url: str, mock_html: str, expected_snippet: str
 ) -> None:
+    """Verifica que o conteúdo buscado contém o trecho esperado."""
     fetcher = SafeHttpFetcher()
     parser = LinkParserService(fetcher=fetcher)
 
@@ -120,6 +124,7 @@ def test_fetch_url_content_valid_simulation(
 
 
 def test_fetch_url_content_size_limit_exceeded() -> None:
+    """Verifica que conteúdo acima do limite máximo é rejeitado."""
     fetcher = SafeHttpFetcher(max_content_bytes=1_000_000)
     parser = LinkParserService(fetcher=fetcher)
 
@@ -184,6 +189,7 @@ def test_dns_rebinding_ip_pinning_transport_connects_only_to_validated_ip() -> N
 
 
 def test_pinned_ip_transport_initializes_with_backend() -> None:
+    """Verifica que o transporte usa o backend de IP fixado."""
     transport = PinnedIPTransport(pinned_ip="93.184.216.34")
     assert transport._pool is not None
     assert isinstance(transport._pool._network_backend, PinnedIPBackend)
@@ -211,6 +217,7 @@ def test_fetch_url_rejects_http_redirects() -> None:
 
 
 def test_text_extraction_identifies_matching_places() -> None:
+    """Verifica a extração de Pontos de Interesse mencionados em texto livre."""
     parser = LinkParserService()
     sample_article = """
     Guia de São Paulo:
