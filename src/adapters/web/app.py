@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from src.adapters.http.safe_fetcher import SafeHttpFetcher
+from src.adapters.places import create_places_adapter
 from src.core.domain.models import (
     POI,
     Coordinates,
@@ -41,8 +42,11 @@ solver = OPTWSolver()
 schedule_service = ScheduleService()
 dining_service = DiningService()
 markdown_service = MarkdownExportService()
-curation_service = CurationService()
-link_parser_service = LinkParserService(fetcher=SafeHttpFetcher())
+places_adapter = create_places_adapter()
+curation_service = CurationService(places_port=places_adapter)
+link_parser_service = LinkParserService(
+    fetcher=SafeHttpFetcher(), curation_service=curation_service
+)
 
 
 class OptimizeRequest(BaseModel):

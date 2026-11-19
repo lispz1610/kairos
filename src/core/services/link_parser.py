@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from src.core.domain.models import POI
 from src.core.ports.fetcher import SSRFValidationError, UrlFetcherPort
+from src.core.ports.places import PlacesPort
 from src.core.services.curation import CurationService
 
 
@@ -15,9 +16,15 @@ class LinkParserService:
         self,
         fetcher: Optional[UrlFetcherPort] = None,
         curation_service: Optional[CurationService] = None,
+        places_port: Optional[PlacesPort] = None,
     ) -> None:
         self.fetcher = fetcher
-        self.curation_service = curation_service or CurationService()
+        if curation_service is not None:
+            self.curation_service = curation_service
+        elif places_port is not None:
+            self.curation_service = CurationService(places_port=places_port)
+        else:
+            self.curation_service = CurationService()
 
     def validate_url_safety(self, url: str) -> None:
         """Delega a validação da URL à porta de busca configurada."""

@@ -33,8 +33,10 @@ env/
 
 # SQLite databases & Local Cache (ADR 0003)
 *.db
+*.sqlite
 *.sqlite3
 cache/
+.cache/
 
 # Testing & Quality (ISO 25010 / ISO 29119)
 .pytest_cache/
