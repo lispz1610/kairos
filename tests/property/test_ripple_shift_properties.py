@@ -29,6 +29,7 @@ def test_ripple_shift_invariants(
     days_stage_2: int,
     delta_days: int,
 ) -> None:
+    """Invariante: o Deslocamento em Cascata preserva a duração das Etapas seguintes."""
     hotel = Accommodation(
         id="h", name="Hotel", location=Coordinates(latitude=0.0, longitude=0.0)
     )
@@ -149,6 +150,7 @@ def test_ripple_shift_invariants(
 
 @st.composite
 def arbitrary_trips(draw: st.DrawFn) -> Trip:
+    """Gera Viagens com Etapas e Conexões Interurbanas arbitrárias."""
     num_stages = draw(st.integers(min_value=1, max_value=3))
     stages = []
     connections = []
@@ -222,6 +224,7 @@ def arbitrary_trips(draw: st.DrawFn) -> Trip:
 @given(trip=arbitrary_trips())
 def test_trip_json_round_trip_idempotence(trip: Trip) -> None:
     # Validate round-trip via json.loads(trip.model_dump_json())
+    """Invariante: serializar e desserializar a Viagem preserva dados e dias de transição."""
     dumped_json_str = trip.model_dump_json()
     dict_payload = json.loads(dumped_json_str)
     restored = Trip.model_validate(dict_payload)

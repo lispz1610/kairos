@@ -5,6 +5,7 @@ from src.core.solvers.optw import OPTWSolver
 
 
 def test_optw_solver_respects_time_budget_and_depots() -> None:
+    """Verifica que o solver respeita orçamento temporal e pontos de partida e retorno."""
     hotel_a = Accommodation(
         id="hotel-a",
         name="Hotel A (Partida)",
@@ -65,6 +66,7 @@ def test_optw_solver_respects_time_budget_and_depots() -> None:
 
 
 def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
+    """Verifica que a busca local 2-opt e troca desentrelaça a ordem das paradas."""
     start_loc = Coordinates(latitude=0.0, longitude=0.0)
     end_loc = Coordinates(latitude=0.0, longitude=0.06)
 
@@ -122,6 +124,7 @@ def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
 
 
 def test_optw_solver_blocks_attractions_during_reserved_slots() -> None:
+    """Verifica que nenhuma parada sobrepõe slots reservados."""
     start_loc = Coordinates(latitude=-23.5505, longitude=-46.6333)
     end_loc = Coordinates(latitude=-23.5600, longitude=-46.6500)
 

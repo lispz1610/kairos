@@ -19,6 +19,7 @@ client = TestClient(app)
     ],
 )
 def test_import_link_ssrf_protection_returns_400(forbidden_url: str) -> None:
+    """Verifica que URLs proibidas por SSRF são rejeitadas com 400."""
     response = client.post(
         "/api/curation/import-link",
         json={"url": forbidden_url, "city_name": "São Paulo"},
@@ -32,6 +33,7 @@ def test_import_link_ssrf_protection_returns_400(forbidden_url: str) -> None:
 
 
 def test_import_link_with_raw_text_succeeds() -> None:
+    """Verifica a extração de candidatos a partir de texto livre."""
     text_payload = {
         "text": "Adoramos o Central em Lima e o Maido, ambos extraordinários!",
         "city_name": "Lima",
@@ -45,6 +47,7 @@ def test_import_link_with_raw_text_succeeds() -> None:
 
 
 def test_import_link_with_valid_url_succeeds() -> None:
+    """Verifica a extração de candidatos a partir de uma URL segura."""
     safe_addr = [(None, None, None, None, ("93.184.216.34", 80))]
     with patch("socket.getaddrinfo", return_value=safe_addr):
         mock_response = MagicMock()
