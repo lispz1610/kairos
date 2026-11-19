@@ -278,19 +278,23 @@ class DiningService:
             return day.effective_accommodation.real_daily_rate
         return HOTEL_TIER_DEFAULTS.get(hotel.price_tier, 450.0)
 
-    def _get_day_dining_cost(self, day: TripDay, daily_food_rate: float) -> float:
+    def _get_day_dining_cost(
+        self, day: TripDay, daily_food_rate: float, num_travelers: int = 1
+    ) -> float:
         day_dining = sum(
             slot.estimated_cost
             for slot in day.meal_slots
             if slot.estimated_cost is not None
         )
-        return day_dining if day_dining > 0 else daily_food_rate
+        base_cost = day_dining if day_dining > 0 else daily_food_rate
+        return base_cost * num_travelers
 
     def calculate_trip_budget(
         self, trip: Trip, food_profile: FoodProfile | str = FoodProfile.MODERATE
     ) -> BudgetSummary:
-        profile_key = str(food_profile).lower()
+        profile_key = getattr(food_profile, "value", str(food_profile)).lower()
         daily_food_rate = DAILY_FOOD_PROFILES.get(profile_key, 180.0)
+        num_travelers = max(1, getattr(trip, "travelers", 1) or 1)
 
         total_accommodation = 0.0
         total_dining = 0.0
@@ -304,7 +308,9 @@ class DiningService:
                 stage_acc_cost += self._get_day_accommodation_rate(
                     day, stage.base_accommodation
                 )
-                stage_dining_cost += self._get_day_dining_cost(day, daily_food_rate)
+                stage_dining_cost += self._get_day_dining_cost(
+                    day, daily_food_rate, num_travelers
+                )
 
             total_accommodation += stage_acc_cost
             total_dining += stage_dining_cost

@@ -1,3 +1,5 @@
+import pytest
+
 from src.core.domain.models import POI, Coordinates, PreferencesProfile
 from src.core.services.preferences import PreferencesService
 
@@ -64,3 +66,73 @@ def test_thematic_slots_generation_for_coffee_and_wine_lovers() -> None:
     assert "Pausa para Café" in slot_names
     assert "Degustação / Wine Bar" in slot_names
     assert len(slots) == 2
+
+
+def test_all_six_preference_categories_modulate_utility() -> None:
+    service = PreferencesService()
+    profile = PreferencesProfile(
+        intensities={
+            "Coffee Lover": 10.0,
+            "Wine Lover": 8.0,
+            "Museum Lover": 6.0,
+            "Nature Lover": 4.0,
+            "Gastronomy & Fine Dining": 5.0,
+            "Street Food": 2.0,
+        }
+    )
+
+    pois = [
+        POI(
+            id="poi-coffee",
+            name="Cafeteria Especial",
+            location=Coordinates(latitude=0.0, longitude=0.0),
+            category="cafe",
+            utility_score=10.0,
+        ),
+        POI(
+            id="poi-wine",
+            name="Wine Bar Boutique",
+            location=Coordinates(latitude=0.0, longitude=0.0),
+            category="wine_bar",
+            utility_score=10.0,
+        ),
+        POI(
+            id="poi-museum",
+            name="Galeria de Arte",
+            location=Coordinates(latitude=0.0, longitude=0.0),
+            category="museum",
+            utility_score=10.0,
+        ),
+        POI(
+            id="poi-nature",
+            name="Parque Ibirapuera",
+            location=Coordinates(latitude=0.0, longitude=0.0),
+            category="park",
+            utility_score=10.0,
+        ),
+        POI(
+            id="poi-gastro",
+            name="Restaurante Autoral",
+            location=Coordinates(latitude=0.0, longitude=0.0),
+            category="restaurant",
+            utility_score=10.0,
+        ),
+        POI(
+            id="poi-street",
+            name="Mercado de Rua",
+            location=Coordinates(latitude=0.0, longitude=0.0),
+            category="street_food",
+            utility_score=10.0,
+        ),
+    ]
+
+    weighted = service.apply_preference_weights(pois, profile)
+    weighted_by_id = {p.id: p.utility_score for p in weighted}
+
+    # Base = 10.0. Multiplier = 1.0 + (intensity / 10.0)
+    assert weighted_by_id["poi-coffee"] == pytest.approx(20.0)  # 10.0 * 2.0
+    assert weighted_by_id["poi-wine"] == pytest.approx(18.0)  # 10.0 * 1.8
+    assert weighted_by_id["poi-museum"] == pytest.approx(16.0)  # 10.0 * 1.6
+    assert weighted_by_id["poi-nature"] == pytest.approx(14.0)  # 10.0 * 1.4
+    assert weighted_by_id["poi-gastro"] == pytest.approx(15.0)  # 10.0 * 1.5
+    assert weighted_by_id["poi-street"] == pytest.approx(12.0)  # 10.0 * 1.2

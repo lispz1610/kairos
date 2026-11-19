@@ -87,6 +87,60 @@ def test_trip_budget_endpoint() -> None:
     assert data["total_trip_cost"] == 1360.0
 
 
+def test_trip_budget_endpoint_with_custom_food_profile_and_multiple_travelers() -> None:
+    payload = {
+        "trip": {
+            "id": "trip-sp-group",
+            "title": "SP Group Trip",
+            "travelers": 3,
+            "stages": [
+                {
+                    "id": "st-sp",
+                    "city_name": "São Paulo",
+                    "start_date": "2026-11-01",
+                    "end_date": "2026-11-03",
+                    "base_accommodation": {
+                        "id": "h-1",
+                        "name": "Hotel SP",
+                        "location": {"latitude": -23.55, "longitude": -46.66},
+                        "real_daily_rate": 600.0,
+                    },
+                    "days": [
+                        {
+                            "date": "2026-11-01",
+                            "base_accommodation": {
+                                "id": "h-1",
+                                "name": "Hotel SP",
+                                "location": {"latitude": -23.55, "longitude": -46.66},
+                            },
+                        },
+                        {
+                            "date": "2026-11-02",
+                            "base_accommodation": {
+                                "id": "h-1",
+                                "name": "Hotel SP",
+                                "location": {"latitude": -23.55, "longitude": -46.66},
+                            },
+                        },
+                    ],
+                }
+            ],
+            "connections": [],
+        },
+        "food_profile": "fine_dining",
+    }
+
+    response = client.post("/api/trip/budget", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    # 2 nights at 600.0 per room = 1200.0
+    assert data["total_accommodation_cost"] == 1200.0
+    # Fine dining = 400.0 * 2 days * 3 travelers = 2400.0
+    assert data["total_dining_cost"] == 2400.0
+    assert data["total_trip_cost"] == 3600.0
+    assert data["stage_breakdowns"]["st-sp"]["total_cost"] == 3600.0
+
+
 def test_contextual_dining_slots_endpoint() -> None:
     dep_hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
     ret_hotel_loc = {"latitude": -23.5700, "longitude": -46.6700}

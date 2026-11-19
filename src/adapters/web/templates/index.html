@@ -362,12 +362,38 @@
             <span id="valNature" style="font-weight: 600; width: 20px; display: inline-block;">5</span>
           </div>
         </div>
+        <div class="slider-row">
+          <span>🍽️ Gastronomy &amp; Fine Dining:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngGastronomy" value="7" />
+            <span id="valGastronomy" style="font-weight: 600; width: 20px; display: inline-block;">7</span>
+          </div>
+        </div>
+        <div class="slider-row">
+          <span>🌮 Street Food:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngStreetFood" value="6" />
+            <span id="valStreetFood" style="font-weight: 600; width: 20px; display: inline-block;">6</span>
+          </div>
+        </div>
       </div>
 
       <!-- Resumo Orçamentário -->
       <div class="panel">
         <div class="panel-title">
           <span>Estimativa Orçamentária</span>
+        </div>
+        <div style="margin-bottom: 0.6rem;">
+          <label class="card-label" for="selFoodProfile" style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem;">Perfil Alimentar:</label>
+          <select id="selFoodProfile" style="width: 100%; padding: 0.35rem 0.5rem; background: var(--bg); color: var(--text); border: 1px solid var(--surface-border); border-radius: 0.25rem; font-size: 0.82rem;">
+            <option value="budget">Econômico: R$ 80</option>
+            <option value="moderate" selected>Moderado: R$ 180</option>
+            <option value="fine_dining">Alta Gastronomia: R$ 400</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 0.75rem;">
+          <label class="card-label" for="numTravelers" style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem;">Número de Viajantes:</label>
+          <input type="number" id="numTravelers" min="1" max="20" value="1" style="width: 100%; padding: 0.35rem 0.5rem; background: var(--bg); color: var(--text); border: 1px solid var(--surface-border); border-radius: 0.25rem; font-size: 0.82rem;" />
         </div>
         <div class="card-row">
           <span class="card-label">Hospedagem (Etapa):</span>
@@ -422,16 +448,28 @@
   <script>
     const STORAGE_KEY = 'kairos_trip_state_v1';
 
+    const PREFERENCE_CATEGORIES = [
+      { id: 'Coffee', key: 'Coffee Lover', defaultVal: 8 },
+      { id: 'Wine', key: 'Wine Lover', defaultVal: 4 },
+      { id: 'Museum', key: 'Museum Lover', defaultVal: 9 },
+      { id: 'Nature', key: 'Nature Lover', defaultVal: 5 },
+      { id: 'Gastronomy', key: 'Gastronomy & Fine Dining', defaultVal: 7 },
+      { id: 'StreetFood', key: 'Street Food', defaultVal: 6 }
+    ];
+
     const defaultState = {
       id: "trip-sp-lima",
       title: "Viagem Cultural São Paulo e Lima",
       travelers: 1,
+      food_profile: "moderate",
       preferences: {
         intensities: {
           "Coffee Lover": 8.0,
           "Wine Lover": 4.0,
           "Museum Lover": 9.0,
-          "Nature Lover": 5.0
+          "Nature Lover": 5.0,
+          "Gastronomy & Fine Dining": 7.0,
+          "Street Food": 6.0
         }
       },
       currentStageIndex: 0,
@@ -482,7 +520,14 @@
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (!parsed.travelers) parsed.travelers = 1;
+          if (!parsed.food_profile) parsed.food_profile = 'moderate';
+          if (!parsed.preferences) parsed.preferences = { intensities: {} };
+          if (!parsed.preferences.intensities) parsed.preferences.intensities = {};
+          return parsed;
+        }
       } catch (e) {
         console.warn("Falha ao ler localStorage", e);
       }
@@ -538,14 +583,23 @@
 
       // Sliders
       const p = tripState.preferences?.intensities || {};
-      ['Coffee', 'Wine', 'Museum', 'Nature'].forEach(k => {
-        const key = `${k} Lover`;
-        const val = p[key] ?? 5;
-        const slider = document.getElementById(`rng${k}`);
-        const label = document.getElementById(`val${k}`);
-        if (slider) slider.value = val;
+      PREFERENCE_CATEGORIES.forEach(cat => {
+        const val = p[cat.key] ?? cat.defaultVal;
+        const slider = document.getElementById(`rng${cat.id}`);
+        const label = document.getElementById(`val${cat.id}`);
+        if (slider && document.activeElement !== slider) slider.value = val;
         if (label) label.innerText = val;
       });
+
+      // Controles Orçamentários
+      const selFood = document.getElementById('selFoodProfile');
+      if (selFood && document.activeElement !== selFood) {
+        selFood.value = tripState.food_profile || 'moderate';
+      }
+      const inputTravelers = document.getElementById('numTravelers');
+      if (inputTravelers && document.activeElement !== inputTravelers) {
+        inputTravelers.value = tripState.travelers || 1;
+      }
 
       // Pílulas de dias
       const daysNav = document.getElementById('daysNav');
@@ -598,10 +652,19 @@
 
     async function updateBudget() {
       try {
+        const selProfile = document.getElementById('selFoodProfile');
+        const foodProfile = selProfile ? selProfile.value : (tripState.food_profile || 'moderate');
+        const numTravelers = tripState.travelers ? Math.max(1, parseInt(tripState.travelers, 10)) : 1;
+        tripState.food_profile = foodProfile;
+        tripState.travelers = numTravelers;
+
         const resp = await fetch('/api/trip/budget', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trip: tripState, food_profile: 'moderate' })
+          body: JSON.stringify({
+            trip: tripState,
+            food_profile: foodProfile
+          })
         });
         if (resp.ok) {
           const b = await resp.json();
@@ -873,19 +936,41 @@
     }
 
     // Handlers dos Sliders de Preferência
-    ['Coffee', 'Wine', 'Museum', 'Nature'].forEach(k => {
-      const slider = document.getElementById(`rng${k}`);
+    PREFERENCE_CATEGORIES.forEach(cat => {
+      const slider = document.getElementById(`rng${cat.id}`);
       if (slider) {
         slider.oninput = (e) => {
           const val = parseFloat(e.target.value);
-          document.getElementById(`val${k}`).innerText = val;
+          const label = document.getElementById(`val${cat.id}`);
+          if (label) label.innerText = val;
           if (!tripState.preferences) tripState.preferences = { intensities: {} };
-          tripState.preferences.intensities[`${k} Lover`] = val;
+          if (!tripState.preferences.intensities) tripState.preferences.intensities = {};
+          tripState.preferences.intensities[cat.key] = val;
           saveState();
           renderUI();
         };
       }
     });
+
+    // Handlers dos Controles de Orçamento
+    const selFood = document.getElementById('selFoodProfile');
+    if (selFood) {
+      selFood.onchange = (e) => {
+        tripState.food_profile = e.target.value;
+        saveState();
+        updateBudget();
+      };
+    }
+
+    const inputTravelers = document.getElementById('numTravelers');
+    if (inputTravelers) {
+      inputTravelers.oninput = (e) => {
+        const val = Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1));
+        tripState.travelers = val;
+        saveState();
+        updateBudget();
+      };
+    }
 
     // Ripple Shift: Ajuste de Dias com Confirmação em Modal
     async function handleRippleShift(delta) {
