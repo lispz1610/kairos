@@ -1,10 +1,16 @@
-from datetime import date
+from datetime import date, time
+
+import pytest
 
 from src.core.domain.models import (
     POI,
     Accommodation,
     Coordinates,
+    FoodProfile,
+    MealSlot,
+    TimeWindow,
     Trip,
+    TripDay,
     TripStage,
 )
 from src.core.services.dining_and_budget import DiningService
@@ -83,3 +89,113 @@ def test_budget_calculation_consolidates_lodging_and_food() -> None:
     # Total = 1740.0
     assert budget.total_trip_cost == 1740.0
     assert "stage-sp" in budget.stage_breakdowns
+
+
+@pytest.mark.parametrize(
+    ("profile", "expected_daily_food"),
+    [
+        (FoodProfile.BUDGET, 80.0),
+        ("budget", 80.0),
+        (FoodProfile.MODERATE, 180.0),
+        ("moderate", 180.0),
+        (FoodProfile.FINE_DINING, 400.0),
+        ("fine_dining", 400.0),
+    ],
+)
+def test_budget_calculation_varies_by_food_profile(
+    profile: FoodProfile | str, expected_daily_food: float
+) -> None:
+    hotel = Accommodation(
+        id="h-sp",
+        name="Hotel SP",
+        location=Coordinates(latitude=-23.55, longitude=-46.66),
+        real_daily_rate=300.0,
+    )
+    stage = TripStage.create(
+        id="st-sp",
+        city_name="São Paulo",
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 4),  # 3 days
+        base_accommodation=hotel,
+    )
+    trip = Trip(id="trip-test", title="Trip Test", stages=[stage], travelers=1)
+
+    service = DiningService()
+    budget = service.calculate_trip_budget(trip, food_profile=profile)
+
+    assert budget.total_accommodation_cost == 300.0 * 3
+    assert budget.total_dining_cost == expected_daily_food * 3
+    assert budget.total_trip_cost == (300.0 * 3) + (expected_daily_food * 3)
+
+
+@pytest.mark.parametrize("travelers", [1, 2, 4])
+def test_budget_calculation_varies_by_travelers_count(travelers: int) -> None:
+    hotel = Accommodation(
+        id="h-sp",
+        name="Hotel SP",
+        location=Coordinates(latitude=-23.55, longitude=-46.66),
+        real_daily_rate=350.0,
+    )
+    stage = TripStage.create(
+        id="st-sp",
+        city_name="São Paulo",
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 3),  # 2 days
+        base_accommodation=hotel,
+    )
+    trip = Trip(id="trip-travelers", title="Trip", stages=[stage], travelers=travelers)
+
+    service = DiningService()
+    budget = service.calculate_trip_budget(trip, food_profile="moderate")
+
+    # Lodging stays per-room: 2 days * 350.0 = 700.0
+    assert budget.total_accommodation_cost == 700.0
+    # Moderate food = 180.0/day * 2 days * travelers
+    expected_food = 180.0 * 2 * travelers
+    assert budget.total_dining_cost == expected_food
+    assert budget.total_trip_cost == 700.0 + expected_food
+
+
+@pytest.mark.parametrize("travelers", [1, 2, 4])
+def test_budget_calculation_scales_meal_slots_by_travelers(travelers: int) -> None:
+    hotel = Accommodation(
+        id="h-sp",
+        name="Hotel SP",
+        location=Coordinates(latitude=-23.55, longitude=-46.66),
+        real_daily_rate=300.0,
+    )
+    slot_lunch = MealSlot(
+        id="slot-lunch",
+        name="Almoço",
+        window=TimeWindow(start_time=time(12, 30), end_time=time(14, 0)),
+        estimated_cost=95.0,
+    )
+    slot_dinner = MealSlot(
+        id="slot-dinner",
+        name="Jantar",
+        window=TimeWindow(start_time=time(19, 30), end_time=time(21, 0)),
+        estimated_cost=190.0,
+    )
+    day = TripDay(
+        date=date(2026, 11, 1),
+        base_accommodation=hotel,
+        meal_slots=[slot_lunch, slot_dinner],
+    )
+    stage = TripStage(
+        id="st-1",
+        city_name="São Paulo",
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 2),
+        base_accommodation=hotel,
+        days=[day],
+    )
+    trip = Trip(id="t-slots", title="Slots Trip", stages=[stage], travelers=travelers)
+
+    service = DiningService()
+    budget = service.calculate_trip_budget(trip, food_profile="moderate")
+
+    # Meal slots total = 95 + 190 = 285.0 per person
+    expected_dining = 285.0 * travelers
+    assert budget.total_dining_cost == expected_dining
+    assert budget.total_accommodation_cost == 300.0
+    assert budget.total_trip_cost == 300.0 + expected_dining
