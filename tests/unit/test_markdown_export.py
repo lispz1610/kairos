@@ -95,18 +95,32 @@ def test_markdown_export_service_structure() -> None:
     service = MarkdownExportService()
     md_content = service.export_trip_markdown(trip)
 
-    # Assertions on Markdown structure
+    # 1. Cabeçalho e Metadados Globais
     assert "# 🌍 Viagem Gastronômica & Cultural" in md_content
+    assert "Guia estruturado de viagem" in md_content
+    assert "👥 **Viajantes**: 1 pessoa(s)" in md_content
+
+    # 2. Quadro Orçamentário Consolidado
     assert "## 💰 Quadro Orçamentário Estimado" in md_content
+    assert "| `st-sp` | 2 |" in md_content
+
+    # 3. Caderno Diário e Etapas
     assert "## 📅 Caderno Diário Detalhado" in md_content
     assert "São Paulo" in md_content
+
+    # 4. Hospedagens e Dia de Troca de Hospedagem
     assert "Hotel Fasano SP" in md_content
     assert "Hotel Boutique Jardins" in md_content
+    assert "Dia de Troca de Hospedagem" in md_content
+    assert "Check-in e Parada de Malas" in md_content
+
+    # 5. Roteiro de Visitas e Pontos de Interesse
     assert "MASP" in md_content
+    assert "Patrimônio Histórico" in md_content
+
+    # 6. Slots de Refeição e Gastronomia Curada
     assert "A Baianeira MASP" in md_content
     assert "Bib Gourmand Michelin" in md_content
-    assert "Troca de Hospedagem" in md_content
-    assert "Check-in e Parada de Malas" in md_content
 
 
 def test_markdown_export_relinks_deserialized_trip_accommodations() -> None:
@@ -144,6 +158,7 @@ def test_markdown_export_relinks_deserialized_trip_accommodations() -> None:
     service = MarkdownExportService()
     md = service.export_trip_markdown(restored_trip)
 
-    assert "Troca de Hospedagem" in md
+    # Verificação de re-vinculação de hospedagens e dia de transição
+    assert "Dia de Troca de Hospedagem" in md
     assert "Check-in e Parada de Malas" in md
     assert "Hotel Custom" in md

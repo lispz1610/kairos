@@ -315,16 +315,16 @@
 
         <div class="card" id="hotelCard">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <strong id="activeHotelName">Hotel Base</strong>
-            <span id="hotelTransitionBadge" class="badge badge-transition" style="display: none;">Troca de Hotel</span>
+            <strong id="activeHotelName">Hospedagem Base</strong>
+            <span id="hotelTransitionBadge" class="badge badge-transition" style="display: none;">Dia de Troca de Hospedagem</span>
           </div>
           <div class="card-row">
             <span class="card-label">Início da Rota (Partida):</span>
-            <span id="depotStart">Hotel Base</span>
+            <span id="depotStart">Hospedagem Base</span>
           </div>
           <div class="card-row">
             <span class="card-label">Término da Rota (Retorno):</span>
-            <span id="depotReturn">Hotel Base</span>
+            <span id="depotReturn">Hospedagem Base</span>
           </div>
           <div class="card-row">
             <span class="card-label">Valor Estimado Diária:</span>
@@ -332,12 +332,12 @@
           </div>
           <div class="card-row" id="luggageOptionRow" style="display: none; margin-top: 0.5rem;">
             <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
-              <input type="checkbox" id="chkLuggageStop" /> Parada para malas no novo hotel à tarde
+              <input type="checkbox" id="chkLuggageStop" /> Parada para malas na nova hospedagem à tarde
             </label>
           </div>
           <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
-            <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnChangeHotel">Alterar Hotel Deste Dia</button>
-            <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnResetBaseHotel">Usar Hotel Padrão</button>
+            <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnChangeHotel">Alterar Hospedagem Deste Dia</button>
+            <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnResetBaseHotel">Usar Hospedagem Padrão</button>
           </div>
         </div>
       </div>
@@ -398,7 +398,7 @@
           <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" id="btnOpenCurationManager">Gerenciar</button>
         </div>
         <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
-          Ative listas para bonificar utilidade no roteiro e refeições.
+          Ative listas para bonificar a pontuação de utilidade no roteiro e refeições.
         </div>
 
         <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--accent); margin-bottom: 0.35rem; display: flex; justify-content: space-between; align-items: center;">
@@ -812,7 +812,7 @@
                 <div class="timeline-dot"></div>
                 <div class="timeline-content">
                   <strong>${stop.arrival_time.slice(0, 5)} – ${stop.departure_time.slice(0, 5)}: ${stop.poi.name}</strong>
-                  <div class="card-label">Permanência: ${stop.poi.stay_duration_minutes} min | Utilidade: ${stop.poi.utility_score}</div>
+                  <div class="card-label">Permanência: ${stop.poi.stay_duration_minutes} min | Pontuação de Utilidade: ${stop.poi.utility_score}</div>
                 </div>
               </div>
             `
@@ -825,7 +825,7 @@
             <div class="timeline-item">
               <div class="timeline-dot"></div>
               <div class="timeline-content">
-                <strong>10:00 — Atração Principal da Manhã</strong>
+                <strong>10:00 — Visita Principal da Manhã</strong>
                 <div class="card-label">Clique em "Otimizar Rota" para preencher via OPTW</div>
               </div>
             </div>
@@ -850,7 +850,7 @@
               <div class="timeline-dot" style="background: #f59e0b;"></div>
               <div class="timeline-content">
                 <strong>12:30 — Almoço (Slot Gastronômico)</strong>
-                <div class="card-label">Recomendação contextual próxima à atração</div>
+                <div class="card-label">Recomendação contextual próxima ao Ponto de Interesse anterior</div>
               </div>
             </div>
           `
@@ -1390,7 +1390,7 @@
                         </div>
                         <div style="font-size: 0.75rem; color: var(--text-muted);">
                           Horário: ${winStr} |
-                          Permanência: ${selectedPlace.stay_duration_minutes || 60} min | Utilidade: ${selectedPlace.utility_score}
+                          Permanência: ${selectedPlace.stay_duration_minutes || 60} min | Pontuação de Utilidade: ${selectedPlace.utility_score}
                         </div>
                       </div>
                     `;
@@ -1568,7 +1568,7 @@
                     <label for="import_cand_${idx}" style="flex: 1; cursor: pointer; font-size: 0.82rem;">
                       <strong>${c.name}</strong> (${c.category})
                       <div style="font-size: 0.72rem; color: var(--text-muted);">
-                        Utilidade: ${c.utility_score} • Coord: ${c.location.latitude.toFixed(4)}, ${c.location.longitude.toFixed(4)}
+                        Pontuação de Utilidade: ${c.utility_score} • Coord: ${c.location.latitude.toFixed(4)}, ${c.location.longitude.toFixed(4)}
                       </div>
                     </label>
                   </div>
@@ -1744,7 +1744,7 @@
         body: JSON.stringify(tripState)
       });
       const data = await resp.json();
-      document.getElementById('modalTitle').innerText = 'Exportação de Itinerário em Markdown';
+      document.getElementById('modalTitle').innerText = 'Exportação de Roteiro em Markdown';
       document.getElementById('modalBody').innerHTML = `
         <div style="margin-bottom: 0.75rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
           <button id="btnCopyMd" class="btn-secondary" style="font-size: 0.8rem;">📋 Copiar Markdown</button>

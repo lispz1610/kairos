@@ -91,6 +91,7 @@ class BudgetRequest(BaseModel):
 
 @app.post("/api/trip/optimize", response_model=Itinerary)
 def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
+    """Otimiza a sequência de visitas para um dia de viagem via algoritmo OPTW."""
     candidates = req.candidates
     if req.curation_lists:
         candidates = curation_service.apply_curation_boost(
@@ -108,6 +109,7 @@ def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
 
 @app.post("/api/dining/recommend", response_model=List[POI])
 def recommend_dining(req: DiningRecommendRequest) -> List[POI]:
+    """Recomenda estabelecimentos gastronômicos com base na proximidade e curadoria."""
     candidates = req.candidates
     if req.curation_lists:
         candidates = curation_service.apply_curation_boost(
@@ -122,6 +124,7 @@ def recommend_dining(req: DiningRecommendRequest) -> List[POI]:
 
 @app.post("/api/dining/contextual-slots", response_model=List[MealSlot])
 def get_contextual_meal_slots(req: ContextualDiningRequest) -> List[MealSlot]:
+    """Gera slots contextuais de refeição e pausas temáticas para o roteiro diário."""
     restaurants = req.restaurant_candidates
     cafes = req.cafe_candidates
     wines = req.wine_candidates
@@ -150,6 +153,7 @@ def get_contextual_meal_slots(req: ContextualDiningRequest) -> List[MealSlot]:
 
 @app.post("/api/trip/budget", response_model=BudgetSummary)
 def calculate_budget(req: BudgetRequest) -> BudgetSummary:
+    """Calcula o resumo orçamentário consolidado da viagem considerando hospedagem e refeições."""
     return dining_service.calculate_trip_budget(
         trip=req.trip,
         food_profile=req.food_profile,
@@ -158,6 +162,7 @@ def calculate_budget(req: BudgetRequest) -> BudgetSummary:
 
 @app.post("/api/trip/ripple-shift/preview", response_model=RippleShiftPreview)
 def preview_ripple_shift(req: RippleShiftRequest) -> RippleShiftPreview:
+    """Gera prévia das alterações de datas decorrentes do deslocamento em cascata."""
     return schedule_service.preview_ripple_shift(
         trip=req.trip,
         target_stage_id=req.target_stage_id,
@@ -167,6 +172,7 @@ def preview_ripple_shift(req: RippleShiftRequest) -> RippleShiftPreview:
 
 @app.post("/api/trip/ripple-shift/apply", response_model=Trip)
 def apply_ripple_shift(req: RippleShiftRequest) -> Trip:
+    """Aplica o deslocamento em cascata nas etapas e conexões da viagem."""
     return schedule_service.apply_ripple_shift(
         trip=req.trip,
         target_stage_id=req.target_stage_id,
@@ -176,17 +182,20 @@ def apply_ripple_shift(req: RippleShiftRequest) -> Trip:
 
 @app.post("/api/trip/export-markdown")
 def export_trip_markdown(trip: Trip) -> dict[str, str]:
+    """Exporta a viagem completa em formato Markdown estruturado."""
     md = markdown_service.export_trip_markdown(trip)
     return {"markdown": md}
 
 
 @app.get("/api/curation/suggested", response_model=List[CurationList])
 def get_suggested_curation(city_name: str) -> List[CurationList]:
+    """Retorna listas de curadoria sugeridas para uma cidade informada."""
     return curation_service.get_suggested_curation_lists(city_name)
 
 
 @app.get("/api/places/search", response_model=List[POI])
 def search_places(query: str, city_name: Optional[str] = None) -> List[POI]:
+    """Busca pontos de interesse com suporte a autocomplete e filtro por cidade."""
     return curation_service.search_places_autocomplete(query, city_name)
 
 
@@ -198,6 +207,7 @@ class ImportLinkRequest(BaseModel):
 
 @app.post("/api/curation/import-link")
 def import_curation_link(req: ImportLinkRequest) -> dict[str, List[POI]]:
+    """Importa candidatos a pontos de interesse a partir de link ou texto com proteção SSRF."""
     content = req.text or ""
     if req.url:
         try:
@@ -216,11 +226,13 @@ def import_curation_link(req: ImportLinkRequest) -> dict[str, List[POI]]:
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
+    """Retorna o status operacional da aplicação."""
     return {"status": "ok", "app": "kairos"}
 
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
+    """Renderiza a página principal da interface web da aplicação."""
     return templates.TemplateResponse(
         request=request,
         name="index.html",

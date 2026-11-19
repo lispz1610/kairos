@@ -15,6 +15,7 @@ class MarkdownExportService:
     def export_trip_markdown(
         self, trip: Trip, budget: Optional[BudgetSummary] = None
     ) -> str:
+        """Exporta os dados estruturados da viagem em formato GitHub Flavored Markdown."""
         for stage in trip.stages:
             stage._relink_accommodations()
 
@@ -33,7 +34,10 @@ class MarkdownExportService:
         lines: List[str] = [
             f"# 🌍 {trip.title}",
             "",
-            "> **Kairos Travel Guide** — Itinerário completo gerado dinamicamente com curadoria.",
+            (
+                "> **Kairos Travel Guide** — "
+                "Guia estruturado de viagem gerado dinamicamente com curadoria."
+            ),
             "",
             f"- 👥 **Viajantes**: {trip.travelers} pessoa(s)",
             "",
@@ -59,10 +63,11 @@ class MarkdownExportService:
             "| Etapa / Cidade | Dias | Hospedagem | Alimentação Estimada | Subtotal |",
             "| :--- | :---: | :---: | :---: | :---: |",
         ]
-        for stage_id, brk in budget.stage_breakdowns.items():
+        for stage_id, breakdown in budget.stage_breakdowns.items():
             lines.append(
-                f"| `{stage_id}` | {brk.days_count} | R$ {brk.accommodation_cost:.2f} | "
-                f"R$ {brk.dining_cost:.2f} | R$ {brk.total_cost:.2f} |"
+                f"| `{stage_id}` | {breakdown.days_count} | "
+                f"R$ {breakdown.accommodation_cost:.2f} | "
+                f"R$ {breakdown.dining_cost:.2f} | R$ {breakdown.total_cost:.2f} |"
             )
         lines.append(
             f"| **TOTAL** | - | **R$ {budget.total_accommodation_cost:.2f}** | "
@@ -109,7 +114,7 @@ class MarkdownExportService:
 
     def _render_itinerary_stops(self, itinerary: Optional[Itinerary]) -> List[str]:
         if not itinerary or not itinerary.stops:
-            return ["  - *Dia livre ou aguardando otimização de atrações.*"]
+            return ["  - *Dia livre ou aguardando otimização do roteiro.*"]
 
         result: List[str] = []
         for stop in itinerary.stops:

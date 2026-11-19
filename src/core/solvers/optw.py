@@ -16,6 +16,7 @@ from src.core.domain.models import (
 
 
 def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
+    """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
     r = 6371.0
     phi1 = math.radians(coord1.latitude)
     phi2 = math.radians(coord2.latitude)
@@ -33,12 +34,14 @@ def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
 def estimate_transit_minutes(
     coord1: Coordinates, coord2: Coordinates, speed_kmh: float = 25.0
 ) -> int:
+    """Estima o tempo de deslocamento em minutos considerando velocidade média urbana."""
     dist = haversine_distance_km(coord1, coord2)
     minutes = int(math.ceil((dist / speed_kmh) * 60.0))
     return max(2, minutes)
 
 
 def minutes_to_time(minutes_since_midnight: int) -> time:
+    """Converte minutos decorridos a partir da meia-noite em um objeto time."""
     normalized = minutes_since_midnight % (24 * 60)
     hours = normalized // 60
     minutes = normalized % 60
@@ -46,6 +49,7 @@ def minutes_to_time(minutes_since_midnight: int) -> time:
 
 
 def time_to_minutes(t: time) -> int:
+    """Converte um objeto time na quantidade de minutos decorridos desde a meia-noite."""
     return t.hour * 60 + t.minute
 
 
@@ -86,6 +90,7 @@ class OPTWSolver:
         preferences: Optional[PreferencesProfile] = None,
         reserved_slots: Optional[List[TimeWindow]] = None,
     ) -> Itinerary:
+        """Resolve o problema de roteamento com janelas temporais e slots reservados."""
         if not candidates:
             return Itinerary(stops=[], total_utility=0.0, total_duration_minutes=0)
 
@@ -194,8 +199,8 @@ class OPTWSolver:
             )
             arr_min = t + transit_min
             poi_open = time_to_minutes(poi.window.start_time)
-            srv_start = max(arr_min, poi_open)
-            dep_min = srv_start + poi.stay_duration_minutes
+            service_start_min = max(arr_min, poi_open)
+            dep_min = service_start_min + poi.stay_duration_minutes
 
             overlap = self._find_overlapping_slot(
                 arr_min, dep_min, context.reserved_ranges
