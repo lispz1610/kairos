@@ -14,8 +14,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-Coordinates = tuple[float, float]
-"""Coordenada geográfica (latitude, longitude)."""
+from src.core.domain.models import Coordinates
 
 __all__ = [
     "ClosureEvent",

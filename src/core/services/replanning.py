@@ -144,7 +144,7 @@ class ReplanningService:
 
         solver_route = Itinerary(stops=[])
         if ReplanningService._can_solve(
-            alert, replan_start, availability_window, window_end
+            alert, replan_start, availability_window, intercity_connection
         ):
             excluded_ids = set(excluded_pois)
             candidates = [
@@ -205,7 +205,7 @@ class ReplanningService:
         início da Janela de Disponibilidade."""
         replan_start = effective_start
         for stop in prefix:
-            stop_end = stop.start + timedelta(minutes=stop.duration_minutes)
+            stop_end = stop.end
             if stop_end > replan_start:
                 replan_start = stop_end
         if replan_start.time() < availability_window.start:
@@ -251,11 +251,14 @@ class ReplanningService:
         alert: InterCityRiskAlert | None,
         replan_start: datetime,
         availability_window: TimeWindow,
-        window_end: time,
+        intercity_connection: InterCityConnection | None,
     ) -> bool:
         """Verdade quando o ``OPTWSolver`` pode gerar a janela restante: sem
         Alerta de Risco e o quadro replanejado é viável dentro da Janela de
         Disponibilidade."""
+        window_end = ReplanningService._window_end(
+            availability_window, intercity_connection
+        )
         return (
             alert is None
             and availability_window.start <= window_end

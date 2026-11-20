@@ -8,7 +8,7 @@ descritivos (lista de strings).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from src.core.domain.models import Itinerary, RouteStop, TimeWindow
 
@@ -42,7 +42,7 @@ class ScheduleService:
         stop: RouteStop, availability_window: TimeWindow
     ) -> list[str]:
         poi = stop.poi
-        visit_end = stop.start + timedelta(minutes=stop.duration_minutes)
+        visit_end = stop.end
         operating_window = poi.operating_window
         deviations: list[str] = []
 

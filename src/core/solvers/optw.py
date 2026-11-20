@@ -138,8 +138,21 @@ def _completion(itinerary: Itinerary, start_time: datetime) -> datetime:
     ``start_time`` quando o Roteiro está vazio)."""
     if not itinerary.stops:
         return start_time
-    last = itinerary.stops[-1]
-    return last.start + timedelta(minutes=last.duration_minutes)
+    return itinerary.stops[-1].end
+
+
+def _route_completion(
+    sequence: list[POI],
+    start_time: datetime,
+    travel_time_minutes: float,
+    visit_durations: Mapping[str, int] | None = None,
+) -> datetime:
+    """Momento em que o Roteiro da sequência termina: o fim da última visita
+    (ou ``start_time`` quando o Roteiro está vazio)."""
+    return _completion(
+        _simulate(sequence, start_time, travel_time_minutes, visit_durations),
+        start_time,
+    )
 
 
 def _weight(poi: POI, marginal_cost: float) -> float:
@@ -165,9 +178,8 @@ def _insert_pass(
     inserção viável. Retorna o número de inserções realizadas."""
     inserted = 0
     while True:
-        route_completion = _completion(
-            _simulate(route, start_time, travel_time_minutes, visit_durations),
-            start_time,
+        route_completion = _route_completion(
+            route, start_time, travel_time_minutes, visit_durations
         )
         best_poi: POI | None = None
         best_position = -1
@@ -186,11 +198,8 @@ def _insert_pass(
                 ):
                     continue
                 marginal_cost = (
-                    _completion(
-                        _simulate(
-                            candidate, start_time, travel_time_minutes, visit_durations
-                        ),
-                        start_time,
+                    _route_completion(
+                        candidate, start_time, travel_time_minutes, visit_durations
                     )
                     - route_completion
                 ).total_seconds() / 60
@@ -220,9 +229,8 @@ def _improving_completion(
         sequence, start_time, travel_time_minutes, availability_window, visit_durations
     ):
         return None
-    completion = _completion(
-        _simulate(sequence, start_time, travel_time_minutes, visit_durations),
-        start_time,
+    completion = _route_completion(
+        sequence, start_time, travel_time_minutes, visit_durations
     )
     if completion >= bound:
         return None
@@ -243,9 +251,8 @@ def _local_search(
     aplicados até a ótima local."""
     moves = 0
     while True:
-        current_completion = _completion(
-            _simulate(route, start_time, travel_time_minutes, visit_durations),
-            start_time,
+        current_completion = _route_completion(
+            route, start_time, travel_time_minutes, visit_durations
         )
         best_route: list[POI] | None = None
         best_completion = current_completion

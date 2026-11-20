@@ -139,7 +139,7 @@ def test_ac2_slots_de_refeicao_futuros_ja_reservados_sao_preservados():
     assert ScheduleService.validate_itinerary(result.itinerary, availability) == []
 
 
-def test_duration_adjustment_applies_to_future_poi_scheduled_later():
+def test_duration_adjustment_applies_to_future_poi_scheduled_later() -> None:
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     poi_d = _make_poi("POI-D", time(11, 0), time(13, 0), utility_score=8.0)

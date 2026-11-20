@@ -8,6 +8,7 @@ Roteiro replanejado com os metadados de impacto — ``preserved_pois``,
 """
 
 from datetime import datetime, time
+from typing import Any
 
 from fastapi.testclient import TestClient
 
@@ -39,7 +40,9 @@ def _stop(poi, start, duration_minutes=30):
     return RouteStop(poi=poi, start=start, duration_minutes=duration_minutes)
 
 
-def _payload(day, current_time, availability_window, events, **overrides):
+def _payload(
+    day, current_time, availability_window, events, **overrides
+) -> dict[str, Any]:
     """Corpo da requisição de ``POST /api/trip/replan`` — ``events`` no
     formato ``ContingencyEventRequest``."""
     payload = {
@@ -58,7 +61,7 @@ def _payload(day, current_time, availability_window, events, **overrides):
     return payload
 
 
-def test_delay_event_replan_keeps_route_starting_after_the_delayed_time():
+def test_delay_event_replan_keeps_route_starting_after_the_delayed_time() -> None:
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     poi_b = _poi("POI-B", time(9, 0), time(12, 0), utility_score=8.0)
@@ -83,7 +86,7 @@ def test_delay_event_replan_keeps_route_starting_after_the_delayed_time():
     assert data["intercity_risk_alert"] is None
 
 
-def test_closure_event_replan_excludes_the_closed_poi():
+def test_closure_event_replan_excludes_the_closed_poi() -> None:
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(8, 0), time(10, 0), utility_score=9.0)
     poi_b = _poi("POI-B", time(8, 0), time(11, 0), utility_score=8.0)
@@ -109,7 +112,7 @@ def test_closure_event_replan_excludes_the_closed_poi():
     assert data["intercity_risk_alert"] is None
 
 
-def test_skip_stop_event_replan_excludes_the_skipped_poi():
+def test_skip_stop_event_replan_excludes_the_skipped_poi() -> None:
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(8, 0), time(10, 0), utility_score=9.0)
     poi_b = _poi("POI-B", time(8, 0), time(11, 0), utility_score=8.0)
@@ -133,7 +136,7 @@ def test_skip_stop_event_replan_excludes_the_skipped_poi():
     assert data["removed_pois"] == ["POI-B"]
 
 
-def test_duration_adjustment_event_replan_applies_the_new_duration():
+def test_duration_adjustment_event_replan_applies_the_new_duration() -> None:
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(8, 0), time(12, 0), utility_score=9.0)
     poi_b = _poi("POI-B", time(8, 0), time(12, 0), utility_score=8.0)
@@ -158,7 +161,7 @@ def test_duration_adjustment_event_replan_applies_the_new_duration():
     assert data["preserved_pois"] == ["POI-A"]
 
 
-def test_reserved_future_stops_are_preserved():
+def test_reserved_future_stops_are_preserved() -> None:
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     poi_c = _poi("POI-C", time(11, 0), time(12, 0), utility_score=7.0)

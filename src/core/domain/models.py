@@ -14,7 +14,7 @@ arquiteturais do parent #18:
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
@@ -79,6 +79,11 @@ class RouteStop(BaseModel):
     duration_minutes: int = Field(
         ge=0, description="Tempo de Permanência no POI, em minutos."
     )
+
+    @property
+    def end(self) -> datetime:
+        """Terceiro do visitante: ``start`` + Tempo de Permanência no POI."""
+        return self.start + timedelta(minutes=self.duration_minutes)
 
 
 class Itinerary(BaseModel):
