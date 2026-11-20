@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kairos — Dia de Viagem</title>
+<style>
+  :root {
+    --line: #d9e2ec;
+    --text: #1f2933;
+    --muted: #52606d;
+    --primary: #0b4f4a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #f4f6f9;
+    color: var(--text);
+  }
+  header.banner {
+    padding: 10px 14px;
+    font-size: 14px;
+    min-height: 18px;
+  }
+  header.banner.hidden { display: none; }
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 0 0 10px; }
+  #stops { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
+  #stops li {
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  #stops li:hover { cursor: pointer; background: #f2f7f7; }
+  #stops li.selected {
+    border-color: var(--primary);
+    background: #eef2f1;
+    font-weight: 600;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-top: 14px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  .control {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .control input {
+    width: 110px;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .control button {
+    padding: 6px 10px;
+    border: 1px solid var(--primary);
+    background: var(--primary);
+    color: #fff;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .control button:hover { background: #093f3d; }
+  #map { height: 380px; border: 1px solid var(--line); border-radius: 8px; }
+  footer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 4px 16px 20px;
+  }
+  footer b { color: var(--text); }
+</style>
+</head>
+<body>
+<header id="impact-banner" class="banner hidden" role="status"></header>
+<main>
+  <section class="panel">
+    <h1>Kairos</h1>
+    <h2>Roteiro — Dia de Viagem ativo</h2>
+    <ul id="stops"></ul>
+    <div class="controls">
+      <div class="control">
+        <span>+ Atraso (min)</span>
+        <input id="delay-minutes" type="number" min="0" step="1" value="15"
+               aria-label="Minutos de atraso a aplicar" />
+        <button type="button" id="apply-delay">+ Atraso (min)</button>
+      </div>
+      <div class="control">
+        <span>Fechou</span>
+        <button type="button" id="apply-closure">Fechou</button>
+      </div>
+      <div class="control">
+        <span>Pular parada</span>
+        <button type="button" id="apply-skip">Pular parada</button>
+      </div>
+      <div class="control">
+        <span>Ajustar permanência</span>
+        <input id="adjusted-minutes" type="number" min="0" step="1" value="30"
+               aria-label="Tempo de permanência ajustado, em minutos" />
+        <button type="button" id="apply-adjust">Ajustar permanência</button>
+      </div>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Rota no mapa</h2>
+    <div id="map"></div>
+  </section>
+</main>
+<footer>Persistido em <b>localStorage</b>; replanejado via <b>POST /api/trip/replan</b>.</footer>
+<script>
+"use strict";
+
+const STORAGE_KEY = "kairos-dia-viagem";
+const API_URL = "/api/trip/replan";
+
+function defaultStop(id, name, start, durationMinutes) {
+  return {
+    poi: {
+      id,
+      name,
+      coordinates: [-23.5505, -46.6333],
+      operating_window: { start: "08:00", end: "23:00" },
+      utility_score: 5.0,
+    },
+    start,
+    duration_minutes: durationMinutes,
+  };
+}
+
+function defaultState() {
+  return {
+    day_id: "dia-2026-11-20",
+    itinerary: [
+      defaultStop("POI-001", "Mirante da História", "2026-11-20T09:00:00", 45),
+      defaultStop("POI-002", "Café Central", "2026-11-20T09:50:00", 30),
+      defaultStop("POI-003", "Praça da Matriz", "2026-11-20T10:40:00", 30),
+    ],
+    availability_window: { start: "08:00", end: "18:00" },
+    current_time: "2026-11-20T09:00:00",
+    closed_pois: [],
+    skipped_pois: [],
+    intercity_connection: null,
+    travel_time_minutes: 15,
+    selectedIndex: 0,
+  };
+}
+
+function loadState() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
+    if (parsed) {
+      parsed.selectedIndex = parsed.selectedIndex || 0;
+      return parsed;
+    }
+  } catch (error) {
+    /* Estado ausente ou corrompido: recuar para a semente padrão. */
+  }
+  return defaultState();
+}
+
+function saveState(state) {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function fmt(iso) {
+  return new Date(iso).toLocaleString("pt-BR");
+}
+
+function addMinutes(iso, minutes) {
+  const date = new Date(iso);
+  date.setMinutes(date.getMinutes() + minutes);
+  return date.toISOString();
+}
+
+let map = null;
+let routeLine = null;
+
+function initMap(state) {
+  if (typeof L === "undefined") {
+    return;
+  }
+  map = L.map("map");
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap contributors",
+  }).addTo(map);
+  const first = state.itinerary[0]
+    ? state.itinerary[0].poi.coordinates
+    : [-23.5505, -46.6333];
+  map.setView(first, 10);
+  routeLine = L.polyline([], { color: "#0b4f4a", weight: 4 }).addTo(map);
+  updateMapRoute(state);
+}
+
+function updateMapRoute(state) {
+  if (!map || !routeLine) {
+    return;
+  }
+  const coords = state.itinerary.map((item) => item.poi.coordinates);
+  routeLine.setLatLngs(coords);
+  if (coords.length > 1) {
+    map.fitBounds(L.latLngBounds(coords), { padding: [10, 10] });
+  }
+}
+
+function renderTimeline(state) {
+  const list = document.getElementById("stops");
+  list.replaceChildren();
+  state.itinerary.forEach((item, index) => {
+    const li = document.createElement("li");
+    li.className = index === state.selectedIndex ? "selected" : "";
+    li.dataset.index = String(index);
+    li.textContent =
+      fmt(item.start) + " — " + item.poi.name + " (" + item.poi.id + ")" +
+      " — Tempo de Permanência " + item.duration_minutes + " min";
+    li.addEventListener("click", () => {
+      state.selectedIndex = index;
+      saveState(state);
+      renderTimeline(state);
+    });
+    list.appendChild(li);
+  });
+}
+
+function currentCoordinate(state) {
+  if (map && map.getCenter()) {
+    const center = map.getCenter();
+    return [center.lat, center.lng];
+  }
+  const item = state.itinerary[state.selectedIndex] || state.itinerary[0];
+  return item ? item.poi.coordinates : [-23.5505, -46.6333];
+}
+
+function targetPoiId(state) {
+  const item = state.itinerary[state.selectedIndex];
+  return item ? item.poi.id : null;
+}
+
+function showBanner(data) {
+  const banner = document.getElementById("impact-banner");
+  const notes = [];
+  if (data.removed_pois.length) {
+    notes.push("POIs removidos: " + data.removed_pois.join(", "));
+  }
+  if (data.intercity_risk_alert) {
+    notes.push(
+      "Alerta de Risco da Conexão Interurbana: déficit de " +
+      data.intercity_risk_alert.deficit_minutes + " minutos"
+    );
+  }
+  banner.textContent = notes.join(" · ");
+  banner.classList.toggle("hidden", notes.length === 0);
+}
+
+function showError(message) {
+  const banner = document.getElementById("impact-banner");
+  banner.textContent = message;
+  banner.classList.remove("hidden");
+}
+
+function selectUpcoming(state, route) {
+  const upcoming = route.findIndex(
+    (item) => new Date(item.start) >= new Date(state.current_time)
+  );
+  state.selectedIndex = upcoming >= 0 ? upcoming : Math.max(0, route.length - 1);
+}
+
+async function replan(events, afterReplanned) {
+  const state = loadState();
+  const body = {
+    day_id: state.day_id,
+    itinerary: { stops: state.itinerary },
+    current_time: state.current_time,
+    availability_window: state.availability_window,
+    current_coordinate: currentCoordinate(state),
+    events: events,
+    closed_pois: state.closed_pois,
+    skipped_pois: state.skipped_pois,
+    intercity_connection: state.intercity_connection,
+    travel_time_minutes: state.travel_time_minutes,
+  };
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    showError("O Roteiro não pôde ser replanejado (status " + response.status + ").");
+    return null;
+  }
+  const data = await response.json();
+  state.itinerary = data.itinerary;
+  afterReplanned(state);
+  selectUpcoming(state, state.itinerary);
+  saveState(state);
+  renderTimeline(state);
+  updateMapRoute(state);
+  showBanner(data);
+  return data;
+}
+
+function init() {
+  const state = loadState();
+  renderTimeline(state);
+  initMap(state);
+}
+
+document.getElementById("apply-delay").addEventListener("click", () => {
+  const state = loadState();
+  const minutes = Number(document.getElementById("delay-minutes").value);
+  replan(
+    [
+      {
+        delay_minutes: minutes,
+        current_time: state.current_time,
+        coordinates: currentCoordinate(state),
+      },
+    ],
+    (updated) => {
+      updated.current_time = addMinutes(updated.current_time, minutes);
+    }
+  );
+});
+
+document.getElementById("apply-closure").addEventListener("click", () => {
+  const state = loadState();
+  const poiId = targetPoiId(state);
+  replan([{ poi_id: poiId }], (updated) => {
+    if (poiId && !updated.closed_pois.includes(poiId)) {
+      updated.closed_pois.push(poiId);
+    }
+  });
+});
+
+document.getElementById("apply-skip").addEventListener("click", () => {
+  const state = loadState();
+  const poiId = targetPoiId(state);
+  replan([{ poi_id: poiId }], (updated) => {
+    if (poiId && !updated.skipped_pois.includes(poiId)) {
+      updated.skipped_pois.push(poiId);
+    }
+  });
+});
+
+document.getElementById("apply-adjust").addEventListener("click", () => {
+  const state = loadState();
+  const poiId = targetPoiId(state);
+  const minutes = Number(document.getElementById("adjusted-minutes").value);
+  replan([{ poi_id: poiId, new_duration_minutes: minutes }], () => {});
+});
+
+if (document.readyState !== "loading") {
+  init();
+} else {
+  document.addEventListener("DOMContentLoaded", init);
+}
+</script>
+</body>
+</html>
