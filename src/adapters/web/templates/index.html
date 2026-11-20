@@ -329,16 +329,9 @@ function init() {
 }
 
 document.getElementById("apply-delay").addEventListener("click", () => {
-  const state = loadState();
   const minutes = Number(document.getElementById("delay-minutes").value);
   replan(
-    [
-      {
-        delay_minutes: minutes,
-        current_time: state.current_time,
-        coordinates: currentCoordinate(state),
-      },
-    ],
+    [{ type: "delay", delay_minutes: minutes }],
     (updated) => {
       updated.current_time = addMinutes(updated.current_time, minutes);
     }
@@ -348,7 +341,7 @@ document.getElementById("apply-delay").addEventListener("click", () => {
 document.getElementById("apply-closure").addEventListener("click", () => {
   const state = loadState();
   const poiId = targetPoiId(state);
-  replan([{ poi_id: poiId }], (updated) => {
+  replan([{ type: "closure", poi_id: poiId }], (updated) => {
     if (poiId && !updated.closed_pois.includes(poiId)) {
       updated.closed_pois.push(poiId);
     }
@@ -358,7 +351,7 @@ document.getElementById("apply-closure").addEventListener("click", () => {
 document.getElementById("apply-skip").addEventListener("click", () => {
   const state = loadState();
   const poiId = targetPoiId(state);
-  replan([{ poi_id: poiId }], (updated) => {
+  replan([{ type: "skip", poi_id: poiId }], (updated) => {
     if (poiId && !updated.skipped_pois.includes(poiId)) {
       updated.skipped_pois.push(poiId);
     }
@@ -369,7 +362,10 @@ document.getElementById("apply-adjust").addEventListener("click", () => {
   const state = loadState();
   const poiId = targetPoiId(state);
   const minutes = Number(document.getElementById("adjusted-minutes").value);
-  replan([{ poi_id: poiId, new_duration_minutes: minutes }], () => {});
+  replan(
+    [{ type: "duration_adjustment", poi_id: poiId, new_duration_minutes: minutes }],
+    () => {}
+  );
 });
 
 if (document.readyState !== "loading") {

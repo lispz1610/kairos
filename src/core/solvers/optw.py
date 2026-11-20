@@ -10,6 +10,7 @@ Janela de Disponibilidade (ADR 0001).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 
 from src.core.domain.models import POI, Itinerary, RouteStop, TimeWindow
@@ -34,6 +35,7 @@ class OPTWSolver:
         availability_window: TimeWindow,
         travel_time_minutes: float,
         start_time: datetime | None = None,
+        visit_durations: Mapping[str, int] | None = None,
     ) -> Itinerary:
         """Gera o Roteiro para a Janela de Disponibilidade.
 
@@ -50,6 +52,9 @@ class OPTWSolver:
                 entre dois Pontos de Interesse consecutivos.
             start_time: Horário de início do Roteiro; quando omitido, o
                 início é o horário de início da Janela de Disponibilidade.
+            visit_durations: Tempo de Permanência ajustado por identificação
+                do POI — usado em vez do Tempo de Permanência padrão em todas
+                as simulações do Roteiro.
 
         Returns:
             O Roteiro construído: subconjunto e sequência de visitas aos
@@ -62,14 +67,23 @@ class OPTWSolver:
         remaining = _unique_pois(candidate_pois)
         while True:
             inserted = _insert_pass(
-                route, remaining, start_time, travel_time_minutes, availability_window
+                route,
+                remaining,
+                start_time,
+                travel_time_minutes,
+                availability_window,
+                visit_durations,
             )
             moved = _local_search(
-                route, start_time, travel_time_minutes, availability_window
+                route,
+                start_time,
+                travel_time_minutes,
+                availability_window,
+                visit_durations,
             )
             if inserted == 0 and moved == 0:
                 break
-        return _simulate(route, start_time, travel_time_minutes)
+        return _simulate(route, start_time, travel_time_minutes, visit_durations)
 
 
 def _unique_pois(candidate_pois: list[POI]) -> list[POI]:
@@ -84,20 +98,24 @@ def _unique_pois(candidate_pois: list[POI]) -> list[POI]:
 
 
 def _simulate(
-    sequence: list[POI], start_time: datetime, travel_time_minutes: float
+    sequence: list[POI],
+    start_time: datetime,
+    travel_time_minutes: float,
+    visit_durations: Mapping[str, int] | None = None,
 ) -> Itinerary:
     """Constrói o ``Itinerary``: ``RouteStop`` por POI com ``start``
     cronológico, descendo ``cursor`` do ``start_time`` pelo Custo de
-    Deslocamento entre paradas."""
+    Deslocamento entre paradas — o Tempo de Permanência do POI é
+    ``visit_durations.get(poi.id, _VISIT_DURATION_MINUTES)``."""
+    durations: Mapping[str, int] = visit_durations or {}
     stops: list[RouteStop] = []
     cursor = start_time
     for poi in sequence:
+        duration_minutes = durations.get(poi.id, _VISIT_DURATION_MINUTES)
         stops.append(
-            RouteStop(poi=poi, start=cursor, duration_minutes=_VISIT_DURATION_MINUTES)
+            RouteStop(poi=poi, start=cursor, duration_minutes=duration_minutes)
         )
-        cursor = cursor + timedelta(
-            minutes=_VISIT_DURATION_MINUTES + travel_time_minutes
-        )
+        cursor = cursor + timedelta(minutes=duration_minutes + travel_time_minutes)
     return Itinerary(stops=stops)
 
 
@@ -106,11 +124,12 @@ def _is_feasible(
     start_time: datetime,
     travel_time_minutes: float,
     availability_window: TimeWindow,
+    visit_durations: Mapping[str, int] | None = None,
 ) -> bool:
     """Verdade quando o Roteiro da sequência não apresenta desvios: cada
     visita dentro do Horário de Funcionamento do POI e dentro da Janela de
     Disponibilidade, reportados por ``ScheduleService``."""
-    itinerary = _simulate(sequence, start_time, travel_time_minutes)
+    itinerary = _simulate(sequence, start_time, travel_time_minutes, visit_durations)
     return ScheduleService.validate_itinerary(itinerary, availability_window) == []
 
 
@@ -138,6 +157,7 @@ def _insert_pass(
     start_time: datetime,
     travel_time_minutes: float,
     availability_window: TimeWindow,
+    visit_durations: Mapping[str, int] | None = None,
 ) -> int:
     """Passo de inserção gulosa: em cada ciclo insere o POI com maior
     Pontuação de Utilidade por Custo Marginal de Tempo — em qualquer
@@ -146,7 +166,8 @@ def _insert_pass(
     inserted = 0
     while True:
         route_completion = _completion(
-            _simulate(route, start_time, travel_time_minutes), start_time
+            _simulate(route, start_time, travel_time_minutes, visit_durations),
+            start_time,
         )
         best_poi: POI | None = None
         best_position = -1
@@ -157,12 +178,18 @@ def _insert_pass(
             for position in range(len(route) + 1):
                 candidate = route[:position] + [poi] + route[position:]
                 if not _is_feasible(
-                    candidate, start_time, travel_time_minutes, availability_window
+                    candidate,
+                    start_time,
+                    travel_time_minutes,
+                    availability_window,
+                    visit_durations,
                 ):
                     continue
                 marginal_cost = (
                     _completion(
-                        _simulate(candidate, start_time, travel_time_minutes),
+                        _simulate(
+                            candidate, start_time, travel_time_minutes, visit_durations
+                        ),
                         start_time,
                     )
                     - route_completion
@@ -185,15 +212,17 @@ def _improving_completion(
     travel_time_minutes: float,
     availability_window: TimeWindow,
     bound: datetime,
+    visit_durations: Mapping[str, int] | None = None,
 ) -> datetime | None:
     """Retorna o término do Roteiro da sequência quando viável e
     estritamente anterior ao ``bound``; ``None`` caso contrário."""
     if not _is_feasible(
-        sequence, start_time, travel_time_minutes, availability_window
+        sequence, start_time, travel_time_minutes, availability_window, visit_durations
     ):
         return None
     completion = _completion(
-        _simulate(sequence, start_time, travel_time_minutes), start_time
+        _simulate(sequence, start_time, travel_time_minutes, visit_durations),
+        start_time,
     )
     if completion >= bound:
         return None
@@ -205,6 +234,7 @@ def _local_search(
     start_time: datetime,
     travel_time_minutes: float,
     availability_window: TimeWindow,
+    visit_durations: Mapping[str, int] | None = None,
 ) -> int:
     """Busca local: swaps de paradas e 2-opt sobre o Roteiro — a move é
     aceita quando o Roteiro permanece viável e seu término se antecipa,
@@ -214,7 +244,8 @@ def _local_search(
     moves = 0
     while True:
         current_completion = _completion(
-            _simulate(route, start_time, travel_time_minutes), start_time
+            _simulate(route, start_time, travel_time_minutes, visit_durations),
+            start_time,
         )
         best_route: list[POI] | None = None
         best_completion = current_completion
@@ -228,6 +259,7 @@ def _local_search(
                     travel_time_minutes,
                     availability_window,
                     best_completion,
+                    visit_durations,
                 )
                 if completion is not None:
                     best_completion = completion
@@ -241,6 +273,7 @@ def _local_search(
                     travel_time_minutes,
                     availability_window,
                     best_completion,
+                    visit_durations,
                 )
                 if completion is not None:
                     best_completion = completion

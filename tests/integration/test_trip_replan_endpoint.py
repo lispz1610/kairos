@@ -1,10 +1,10 @@
 """Testes de integração de ``POST /api/trip/replan`` (ticket #38).
 
 Cada teste é uma asserção lógica sobre a interface pública do endpoint:
-dado o Roteiro de um Dia de Viagem, um horário atual e um Evento de
-Contingência (de #35), a resposta devolve o Roteiro replanejado com os
-metadados de impacto — ``preserved_pois``, ``removed_pois`` e
-``intercity_risk_alert``.
+dado o Roteiro de um Dia de Viagem, um horário atual e os Eventos de
+Contingência (``ContingencyEventRequest``) aplicados, a resposta devolve o
+Roteiro replanejado com os metadados de impacto — ``preserved_pois``,
+``removed_pois`` e ``intercity_risk_alert``.
 """
 
 from datetime import datetime, time
@@ -12,12 +12,6 @@ from datetime import datetime, time
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
-from src.core.domain.events import (
-    ClosureEvent,
-    DelayEvent,
-    DurationAdjustmentEvent,
-    SkipStopEvent,
-)
 from src.core.domain.models import (
     POI,
     InterCityConnection,
@@ -46,14 +40,15 @@ def _stop(poi, start, duration_minutes=30):
 
 
 def _payload(day, current_time, availability_window, events, **overrides):
-    """Corpo da requisição de ``POST /api/trip/replan``."""
+    """Corpo da requisição de ``POST /api/trip/replan`` — ``events`` no
+    formato ``ContingencyEventRequest``."""
     payload = {
         "day_id": "dia-2026-11-20",
         "itinerary": day.model_dump(mode="json"),
         "current_time": current_time.isoformat(),
         "availability_window": availability_window.model_dump(mode="json"),
         "current_coordinate": [-23.5505, -46.6333],
-        "events": [event.model_dump(mode="json") for event in events],
+        "events": events,
         "closed_pois": [],
         "skipped_pois": [],
         "intercity_connection": None,
@@ -73,13 +68,7 @@ def test_delay_event_replan_keeps_route_starting_after_the_delayed_time():
             _stop(poi_b, datetime(2026, 11, 20, 9, 10), 30),
         ]
     )
-    events = [
-        DelayEvent(
-            delay_minutes=20,
-            current_time=datetime(2026, 11, 20, 9, 0),
-            coordinates=(-23.5505, -46.6333),
-        )
-    ]
+    events = [{"type": "delay", "delay_minutes": 20}]
 
     response = client.post(
         "/api/trip/replan",
@@ -106,7 +95,7 @@ def test_closure_event_replan_excludes_the_closed_poi():
             _stop(poi_c, datetime(2026, 11, 20, 10, 30), 30),
         ]
     )
-    events = [ClosureEvent(poi_id="POI-B")]
+    events = [{"type": "closure", "poi_id": "POI-B"}]
 
     response = client.post(
         "/api/trip/replan",
@@ -132,7 +121,7 @@ def test_skip_stop_event_replan_excludes_the_skipped_poi():
             _stop(poi_c, datetime(2026, 11, 20, 10, 30), 30),
         ]
     )
-    events = [SkipStopEvent(poi_id="POI-B")]
+    events = [{"type": "skip", "poi_id": "POI-B"}]
 
     response = client.post(
         "/api/trip/replan",
@@ -154,7 +143,9 @@ def test_duration_adjustment_event_replan_applies_the_new_duration():
             _stop(poi_b, datetime(2026, 11, 20, 10, 0), 30),
         ]
     )
-    events = [DurationAdjustmentEvent(poi_id="POI-A", new_duration_minutes=60)]
+    events = [
+        {"type": "duration_adjustment", "poi_id": "POI-A", "new_duration_minutes": 60}
+    ]
 
     response = client.post(
         "/api/trip/replan",
@@ -165,6 +156,31 @@ def test_duration_adjustment_event_replan_applies_the_new_duration():
     assert [stop["poi"]["id"] for stop in data["itinerary"]] == ["POI-A", "POI-B"]
     assert data["itinerary"][0]["duration_minutes"] == 60
     assert data["preserved_pois"] == ["POI-A"]
+
+
+def test_reserved_future_stops_are_preserved():
+    availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
+    poi_a = _poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
+    poi_c = _poi("POI-C", time(11, 0), time(12, 0), utility_score=7.0)
+    day = Itinerary(stops=[_stop(poi_a, datetime(2026, 11, 20, 9, 0), 30)])
+    reserved_stop = _stop(poi_c, datetime(2026, 11, 20, 11, 0), 30)
+
+    response = client.post(
+        "/api/trip/replan",
+        json=_payload(
+            day,
+            datetime(2026, 11, 20, 9, 0),
+            availability_window,
+            [],
+            reserved_future_stops=[reserved_stop.model_dump(mode="json")],
+        ),
+    )
+
+    data = response.json()
+    assert [stop["poi"]["id"] for stop in data["itinerary"]] == ["POI-A", "POI-C"]
+    assert data["preserved_pois"] == ["POI-A", "POI-C"]
+    assert data["itinerary"][1]["start"] == "2026-11-20T11:00:00"
+    assert data["itinerary"][1]["duration_minutes"] == 30
 
 
 def test_intercity_risk_alert_reported_when_boarding_does_not_fit():

@@ -10,7 +10,7 @@ aplicando a proteção do teto seguro da Conexão Interurbana.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, time, timedelta
 
 from pydantic import BaseModel, Field
@@ -80,14 +80,14 @@ class ReplanningService:
         intercity_connection: InterCityConnection | None = None,
         excluded_pois: Sequence[str] = (),
         reserved_future_stops: Sequence[RouteStop] = (),
-        delay_minutes: int = 0,
+        duration_adjustments: Mapping[str, int] | None = None,
     ) -> ReplanResult:
         """Reotimiza o Roteiro restante do Dia de Viagem a partir do horário
         e da coordenada atuais.
 
         Paradas até ``current_time`` permanecem travadas como histórico do
-        Roteiro; Slots de Refeição futuros já reservados
-        (``reserved_future_stops``) permanecem preservados no Roteiro
+        Roteiro; Paradas futuras já reservadas
+        (``reserved_future_stops``) permanecem preservadas no Roteiro
         replanejado; a janela restante — ``[horário efetivo pós-evento, fim da
         Janela de Disponibilidade]`` — é reotimizada via ``OPTWSolver`` a partir
         do horário efetivo, excluindo os POIs fechados/pulados
@@ -109,8 +109,11 @@ class ReplanningService:
                 Contingência (``ClosureEvent``/``SkipStopEvent``).
             reserved_future_stops: Paradas futuras já reservadas (Slots de
                 Refeição), preservadas no Roteiro replanejado.
-            delay_minutes: Atraso efetivo a partir do ``current_time`` (do
-                ``DelayEvent``).
+            duration_adjustments: Tempo de Permanência ajustado por identificação
+                do POI (``DurationAdjustmentEvent``) — aplicado às Paradas
+                preservadas e reservadas e passado ao ``OPTWSolver``
+                (``visit_durations``), de modo que Paradas agendadas pelo
+                solver usam o Tempo de Permanência ajustado.
 
         Returns:
             O Roteiro replanejado e os metadados de impacto: POIs preservados,
@@ -118,15 +121,19 @@ class ReplanningService:
             quando o retorno/embarque não couber antes do limite operacional.
         """
         preserved = ReplanningService._preserved_stops(itinerary, current_time)
-        prefix = sorted(
-            preserved + list(reserved_future_stops), key=lambda stop: stop.start
-        )
+        reserved = list(reserved_future_stops)
+        if duration_adjustments:
+            preserved = ReplanningService._with_adjusted_durations(
+                preserved, duration_adjustments
+            )
+            reserved = ReplanningService._with_adjusted_durations(
+                reserved, duration_adjustments
+            )
+        prefix = sorted(preserved + reserved, key=lambda stop: stop.start)
         prefix_ids = {stop.poi.id for stop in prefix}
 
         replan_start = ReplanningService._replan_start(
-            prefix,
-            current_time + timedelta(minutes=delay_minutes),
-            availability_window,
+            prefix, current_time, availability_window
         )
         window_end = ReplanningService._window_end(
             availability_window, intercity_connection
@@ -147,7 +154,11 @@ class ReplanningService:
             ]
             solver_window = TimeWindow(start=availability_window.start, end=window_end)
             solver_route = OPTWSolver.solve(
-                candidates, solver_window, travel_time_minutes, start_time=replan_start
+                candidates,
+                solver_window,
+                travel_time_minutes,
+                start_time=replan_start,
+                visit_durations=duration_adjustments,
             )
 
         final_stops = prefix + solver_route.stops
@@ -161,6 +172,23 @@ class ReplanningService:
             removed_pois=removed_pois,
             intercity_risk_alert=alert,
         )
+
+    @staticmethod
+    def _with_adjusted_durations(
+        stops: Sequence[RouteStop], duration_adjustments: Mapping[str, int]
+    ) -> list[RouteStop]:
+        """Paradas com o Tempo de Permanência ajustado quando há ajuste para o
+        POI (``duration_adjustments``); Paradas sem ajuste inalteradas."""
+        return [
+            RouteStop(
+                poi=stop.poi,
+                start=stop.start,
+                duration_minutes=duration_adjustments[stop.poi.id],
+            )
+            if stop.poi.id in duration_adjustments
+            else stop
+            for stop in stops
+        ]
 
     @staticmethod
     def _preserved_stops(itinerary: Itinerary, current_time: datetime) -> list[RouteStop]:

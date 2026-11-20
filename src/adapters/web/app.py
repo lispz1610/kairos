@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Literal, cast
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.adapters.web.contingency import ContingencyEvent, apply_contingency_event
-from src.core.domain.events import DurationAdjustmentEvent
+from src.core.domain.events import (
+    ClosureEvent,
+    DelayEvent,
+    DurationAdjustmentEvent,
+    SkipStopEvent,
+)
 from src.core.domain.models import (
     Coordinates,
     InterCityConnection,
@@ -32,8 +38,72 @@ DEFAULT_TRAVEL_TIME_MINUTES = 15.0
 app = FastAPI(title="Kairos — Dia de Viagem")
 
 
+class ContingencyEventRequest(BaseModel):
+    """Evento de Contingência ao Roteiro do Dia de Viagem — tipo explícito.
+
+    O ``type`` declara o tipo do Evento e os campos restantes são obrigatórios
+    por tipo — o ``model_validator`` rejeita Eventos incompletos — para que a
+    validação do endpoint substitua a coerção implícita de uma união Pydantic
+    (``ClosureEvent`` e ``SkipStopEvent`` têm formas idênticas).
+    """
+
+    type: Literal["delay", "closure", "skip", "duration_adjustment"] = Field(
+        description="Tipo do Evento de Contingência: 'delay', 'closure', 'skip' ou 'duration_adjustment'."
+    )
+    poi_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Identificação do POI: fechado ('closure'), pulado ('skip') ou "
+            "com Tempo de Permanência ajustado ('duration_adjustment')."
+        ),
+    )
+    delay_minutes: int | None = Field(
+        default=None,
+        ge=0,
+        description="Atraso em minutos a partir do horário atual ('delay').",
+    )
+    new_duration_minutes: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Novo Tempo de Permanência do POI, em minutos "
+            "('duration_adjustment')."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _fields_required_by_type(self) -> ContingencyEventRequest:
+        """Exige, por ``type``, os campos do Evento de Contingência:
+        ``delay_minutes`` para 'delay'; ``poi_id`` para 'closure', 'skip' e
+        'duration_adjustment'; ``new_duration_minutes`` para
+        'duration_adjustment'."""
+        if self.type == "delay":
+            if self.delay_minutes is None:
+                raise ValueError(
+                    "delay_minutes é obrigatório para o Evento 'delay'."
+                )
+        elif self.type == "duration_adjustment":
+            if self.poi_id is None:
+                raise ValueError(
+                    "poi_id é obrigatório para o Evento 'duration_adjustment'."
+                )
+            if self.new_duration_minutes is None:
+                raise ValueError(
+                    "new_duration_minutes é obrigatório para o Evento "
+                    "'duration_adjustment'."
+                )
+        elif self.poi_id is None:
+            raise ValueError(
+                "poi_id é obrigatório para os Eventos 'closure' e 'skip'."
+            )
+        return self
+
+
 class ReplanRequest(BaseModel):
-    """Corpo de ``POST /api/trip/replan``: o Roteiro do Dia de Viagem antes dos Eventos e os Eventos aplicados."""
+    """Corpo de ``POST /api/trip/replan``: o Roteiro do Dia de Viagem antes dos
+    Eventos de Contingência, os Eventos aplicados e as Paradas futuras
+    reservadas que devem permanecer no Roteiro replanejado."""
 
     day_id: str = Field(min_length=1, description="Identificação do Dia de Viagem.")
     itinerary: Itinerary = Field(
@@ -46,9 +116,16 @@ class ReplanRequest(BaseModel):
     current_coordinate: Coordinates = Field(
         description="Coordenada geográfica atual do visitante."
     )
-    events: list[ContingencyEvent] = Field(
+    events: list[ContingencyEventRequest] = Field(
         default_factory=list,
         description="Eventos de Contingência aplicados ao Roteiro do Dia de Viagem.",
+    )
+    reserved_future_stops: list[RouteStop] = Field(
+        default_factory=list,
+        description=(
+            "Paradas futuras já reservadas (Slots de Refeição) que devem ser "
+            "preservadas no Roteiro replanejado."
+        ),
     )
     closed_pois: list[str] = Field(
         default_factory=list,
@@ -96,17 +173,18 @@ def trip_replan(request: ReplanRequest) -> ReplanResponse:
     current_time = request.current_time
     closed_pois: list[str] = []
     skipped_pois: list[str] = []
-    adjusted: tuple[str, int] | None = None
-    for event in request.events:
-        current_time, event_closed, event_skipped, new_duration = apply_contingency_event(
+    duration_adjustments: dict[str, int] = {}
+    for event_req in request.events:
+        event = _to_domain_event(
+            event_req, request.current_time, request.current_coordinate
+        )
+        current_time, event_closed, event_skipped, _ = apply_contingency_event(
             day, current_time, event
         )
         closed_pois.extend(event_closed)
         skipped_pois.extend(event_skipped)
-        if isinstance(event, DurationAdjustmentEvent) and new_duration is not None:
-            adjusted = (event.poi_id, new_duration)
-    if adjusted is not None:
-        day = _with_adjusted_duration(day, adjusted[0], adjusted[1])
+        if isinstance(event, DurationAdjustmentEvent):
+            duration_adjustments[event.poi_id] = event.new_duration_minutes
     result: ReplanResult = ReplanningService.replan(
         itinerary=day,
         availability_window=request.availability_window,
@@ -120,6 +198,8 @@ def trip_replan(request: ReplanRequest) -> ReplanResponse:
             *request.skipped_pois,
             *skipped_pois,
         ],
+        reserved_future_stops=request.reserved_future_stops,
+        duration_adjustments=duration_adjustments,
     )
     return ReplanResponse(
         itinerary=result.itinerary.stops,
@@ -129,17 +209,30 @@ def trip_replan(request: ReplanRequest) -> ReplanResponse:
     )
 
 
-def _with_adjusted_duration(
-    day: Itinerary, poi_id: str, duration_minutes: int
-) -> Itinerary:
-    """Roteiro com o Tempo de Permanência do POI ajustado — quando o POI está no Roteiro."""
-    return Itinerary(
-        stops=[
-            RouteStop(poi=stop.poi, start=stop.start, duration_minutes=duration_minutes)
-            if stop.poi.id == poi_id
-            else stop
-            for stop in day.stops
-        ]
+def _to_domain_event(
+    event_req: ContingencyEventRequest,
+    current_time: datetime,
+    coordinates: Coordinates,
+) -> ContingencyEvent:
+    """Constrói o Evento de Contingência de domínio a partir do Evento da
+    requisição (``ContingencyEventRequest``): ``DelayEvent`` com
+    ``current_time``/``coordinates`` do pedido; ``ClosureEvent``,
+    ``SkipStopEvent`` e ``DurationAdjustmentEvent`` com os campos do Evento.
+    Os campos ``Optional`` são garantidos não ``None`` pelo
+    ``model_validator`` de ``ContingencyEventRequest`` por tipo ``type``."""
+    if event_req.type == "delay":
+        return DelayEvent(
+            delay_minutes=cast(int, event_req.delay_minutes),
+            current_time=current_time,
+            coordinates=coordinates,
+        )
+    if event_req.type == "closure":
+        return ClosureEvent(poi_id=cast(str, event_req.poi_id))
+    if event_req.type == "skip":
+        return SkipStopEvent(poi_id=cast(str, event_req.poi_id))
+    return DurationAdjustmentEvent(
+        poi_id=cast(str, event_req.poi_id),
+        new_duration_minutes=cast(int, event_req.new_duration_minutes),
     )
 
 

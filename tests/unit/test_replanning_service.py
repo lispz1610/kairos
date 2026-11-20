@@ -139,6 +139,32 @@ def test_ac2_slots_de_refeicao_futuros_ja_reservados_sao_preservados():
     assert ScheduleService.validate_itinerary(result.itinerary, availability) == []
 
 
+def test_duration_adjustment_applies_to_future_poi_scheduled_later():
+    availability = TimeWindow(start=time(8, 0), end=time(20, 0))
+    poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
+    poi_d = _make_poi("POI-D", time(11, 0), time(13, 0), utility_score=8.0)
+    current_time = datetime(2026, 11, 20, 9, 0)
+    itinerary = Itinerary(
+        stops=[_stop(poi_a, datetime(2026, 11, 20, 9, 0), duration_minutes=30)]
+    )
+    reserved_stop = _stop(poi_d, datetime(2026, 11, 20, 11, 0), 30)
+
+    result = _replan(
+        itinerary=itinerary,
+        availability_window=availability,
+        current_time=current_time,
+        reserved_future_stops=[reserved_stop],
+        duration_adjustments={"POI-D": 60},
+    )
+
+    stop_d = next(
+        stop for stop in result.itinerary.stops if stop.poi.id == "POI-D"
+    )
+    assert stop_d.start == reserved_stop.start
+    assert stop_d.duration_minutes == 60
+    assert "POI-D" in result.preserved_pois
+
+
 def test_ac3_teto_seguro_da_conexao_interurbana_aplicado_no_ultimo_dia():
     availability = TimeWindow(start=time(8, 0), end=time(18, 0))
     pois = [
