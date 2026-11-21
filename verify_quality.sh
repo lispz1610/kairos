@@ -94,16 +94,25 @@ run_mutation() {
     cp README.md "$mutmut_dir/README.md"
   fi
 
-  # mutmut 3.x has no CLI flag (or env var) to choose the mutated path: it reads
-  # [tool.mutmut] from pyproject.toml in the current directory. Generate that
-  # config in an isolated workspace so the repository's pyproject.toml is never
-  # touched. source_paths copies the whole src tree (so tests can still import
-  # adapters), while only_mutate restricts actual mutation to src/core/.
-  printf '\n[tool.mutmut]\nsource_paths = ["src"]\nonly_mutate = ["src/core/*"]\n' >> "$mutmut_dir/pyproject.toml"
+  # mutmut 3.x reads [tool.mutmut] from pyproject.toml in the current directory.
+  # Generate that config in an isolated workspace so the repository's pyproject.toml
+  # is never touched.
+  #
+  # The project imports modules as `from src...`, but mutmut 3.x rejects mutating
+  # modules whose trampoline name starts with `src.`. Expose `core` and `adapters`
+  # as top-level packages for mutmut, while keeping a `src/` package shim so tests
+  # that import `from src...` resolve to the same files. Only `core` is mutated.
+  cp -R "$mutmut_dir/src/core" "$mutmut_dir/core"
+  cp -R "$mutmut_dir/src/adapters" "$mutmut_dir/adapters"
+  rm -rf "$mutmut_dir/src/core" "$mutmut_dir/src/adapters"
+  ln -s ../core "$mutmut_dir/src/core"
+  ln -s ../adapters "$mutmut_dir/src/adapters"
+
+  printf '\n[tool.mutmut]\npaths_to_mutate = ["core"]\nalso_copy = ["src", "core", "adapters", "tests"]\n' >> "$mutmut_dir/pyproject.toml"
 
   (
     cd "$mutmut_dir"
-    mutmut run
+    PYTHONPATH="$mutmut_dir${PYTHONPATH:+:$PYTHONPATH}" mutmut run
     mutmut export-cicd-stats
   )
   mutation_stats="$mutmut_dir/mutants/mutmut-cicd-stats.json"

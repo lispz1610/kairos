@@ -98,7 +98,7 @@ class MealSlot(BaseModel):
 
 
 class ItineraryStop(BaseModel):
-    """Parada de um Roteiro com chegada, partida e Deslocamento até o Ponto de Interesse."""
+    """Ponto de Interesse de um Roteiro com chegada, partida e Deslocamento."""
 
     poi: POI
     arrival_time: time
@@ -107,7 +107,7 @@ class ItineraryStop(BaseModel):
 
 
 class Itinerary(BaseModel):
-    """Roteiro ordenado de paradas com Pontuação de Utilidade e duração totais acumuladas."""
+    """Roteiro ordenado de Pontos de Interesse com Pontuação de Utilidade e duração totais."""
 
     stops: list[ItineraryStop] = Field(default_factory=list)
     total_utility: float = 0.0

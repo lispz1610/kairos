@@ -74,7 +74,7 @@ def test_optw_itinerary_never_collides_with_reserved_slots(
     include_coffee: bool,
     include_wine: bool,
 ) -> None:
-    """Invariante: nenhuma parada sobrepõe slots reservados ou paradas adjacentes."""
+    """Invariante: nenhum Ponto de Interesse sobrepõe slots reservados ou POIs adjacentes."""
     start_loc = Coordinates(latitude=lat_start, longitude=lng_start)
     end_loc = Coordinates(latitude=lat_end, longitude=lng_end)
     window = TimeWindow(start_time=time(9, 0), end_time=time(21, 30))

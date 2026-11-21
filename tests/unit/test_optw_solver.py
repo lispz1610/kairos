@@ -66,7 +66,7 @@ def test_optw_solver_respects_time_budget_and_depots() -> None:
 
 
 def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
-    """Verifica que a busca local 2-opt e troca desentrelaça a ordem das paradas."""
+    """Verifica que a busca local 2-opt e troca desentrelaça a ordem dos Pontos de Interesse."""
     start_loc = Coordinates(latitude=0.0, longitude=0.0)
     end_loc = Coordinates(latitude=0.0, longitude=0.06)
 
@@ -76,7 +76,7 @@ def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
     # than 0 -> A -> C -> D -> B -> end
     poi_a = POI(
         id="poi-a",
-        name="Parada A",
+        name="Ponto de Interesse A",
         location=Coordinates(latitude=0.0, longitude=0.01),
         window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
         stay_duration_minutes=30,
@@ -84,7 +84,7 @@ def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
     )
     poi_b = POI(
         id="poi-b",
-        name="Parada B",
+        name="Ponto de Interesse B",
         location=Coordinates(latitude=0.0, longitude=0.05),
         window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
         stay_duration_minutes=30,
@@ -92,7 +92,7 @@ def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
     )
     poi_c = POI(
         id="poi-c",
-        name="Parada C",
+        name="Ponto de Interesse C",
         location=Coordinates(latitude=0.0, longitude=0.02),
         window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
         stay_duration_minutes=30,
@@ -100,7 +100,7 @@ def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
     )
     poi_d = POI(
         id="poi-d",
-        name="Parada D",
+        name="Ponto de Interesse D",
         location=Coordinates(latitude=0.0, longitude=0.04),
         window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
         stay_duration_minutes=30,
@@ -124,7 +124,7 @@ def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
 
 
 def test_optw_solver_blocks_attractions_during_reserved_slots() -> None:
-    """Verifica que nenhuma parada sobrepõe slots reservados."""
+    """Verifica que nenhum Ponto de Interesse sobrepõe Slots de Refeição reservados."""
     start_loc = Coordinates(latitude=-23.5505, longitude=-46.6333)
     end_loc = Coordinates(latitude=-23.5600, longitude=-46.6500)
 
@@ -166,6 +166,6 @@ def test_optw_solver_blocks_attractions_during_reserved_slots() -> None:
                 stop.departure_time, slot.end_time
             )
             assert not overlap, (
-                f"Parada {stop.poi.name} ({stop.arrival_time}-{stop.departure_time}) "
+                f"Ponto de Interesse {stop.poi.name} ({stop.arrival_time}-{stop.departure_time}) "
                 f"sobrepõe slot reservado ({slot.start_time}-{slot.end_time})"
             )
