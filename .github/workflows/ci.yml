@@ -12,8 +12,8 @@ jobs:
     name: "Python CI (${{ matrix.python-version }})"
     runs-on:
       - self-hosted
-      - linux
-      - x64
+      - Linux
+      - X64
     permissions:
       contents: read
     strategy:
