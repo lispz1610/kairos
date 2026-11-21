@@ -11,8 +11,9 @@ de Permanência de um POI específico).
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, model_serializer
 
 from src.core.domain.models import Coordinates
 
@@ -37,9 +38,17 @@ class DelayEvent(BaseModel):
         description="Coordenada geográfica atual (latitude, longitude)."
     )
 
-    @field_serializer("coordinates")
-    def serialize_coordinates(self, coordinates: Coordinates) -> tuple[float, float]:
-        return (coordinates.latitude, coordinates.longitude)
+    @model_serializer(mode="wrap")
+    def serialize_model(self, handler: Any) -> Any:
+        data = handler(self)
+        # Serialize coordinates as tuple
+        if "coordinates" in data:
+            coords = data["coordinates"]
+            if isinstance(coords, dict) and "latitude" in coords and "longitude" in coords:
+                data["coordinates"] = (coords["latitude"], coords["longitude"])
+            elif hasattr(coords, "as_tuple"):
+                data["coordinates"] = coords.as_tuple()
+        return data
 
 
 class ClosureEvent(BaseModel):

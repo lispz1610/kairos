@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime, time, timedelta
+from typing import Union
 
 from pydantic import BaseModel, Field
 
@@ -19,12 +20,16 @@ from src.core.domain.models import (
     Coordinates,
     InterCityConnection,
     Itinerary,
+    ItineraryStop,
     RouteStop,
     TimeWindow,
 )
 from src.core.solvers.optw import OPTWSolver
 
 __all__ = ["InterCityRiskAlert", "ReplanResult", "ReplanningService"]
+
+# Type alias for stops that can be either RouteStop or ItineraryStop
+StopUnion = Union[RouteStop, ItineraryStop]
 
 
 class InterCityRiskAlert(BaseModel):
@@ -79,7 +84,7 @@ class ReplanningService:
         coordinates: Coordinates,
         intercity_connection: InterCityConnection | None = None,
         excluded_pois: Sequence[str] = (),
-        reserved_future_stops: Sequence[RouteStop] = (),
+        reserved_future_stops: Sequence[StopUnion] = (),
         duration_adjustments: Mapping[str, int] | None = None,
     ) -> ReplanResult:
         """Reotimiza o Roteiro restante do Dia de Viagem a partir do horário
@@ -122,8 +127,8 @@ class ReplanningService:
             POIs removidos/substituídos e Alerta de Risco de Conexão Interurbana,
             quando o retorno/embarque não couber antes do limite operacional.
         """
-        preserved = ReplanningService._preserved_stops(itinerary, current_time)
-        reserved = list(reserved_future_stops)
+        preserved: list[StopUnion] = ReplanningService._preserved_stops(itinerary, current_time)
+        reserved: list[StopUnion] = list(reserved_future_stops)
         if duration_adjustments:
             preserved = ReplanningService._with_adjusted_durations(
                 preserved, duration_adjustments
@@ -131,7 +136,7 @@ class ReplanningService:
             reserved = ReplanningService._with_adjusted_durations(
                 reserved, duration_adjustments
             )
-        prefix = sorted(preserved + reserved, key=lambda stop: stop.start)
+        prefix: list[StopUnion] = sorted(preserved + reserved, key=lambda stop: stop.start)
         prefix_ids = {stop.poi.id for stop in prefix}
 
         replan_start = ReplanningService._replan_start(
@@ -154,7 +159,7 @@ class ReplanningService:
                 for stop in itinerary.stops
                 if stop.poi.id not in prefix_ids and stop.poi.id not in excluded_ids
             ]
-            solver_window = TimeWindow(start=availability_window.start, end=window_end)
+            solver_window = TimeWindow(start_time=availability_window.start, end_time=window_end)
             solver_route = OPTWSolver.solve(
                 candidates,
                 solver_window,
@@ -181,8 +186,8 @@ class ReplanningService:
 
     @staticmethod
     def _with_adjusted_durations(
-        stops: Sequence[RouteStop], duration_adjustments: Mapping[str, int]
-    ) -> list[RouteStop]:
+        stops: Sequence[StopUnion], duration_adjustments: Mapping[str, int]
+    ) -> list[StopUnion]:
         """POIs com o Tempo de Permanência ajustado quando há ajuste para o
         POI (``duration_adjustments``); POIs sem ajuste inalteradas."""
         return [
@@ -197,14 +202,23 @@ class ReplanningService:
         ]
 
     @staticmethod
-    def _preserved_stops(itinerary: Itinerary, current_time: datetime) -> list[RouteStop]:
+    def _preserved_stops(itinerary: Itinerary, current_time: datetime) -> list[StopUnion]:
         """POIs até o ``current_time`` — já iniciadas pelo menos: preservadas
         como histórico do Roteiro, sem alteração."""
-        return [stop for stop in itinerary.stops if stop.start <= current_time]
+        return [
+            stop
+            for stop in itinerary.stops
+            if (
+                stop.start
+                if isinstance(stop.start, datetime)
+                else datetime.combine(current_time.date(), stop.start)
+            )
+            <= current_time
+        ]
 
     @staticmethod
     def _replan_start(
-        prefix: list[RouteStop], effective_start: datetime, availability_window: TimeWindow
+        prefix: list[StopUnion], effective_start: datetime, availability_window: TimeWindow
     ) -> datetime:
         """Horário de início da janela restante: o horário efetivo pós-evento
         adiantado pelos términos dos POIs preservados que já iniciaram antes
@@ -212,8 +226,15 @@ class ReplanningService:
         da janela — nunca antes do início da Janela de Disponibilidade."""
         replan_start = effective_start
         for stop in prefix:
-            if stop.start <= replan_start:
+            start_time = (
+                stop.start
+                if isinstance(stop.start, datetime)
+                else datetime.combine(replan_start.date(), stop.start)
+            )
+            if start_time <= replan_start:
                 stop_end = stop.end
+                if isinstance(stop_end, time):
+                    stop_end = datetime.combine(replan_start.date(), stop_end)
                 if stop_end > replan_start:
                     replan_start = stop_end
         if replan_start.time() < availability_window.start:

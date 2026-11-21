@@ -153,7 +153,15 @@ def _completion(itinerary: Itinerary, start_time: datetime) -> datetime:
     ``start_time`` quando o Roteiro está vazio)."""
     if not itinerary.stops:
         return start_time
-    return itinerary.stops[-1].end
+    last_stop = itinerary.stops[-1]
+    end_time = (
+        last_stop.end if hasattr(last_stop, "end") else getattr(last_stop, "departure_time", None)
+    )
+    if isinstance(end_time, datetime):
+        return end_time
+    if isinstance(end_time, time):
+        return datetime.combine(start_time.date(), end_time)
+    return start_time
 
 
 def _route_completion(

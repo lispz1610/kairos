@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 from enum import Enum, StrEnum
 from typing import Any, Optional, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_serializer, model_validator
 
 
 class PriceTier(StrEnum):
@@ -26,7 +26,7 @@ class Coordinates(BaseModel):
     longitude: float
 
     @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema, handler):
+    def __get_pydantic_json_schema__(cls, core_schema: Any, handler: Any) -> Any:
         return handler(
             core_schema.tuple_schema(
                 [core_schema.float_schema(), core_schema.float_schema()]
@@ -35,25 +35,27 @@ class Coordinates(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _from_tuple(cls, data: Any) -> Any:
+    def _from_tuple(cls, data: Any) -> dict[str, float] | Any:
         if isinstance(data, (tuple, list)) and len(data) == 2:
             return {"latitude": data[0], "longitude": data[1]}
         return data
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, Coordinates):
             return self.latitude == other.latitude and self.longitude == other.longitude
-        if isinstance(other, (tuple, list)) and len(other) == 2:
-            return self.latitude == other[0] and self.longitude == other[1]
-        return NotImplemented
+        if isinstance(other, tuple):
+            return len(other) == 2 and self.latitude == other[0] and self.longitude == other[1]
+        if isinstance(other, list):
+            return len(other) == 2 and self.latitude == other[0] and self.longitude == other[1]
+        return False
 
-    def __iter__(self):
-        yield self.latitude
-        yield self.longitude
-
-    def model_dump(self, *args, **kwargs):
-        # Serialize as tuple for backward compatibility
+    def as_tuple(self) -> tuple[float, float]:
+        """Return coordinates as (latitude, longitude) tuple."""
         return (self.latitude, self.longitude)
+
+    @field_serializer("latitude", "longitude", when_used="json")
+    def serialize_coords(self, value: float) -> float:
+        return value
 
 
 class TimeWindow(BaseModel):
@@ -138,6 +140,16 @@ class ItineraryStop(BaseModel):
     arrival_time: time
     departure_time: time
     transit_duration_minutes: int = 0
+
+    @property
+    def end(self) -> time:
+        """Fim da visita ao POI."""
+        return self.departure_time
+
+    @property
+    def start(self) -> time:
+        """Início da visita ao POI."""
+        return self.arrival_time
 
 
 class RouteStop(BaseModel):
@@ -299,6 +311,20 @@ class InterCityConnection(BaseModel):
                 ),
             }
         return data
+
+    @model_validator(mode="after")
+    def _set_departure_time_from_datetime(self) -> Self:
+        """Define departure_time a partir de departure_datetime se não informado."""
+        if self.departure_time is None and self.departure_datetime is not None:
+            self.departure_time = self.departure_datetime.date()
+        return self
+
+    @property
+    def effective_departure_time(self) -> date:
+        """Data de partida efetiva: usa departure_time ou calcula a partir de departure_datetime."""
+        if self.departure_time is not None:
+            return self.departure_time
+        return self.departure_datetime.date()
 
 
 class PreferencesProfile(BaseModel):
