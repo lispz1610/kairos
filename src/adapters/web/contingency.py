@@ -29,7 +29,8 @@ def apply_contingency_event(
     current_time: datetime,
     event: ContingencyEvent,
 ) -> tuple[datetime, list[str], list[str], int | None]:
-    """Mapeia um Evento de Contingência para as entradas de Replanejamento do Roteiro do Dia de Viagem.
+    """Mapeia um Evento de Contingência para as entradas de Replanejamento
+    do Roteiro do Dia de Viagem.
 
     Args:
         day: Roteiro do Dia de Viagem ao qual o Evento se aplica.

@@ -22,9 +22,9 @@ import hypothesis.strategies as st
 from hypothesis import given
 
 from src.core.domain.models import (
+    POI,
     InterCityConnection,
     Itinerary,
-    POI,
     RouteStop,
     TimeWindow,
 )
@@ -145,7 +145,8 @@ def test_ac2_slots_de_refeicao_futuros_ja_reservados_sao_preservados():
 
 
 def test_replan_keeps_free_window_before_future_reserved_slot() -> None:
-    """Slot de Refeição reservado no futuro: a janela livre ANTES do Slot continua disponível ao replano."""
+    """Slot de Refeição reservado no futuro: a janela livre ANTES do Slot
+    continua disponível ao replano."""
     availability = TimeWindow(start=time(9, 0), end=time(20, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     slot_poi = _make_poi("POI-SLOT", time(11, 0), time(11, 30), utility_score=5.0)

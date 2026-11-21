@@ -14,8 +14,8 @@ from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 
 from src.core.domain.models import (
-    Coordinates,
     POI,
+    Coordinates,
     Itinerary,
     RouteStop,
     TimeWindow,

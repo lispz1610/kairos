@@ -48,7 +48,10 @@ class ContingencyEventRequest(BaseModel):
     """
 
     type: Literal["delay", "closure", "skip", "duration_adjustment"] = Field(
-        description="Tipo do Evento de Contingência: 'delay', 'closure', 'skip' ou 'duration_adjustment'."
+        description=(
+            "Tipo do Evento de Contingência: 'delay', 'closure', 'skip' "
+            "ou 'duration_adjustment'."
+        ),
     )
     poi_id: str | None = Field(
         default=None,
@@ -168,7 +171,8 @@ class ReplanResponse(BaseModel):
 
 @app.post("/api/trip/replan", response_model=ReplanResponse)
 def trip_replan(request: ReplanRequest) -> ReplanResponse:
-    """Aplica os Eventos de Contingência ao Roteiro do Dia de Viagem e devolve o Roteiro replanejado com métricas de impacto."""
+    """Aplica os Eventos de Contingência ao Roteiro do Dia de Viagem e
+    devolve o Roteiro replanejado com métricas de impacto."""
     day = request.itinerary
     current_time = request.current_time
     closed_pois: list[str] = []

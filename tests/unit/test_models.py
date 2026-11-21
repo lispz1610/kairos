@@ -13,10 +13,6 @@ from pydantic import ValidationError
 
 from src.core.domain.models import (
     InterCityConnection,
-    Itinerary,
-    POI,
-    RouteStop,
-    TimeWindow,
 )
 
 DEPARTURE_DATETIME = datetime(2026, 11, 20, 8, 0, tzinfo=timezone.utc)

@@ -8,7 +8,7 @@ descritivos (lista de strings).
 
 from datetime import datetime, time
 
-from src.core.domain.models import Itinerary, POI, RouteStop, TimeWindow
+from src.core.domain.models import POI, Itinerary, RouteStop, TimeWindow
 from src.core.services.schedule import ScheduleService
 
 
