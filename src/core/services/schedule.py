@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import List
 
 from pydantic import BaseModel
 
-from src.core.domain.models import InterCityConnection, Trip, TripDay, TripStage
+from src.core.domain.models import (
+    InterCityConnection,
+    Itinerary,
+    TimeWindow,
+    Trip,
+    TripDay,
+    TripStage,
+)
 
 
 class ShiftedStageInfo(BaseModel):
@@ -77,12 +84,12 @@ class ScheduleService:
             )
 
         for conn in trip.connections:
-            if conn.departure_time >= target_stage.end_date:
+            if conn.effective_departure_time >= target_stage.end_date:
                 shifted_conns.append(
                     ShiftedConnectionInfo(
                         connection_id=conn.id,
-                        old_departure=conn.departure_time,
-                        new_departure=conn.departure_time + shift_delta,
+                        old_departure=conn.effective_departure_time,
+                        new_departure=conn.effective_departure_time + shift_delta,
                     )
                 )
 
@@ -155,5 +162,62 @@ class ScheduleService:
         self, connections: List[InterCityConnection], threshold_date: date, shift_delta: timedelta
     ) -> None:
         for conn in connections:
-            if conn.departure_time >= threshold_date:
-                conn.departure_time += shift_delta
+            if conn.effective_departure_time >= threshold_date:
+                # Update both departure_time and departure_datetime
+                new_departure_time = conn.effective_departure_time + shift_delta
+                conn.departure_time = new_departure_time
+                conn.departure_datetime = datetime.combine(
+                    new_departure_time, conn.departure_datetime.time()
+                )
+
+    @staticmethod
+    def validate_itinerary(
+        itinerary: Itinerary, availability_window: TimeWindow
+    ) -> list[str]:
+        """Valida visitas no formato legado de contingência."""
+        deviations: list[str] = []
+        for stop in itinerary.stops:
+            if not hasattr(stop, "start") or not hasattr(stop, "duration_minutes"):
+                continue
+            poi = stop.poi
+            # Handle both time and datetime for stop.start
+            start_time = stop.start
+            if isinstance(start_time, time) and not isinstance(start_time, datetime):
+                # Convert time to datetime for calculation
+                start_datetime = datetime.combine(date.today(), start_time)
+            else:
+                start_datetime = start_time
+            visit_end = start_datetime + timedelta(minutes=stop.duration_minutes)
+            operating_window = poi.operating_window
+            # Extract time for comparison
+            start_time = (
+                start_datetime.time() if isinstance(start_datetime, datetime) else start_time
+            )
+            visit_end_time = (
+                visit_end.time() if isinstance(visit_end, datetime) else visit_end
+            )
+            if start_time < operating_window.start:
+                deviations.append(
+                    f"Visita ao POI {poi.id} ({poi.name}) iniciada em "
+                    f"{start_datetime:%d/%m/%Y %H:%M} antes do início do horário de "
+                    f"funcionamento do POI ({operating_window.start:%H:%M})."
+                )
+            if visit_end_time > operating_window.end:
+                deviations.append(
+                    f"Visita ao POI {poi.id} ({poi.name}) encerrada em "
+                    f"{visit_end:%d/%m/%Y %H:%M} após o fechamento do horário de "
+                    f"funcionamento do POI ({operating_window.end:%H:%M})."
+                )
+            if start_time < availability_window.start:
+                deviations.append(
+                    f"Visita ao POI {poi.id} ({poi.name}) iniciada em "
+                    f"{start_datetime:%d/%m/%Y %H:%M} antes do início da Janela de "
+                    f"Disponibilidade ({availability_window.start:%H:%M})."
+                )
+            if visit_end_time > availability_window.end:
+                deviations.append(
+                    f"Visita ao POI {poi.id} ({poi.name}) encerrada em "
+                    f"{visit_end:%d/%m/%Y %H:%M} após o término da Janela de "
+                    f"Disponibilidade ({availability_window.end:%H:%M})."
+                )
+        return deviations

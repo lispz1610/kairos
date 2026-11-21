@@ -100,6 +100,48 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
      - **Caderno Diário**: Cronograma horário detalhado dia a dia, com hospedagens, paradas em POIs (com tempo de permanência), tempos de deslocamento e slots de refeição com sugestões curadas e faixas de preço;
      - **Apêndice de Curadoria**: Relação de estabelecimentos premiados e notas do usuário.
 
+### RF09 — Conexão Interurbana: Departure Datetime e Margem de Embarque
+- **Descrição**: O sistema deve representar a *Conexão Interurbana* com partida obrigatória com data e hora e um limite de embarque configurável por modal, alinhado ao modelo temporal do Dia de Viagem.
+- **Comportamento**:
+  1. `InterCityConnection` (Conexão Interurbana): campo obrigatório `departure_datetime: datetime` (partida com data e hora).
+  2. `boarding_cutoff_minutes: int` (Margem de Embarque): padrão `120` para modal `flying`, `30` para modal `driving` e `transit`.
+  3. `ScheduleService`: valida que o Roteiro do Dia de Viagem respeita os Horários de Funcionamento dos Pontos de Interesse e permanece dentro da Janela de Disponibilidade, reportando desvios quando houver.
+  4. Testes unitários de contrato (ISO/IEC/IEEE 29119):
+     - Padrão do modal: `boarding_cutoff_minutes` padrão `120` (modal `flying`) e `30` (modais `driving`/`transit`).
+     - Visita fora do horário de funcionamento (desvio reportado): `ScheduleService` reporta o desvio.
+     - Janela de Disponibilidade violada (desvio reportado): `ScheduleService` reporta o desvio.
+
+### RF10 — Eventos de Contingência Tipados (`ContingencyEventRequest`)
+- **Descrição**: Os Eventos de Contingência enviados ao endpoint ``POST /api/trip/replan`` devem ser tipados com um campo ``type`` explícito — eliminando a coerção implícita de uma união Pydantic (``ClosureEvent`` e ``SkipStopEvent`` têm formas idênticas).
+- **Comportamento**:
+  1. ``ContingencyEventRequest`` declara ``type: Literal["delay", "closure", "skip", "duration_adjustment"]`` e os campos opcionais ``poi_id``, ``delay_minutes`` e ``new_duration_minutes``.
+  2. O ``model_validator`` rejeita Eventos incompletos: ``delay_minutes`` exigido para 'delay'; ``poi_id`` exigido para 'closure', 'skip' e 'duration_adjustment'; ``new_duration_minutes`` exigido para 'duration_adjustment'.
+  3. O endpoint constrói os Eventos de Domínio via ``_to_domain_event(event_req, current_time, coordinates)`` — ``DelayEvent`` com ``current_time``/``coordinates`` do pedido e ``ClosureEvent``/``SkipStopEvent``/``DurationAdjustmentEvent`` com os campos do Evento.
+
+### RF11 — Motor OPTW (#36)
+- **Descrição**: O Motor OPTW (``OPTWSolver``) modela o problema como Orienteering Problem with Time Windows: seleção e sequenciamento de um subconjunto de Pontos de Interesse que maximiza a Pontuação de Utilidade acumulada respeitando os Horários de Funcionamento e a Janela de Disponibilidade (ADR 0001).
+- **Comportamento**:
+  1. Heurística construtiva de inserção gulosa — em cada ciclo escolhe-se o POI com maior Pontuação de Utilidade por Custo Marginal de Tempo em qualquer posição onde a inserção se mantém viável (viabilidade validada via ``ScheduleService``).
+  2. Busca local: swaps de paradas e 2-opt — a move é aceita quando o Roteiro permanece viável e seu término se antecipa, mantendo a Pontuação de Utilidade acumulada.
+  3. Paradas são emitidas em ordem cronológica, descendo ``cursor`` do horário de início pelo Custo de Deslocamento entre Paradas.
+  4. Tempo de Permanência por POI: ``visit_durations`` (``Mapping[str, int]``) fornece o Tempo de Permanência ajustado de um POI nas simulações do Roteiro — padrão ``_VISIT_DURATION_MINUTES`` quando não informado.
+
+### RF12 — Replanejamento Dinâmico do Dia de Viagem (#37)
+- **Descrição**: O ``ReplanningService.replan`` reotimiza a janela restante do Roteiro a partir do horário efetivo pós-evento, preservando o histórico até ``current_time`` e as Paradas futuras reservadas.
+- **Comportamento**:
+  1. Paradas até ``current_time`` permanecem travadas como histórico do Roteiro; Paradas futuras já reservadas (``reserved_future_stops``) permanecem preservadas no Roteiro replanejado.
+  2. A janela restante — ``[horário efetivo pós-evento, fim da Janela de Disponibilidade]`` — é reotimizada via ``OPTWSolver`` a partir do horário efetivo, excluindo POIs fechados/pulados (``excluded_pois``) e aplicando o teto seguro da Conexão Interurbana quando o Dia de Viagem replanejado é o último dia da Etapa de Viagem com partida interurbana.
+  3. Ajustes de Tempo de Permanência (``duration_adjustments``) são aplicados às Paradas preservadas e reservadas e passados ao ``OPTWSolver`` (``visit_durations``) — Paradas agendadas pelo solver usam o Tempo de Permanência ajustado.
+  4. Metadados de impacto: POIs preservados (``preserved_pois``), removidos/substituídos (``removed_pois``) e Alerta de Risco da Conexão Interurbana com déficit em minutos quando o retorno/embarque não couber antes do limite operacional.
+
+### RF13 — Endpoint ``POST /api/trip/replan`` e Controles de Contingência na Timeline (#38)
+- **Descrição**: O endpoint ``POST /api/trip/replan`` aplica os Eventos de Contingência ao Roteiro do Dia de Viagem; a interface expõe controles de contingência na timeline do Dia de Viagem.
+- **Comportamento**:
+  1. Endpoint: aceita ``ReplanRequest`` com ``itinerary``, ``current_time``, ``availability_window``, ``current_coordinate``, ``events: list[ContingencyEventRequest]``, ``closed_pois``, ``skipped_pois``, ``intercity_connection`` e ``travel_time_minutes``; devolve ``itinerary``, ``preserved_pois``, ``removed_pois`` e ``intercity_risk_alert``.
+  2. ``ReplanRequest`` aceita ``reserved_future_stops: list[RouteStop]`` — Paradas futuras já reservadas que devem permanecer no Roteiro replanejado.
+  3. Interface (timeline do Dia de Viagem): controles ``+ Atraso (min)`` (envia ``[{"type": "delay", "delay_minutes": ...}]`` e adianta ``current_time``), ``Fechou`` (envia ``[{"type": "closure", "poi_id": ...}]``), ``Pular parada`` (envia ``[{"type": "skip", "poi_id": ...}]``) e ``Ajustar permanência`` (envia ``[{"type": "duration_adjustment", "poi_id": ..., "new_duration_minutes": ...}]``).
+  4. O endpoint constrói os Eventos de Domínio via ``_to_domain_event`` (``DelayEvent`` com ``current_time``/``coordinates`` do pedido) e acumula ``duration_adjustments`` a partir dos ``DurationAdjustmentEvent``, repassando ``reserved_future_stops`` e ``duration_adjustments`` a ``ReplanningService.replan``.
+
 ---
 
 ## 3. Diretrizes de Qualidade e Casos de Teste (ISO/IEC 25010 & 29119)

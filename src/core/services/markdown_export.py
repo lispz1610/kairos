@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from src.core.domain.models import CurationList, Itinerary, MealSlot, Trip, TripDay, TripStage
+from src.core.domain.models import (
+    CurationList,
+    Itinerary,
+    ItineraryStop,
+    MealSlot,
+    Trip,
+    TripDay,
+    TripStage,
+)
 from src.core.services.dining_and_budget import BudgetSummary, DiningService
 
 
@@ -51,7 +59,7 @@ class MarkdownExportService:
             e_date = st.end_date.strftime("%d/%m/%Y")
             lines.append(f"- **{st.city_name}**: {s_date} a {e_date} ({len(st.days)} dias)")
         for conn in trip.connections:
-            d_time = conn.departure_time.strftime("%d/%m/%Y")
+            d_time = conn.effective_departure_time.strftime("%d/%m/%Y")
             lines.append(
                 f"- ✈️ **Conexão Interurbana**: Partida em {d_time} (Modal: `{conn.mode.value}`)"
             )
@@ -120,14 +128,21 @@ class MarkdownExportService:
         result: List[str] = []
         for stop in itinerary.stops:
             awards_str = f" [Selos: {', '.join(stop.poi.awards)}]" if stop.poi.awards else ""
-            arr = stop.arrival_time.strftime("%H:%M")
-            dep = stop.departure_time.strftime("%H:%M")
+            # Type narrowing using isinstance
+            if isinstance(stop, ItineraryStop):
+                arr = stop.arrival_time.strftime("%H:%M")
+                dep = stop.departure_time.strftime("%H:%M")
+                transit = (
+                    f" [Deslocamento: {stop.transit_duration_minutes} min]"
+                    if stop.transit_duration_minutes > 0
+                    else ""
+                )
+            else:
+                # RouteStop has start (datetime) and end (property)
+                arr = stop.start.strftime("%H:%M")
+                dep = stop.end.strftime("%H:%M")
+                transit = ""
             dur = stop.poi.stay_duration_minutes
-            transit = (
-                f" [Deslocamento: {stop.transit_duration_minutes} min]"
-                if stop.transit_duration_minutes > 0
-                else ""
-            )
             result.append(
                 f"  - `{arr} – {dep}`: **{stop.poi.name}** ({dur} min){transit}{awards_str}"
             )

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, time, timedelta
+import uuid
+from datetime import date, datetime, time, timedelta
 from enum import Enum, StrEnum
-from typing import Optional, Self
+from typing import Any, Optional, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 
 class PriceTier(StrEnum):
@@ -30,12 +31,59 @@ class Coordinates(BaseModel):
     latitude: float
     longitude: float
 
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema: Any, handler: Any) -> Any:
+        """Personalizar o schema OpenAPI/JSON gerado para representar tupla de floats."""
+        return handler(
+            core_schema.tuple_schema(
+                [core_schema.float_schema(), core_schema.float_schema()]
+            )
+        )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_tuple(cls, data: Any) -> dict[str, float] | Any:
+        if isinstance(data, (tuple, list)) and len(data) == 2:
+            return {"latitude": data[0], "longitude": data[1]}
+        return data
+
+    def __eq__(self, other: object) -> bool:
+        """Comparar coordenadas por igualdade de latitude e longitude ou tupla equivalente."""
+        if isinstance(other, Coordinates):
+            return self.latitude == other.latitude and self.longitude == other.longitude
+        if isinstance(other, tuple):
+            return len(other) == 2 and self.latitude == other[0] and self.longitude == other[1]
+        if isinstance(other, list):
+            return len(other) == 2 and self.latitude == other[0] and self.longitude == other[1]
+        return False
+
+    def as_tuple(self) -> tuple[float, float]:
+        """Return coordinates as (latitude, longitude) tuple."""
+        return (self.latitude, self.longitude)
+
+    @field_serializer("latitude", "longitude", when_used="json")
+    def serialize_coords(self, value: float) -> float:
+        """Serializar coordenadas individualmente em formato numérico float."""
+        return value
+
 
 class TimeWindow(BaseModel):
     """Janela de Disponibilidade ou Janela de Funcionamento com horários de início e fim."""
 
-    start_time: time
-    end_time: time
+    model_config = ConfigDict(populate_by_name=True)
+
+    start_time: time = Field(alias="start")
+    end_time: time = Field(alias="end")
+
+    @property
+    def start(self) -> time:
+        """Obter o horário de início da Janela."""
+        return self.start_time
+
+    @property
+    def end(self) -> time:
+        """Obter o horário de fim da Janela."""
+        return self.end_time
 
     @property
     def duration_minutes(self) -> int:
@@ -73,8 +121,9 @@ class POI(BaseModel):
 
     id: str
     name: str
-    location: Coordinates
+    location: Coordinates = Field(alias="coordinates")
     window: TimeWindow = Field(
+        alias="operating_window",
         default_factory=lambda: TimeWindow(start_time=time(9, 0), end_time=time(18, 0))
     )
     stay_duration_minutes: int = 60
@@ -84,6 +133,18 @@ class POI(BaseModel):
     price_tier: Optional[PriceTier] = None
     awards: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
+
+    @property
+    def operating_window(self) -> TimeWindow:
+        """Obter a Janela de Funcionamento do Ponto de Interesse."""
+        return self.window
+
+    @property
+    def coordinates(self) -> Coordinates:
+        """Obter as coordenadas geográficas do Ponto de Interesse."""
+        return self.location
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class MealSlot(BaseModel):
@@ -105,13 +166,45 @@ class ItineraryStop(BaseModel):
     departure_time: time
     transit_duration_minutes: int = 0
 
+    @property
+    def end(self) -> time:
+        """Fim da visita ao POI."""
+        return self.departure_time
+
+    @property
+    def start(self) -> time:
+        """Início da visita ao POI."""
+        return self.arrival_time
+
+
+class RouteStop(BaseModel):
+    """Visita a um Ponto de Interesse: ``poi``, ``start`` e Tempo de Permanência."""
+
+    poi: POI = Field(description="Ponto de Interesse visitado.")
+    start: datetime = Field(description="Horário de início da visita ao POI.")
+    duration_minutes: int = Field(
+        ge=0, description="Tempo de Permanência no POI, em minutos."
+    )
+
+    @property
+    def end(self) -> datetime:
+        """Terceiro do visitante: ``start`` + Tempo de Permanência no POI."""
+        return self.start + timedelta(minutes=self.duration_minutes)
+
 
 class Itinerary(BaseModel):
     """Roteiro ordenado de Pontos de Interesse com Pontuação de Utilidade e duração totais."""
 
-    stops: list[ItineraryStop] = Field(default_factory=list)
+    stops: list[ItineraryStop | RouteStop] = Field(default_factory=list)
     total_utility: float = 0.0
     total_duration_minutes: int = 0
+    start_location: Coordinates | None = Field(
+        default=None,
+        description=(
+            "Coordenada do início do Roteiro replanejado — a coordenada atual "
+            "do visitante."
+        ),
+    )
 
 
 class TripDay(BaseModel):
@@ -228,11 +321,69 @@ class TripStage(BaseModel):
 class InterCityConnection(BaseModel):
     """Conexão Interurbana entre Etapas de Viagem com Modal de Transporte e data de partida."""
 
-    id: str
-    from_stage_id: str
-    to_stage_id: str
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    from_stage_id: str = ""
+    to_stage_id: str = ""
     mode: TransportMode = TransportMode.FLYING
-    departure_time: date
+    departure_time: date | None = None
+    departure_datetime: datetime = Field(description="Partida com data e hora.")
+    modal: str = Field(
+        default="driving",
+        min_length=1,
+        description="Modal de Transporte da Conexão Interurbana.",
+    )
+    boarding_cutoff_minutes: int = Field(
+        ge=0,
+        default=30,
+        description=(
+            "Margem de Embarque em minutos; o padrão do Modal de Transporte é "
+            "aplicado quando não informado."
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_modal_default(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "departure_datetime" not in data or data["departure_datetime"] is None:
+                dep_time = data.get("departure_time")
+                if dep_time is not None:
+                    if isinstance(dep_time, datetime):
+                        data = {**data, "departure_datetime": dep_time}
+                    elif isinstance(dep_time, date):
+                        combined = datetime.combine(dep_time, time(0, 0))
+                        data = {**data, "departure_datetime": combined}
+                    elif isinstance(dep_time, str):
+                        try:
+                            parsed = datetime.fromisoformat(dep_time)
+                        except ValueError:
+                            parsed = datetime.combine(
+                                date.fromisoformat(dep_time), time(0, 0)
+                            )
+                        data = {**data, "departure_datetime": parsed}
+            if data.get("boarding_cutoff_minutes") is None:
+                modal = data.get("modal") or "driving"
+                data = {
+                    **data,
+                    "boarding_cutoff_minutes": {"flying": 120, "driving": 30, "transit": 30}.get(
+                        modal, 30
+                    ),
+                }
+        return data
+
+    @model_validator(mode="after")
+    def _set_departure_time_from_datetime(self) -> Self:
+        """Define departure_time a partir de departure_datetime se não informado."""
+        if self.departure_time is None and self.departure_datetime is not None:
+            self.departure_time = self.departure_datetime.date()
+        return self
+
+    @property
+    def effective_departure_time(self) -> date:
+        """Data de partida efetiva: usa departure_time ou calcula a partir de departure_datetime."""
+        if self.departure_time is not None:
+            return self.departure_time
+        return self.departure_datetime.date()
 
 
 class PreferencesProfile(BaseModel):

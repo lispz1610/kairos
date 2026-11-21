@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import time
+from datetime import datetime, time
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel
@@ -95,9 +95,13 @@ class DiningService:
         """Determina a coordenada de referência para o slot com base no último POI anterior."""
         if itinerary and itinerary.stops:
             slot_start = slot_window.start_time
-            prior_stops = [
-                s for s in itinerary.stops if s.departure_time <= slot_start
-            ]
+            prior_stops = []
+            for s in itinerary.stops:
+                end_time = s.departure_time if hasattr(s, 'departure_time') else s.end
+                if isinstance(end_time, datetime):
+                    end_time = end_time.time()
+                if end_time <= slot_start:
+                    prior_stops.append(s)
             if prior_stops:
                 return prior_stops[-1].poi.location
         return return_location if fallback_to_return else departure_location
