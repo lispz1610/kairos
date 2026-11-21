@@ -1,12 +1,4 @@
-"""Motor OPTW do Roteiro Urbano (#36).
-
-Heurística construtiva de inserção gulosa ponderada pela Pontuação de
-Utilidade / Custo Marginal de Tempo (ADR 0001), seguida de busca local de
-swaps de POIs e 2-opt: o problema modelado é a seleção e sequenciamento
-de um subconjunto de Pontos de Interesse que maximiza a Pontuação de
-Utilidade acumulada respeitando os Horários de Funcionamento dos POIs e a
-Janela de Disponibilidade (ADR 0001).
-"""
+"""Motor OPTW do Roteiro Urbano (#36) e Solver Heurístico com Janelas Temporais."""
 
 from __future__ import annotations
 
@@ -14,11 +6,14 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from typing import Any, List, Optional, Tuple, cast, overload
 
 from src.core.domain.models import (
     POI,
     Coordinates,
     Itinerary,
+    ItineraryStop,
+    PreferencesProfile,
     RouteStop,
     TimeWindow,
 )
@@ -27,18 +22,186 @@ from src.core.services.schedule import ScheduleService
 __all__ = ["OPTWSolver", "haversine_distance_km", "estimate_transit_minutes"]
 
 _VISIT_DURATION_MINUTES = 0
-"""Tempo de Permanência do POI: o modelo ``POI`` não fornece Tempo de
-Permanência configurado, então o visitante descansa 0 minutos no interior do
-POI; o constraint de Janela de Funcionamento aplica ao horário da visita."""
+
+
+def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
+    """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
+    r = 6371.0
+    phi1 = math.radians(coord1.latitude)
+    phi2 = math.radians(coord2.latitude)
+    delta_phi = math.radians(coord2.latitude - coord1.latitude)
+    delta_lambda = math.radians(coord2.longitude - coord1.longitude)
+
+    a = (
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
+    )
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return r * c
+
+
+def estimate_transit_minutes(
+    coord1: Coordinates, coord2: Coordinates, speed_kmh: float = 25.0
+) -> int:
+    """Estima o tempo de deslocamento em minutos considerando velocidade média urbana."""
+    dist = haversine_distance_km(coord1, coord2)
+    minutes = int(math.ceil((dist / speed_kmh) * 60.0))
+    return max(2, minutes)
+
+
+def minutes_to_time(minutes_since_midnight: int) -> time:
+    """Converte minutos decorridos a partir da meia-noite em um objeto time."""
+    normalized = minutes_since_midnight % (24 * 60)
+    hours = normalized // 60
+    minutes = normalized % 60
+    return time(hour=hours, minute=minutes)
+
+
+def time_to_minutes(t: time) -> int:
+    """Converte um objeto time na quantidade de minutos decorridos desde a meia-noite."""
+    return t.hour * 60 + t.minute
+
+
+@dataclass(frozen=True)
+class FeasibilityContext:
+    """Parâmetros de contorno e restrições temporais para avaliação de viabilidade."""
+
+    end_location: Coordinates
+    window_end_min: int
+    reserved_ranges: List[Tuple[int, int]]
+
+
+@dataclass(frozen=True)
+class CandidateSchedule:
+    """Horários calculados para visitação de um POI."""
+
+    arrival_min: int
+    departure_min: int
+    transit_min: int
 
 
 class OPTWSolver:
-    """Motor OPTW: gera um Roteiro de Pontos de Interesse dentro da
-    Janela de Disponibilidade, maximizando a Pontuação de Utilidade
-    acumulada."""
+    """Solver heurístico com busca local para Orienteering Problem with Time Windows (OPTW).
+
+    Maximiza utilidade acumulada respeitando horários de funcionamento,
+    janela diária e slots reservados para refeições e pausas temáticas.
+    """
+
+    def __init__(self, transit_speed_kmh: float = 25.0) -> None:
+        self.transit_speed_kmh = transit_speed_kmh
+
+    @classmethod
+    def _is_legacy_call(cls, actual_args: tuple[Any, ...], kwargs: dict[str, Any]) -> bool:
+        return bool(
+            "end_location" in kwargs
+            or "candidates" in kwargs
+            or "preferences" in kwargs
+            or "reserved_slots" in kwargs
+            or (len(actual_args) >= 1 and isinstance(actual_args[0], Coordinates))
+            or (
+                len(actual_args) >= 3
+                and isinstance(actual_args[0], Coordinates)
+                and isinstance(actual_args[1], Coordinates)
+            )
+        )
+
+    @overload
+    @classmethod
+    def solve(
+        cls,
+        candidate_pois: list[POI],
+        availability_window: TimeWindow,
+        travel_time_minutes: float = 15.0,
+        start_time: datetime | None = None,
+        visit_durations: Mapping[str, int] | None = None,
+        start_location: Coordinates | None = None,
+        **kwargs: Any,
+    ) -> Itinerary: ...
+
+    @overload
+    @classmethod
+    def solve(
+        cls,
+        start_location: Coordinates,
+        end_location: Coordinates,
+        window: TimeWindow,
+        candidates: List[POI],
+        preferences: Optional[PreferencesProfile] = None,
+        reserved_slots: Optional[List[TimeWindow]] = None,
+    ) -> Itinerary: ...
+
+    @classmethod
+    def solve(
+        cls,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Itinerary:
+        """Resolve o problema de roteamento OPTW, suportando ambas as interfaces:
+        1. Interface legada (planejamento otimizado com coordenadas, janelas e slots reservados)
+        2. Interface de contingência (inserção gulosa com busca local para replanejamento)
+        """
+        solver_instance = cls()
+        actual_args = args
+
+        if cls._is_legacy_call(actual_args, kwargs):
+            start_location = kwargs.get("start_location") or (
+                actual_args[0] if len(actual_args) > 0 else None
+            )
+            end_location = kwargs.get("end_location") or (
+                actual_args[1] if len(actual_args) > 1 else None
+            )
+            window = kwargs.get("window") or (
+                actual_args[2] if len(actual_args) > 2 else None
+            )
+            candidates = kwargs.get("candidates") or (
+                actual_args[3] if len(actual_args) > 3 else []
+            )
+            preferences = kwargs.get("preferences") or (
+                actual_args[4] if len(actual_args) > 4 else None
+            )
+            reserved_slots = kwargs.get("reserved_slots") or (
+                actual_args[5] if len(actual_args) > 5 else None
+            )
+
+            return solver_instance._solve_legacy(
+                start_location=cast(Coordinates, start_location),
+                end_location=cast(Coordinates, end_location),
+                window=cast(TimeWindow, window),
+                candidates=cast(List[POI], candidates),
+                preferences=cast(Optional[PreferencesProfile], preferences),
+                reserved_slots=cast(Optional[List[TimeWindow]], reserved_slots),
+            )
+
+        candidate_pois = kwargs.get("candidate_pois") or (
+            actual_args[0] if len(actual_args) > 0 else []
+        )
+        availability_window = kwargs.get("availability_window") or (
+            actual_args[1] if len(actual_args) > 1 else None
+        )
+        travel_time_minutes = kwargs.get("travel_time_minutes") or (
+            actual_args[2] if len(actual_args) > 2 else 15.0
+        )
+        start_time = kwargs.get("start_time") or (
+            actual_args[3] if len(actual_args) > 3 else None
+        )
+        visit_durations = kwargs.get("visit_durations") or (
+            actual_args[4] if len(actual_args) > 4 else None
+        )
+        start_location = kwargs.get("start_location") or (
+            actual_args[5] if len(actual_args) > 5 else None
+        )
+
+        return OPTWSolver._solve_contingency(
+            candidate_pois=cast(list[POI], candidate_pois),
+            availability_window=cast(TimeWindow, availability_window),
+            travel_time_minutes=float(travel_time_minutes),
+            start_time=cast(Optional[datetime], start_time),
+            visit_durations=cast(Optional[Mapping[str, int]], visit_durations),
+            start_location=cast(Optional[Coordinates], start_location),
+        )
 
     @staticmethod
-    def solve(
+    def _solve_contingency(
         candidate_pois: list[POI],
         availability_window: TimeWindow,
         travel_time_minutes: float,
@@ -46,32 +209,6 @@ class OPTWSolver:
         visit_durations: Mapping[str, int] | None = None,
         start_location: Coordinates | None = None,
     ) -> Itinerary:
-        """Gera o Roteiro para a Janela de Disponibilidade.
-
-        O Roteiro é construído por inserção gulosa — em cada ciclo escolhe-se
-        o POI com maior Pontuação de Utilidade por Custo Marginal de Tempo
-        em qualquer posição onde a inserção se mantém viável — seguido de
-        busca local (swaps de POIs e 2-opt) que reduz o término do
-        Roteiro mantendo-o viável.
-
-        Args:
-            candidate_pois: Pontos de Interesse candidatos à visita.
-            availability_window: Janela de Disponibilidade do Dia de Viagem.
-            travel_time_minutes: Custo de Deslocamento (Tempo de Trânsito)
-                entre dois Pontos de Interesse consecutivos.
-            start_time: Horário de início do Roteiro; quando omitido, o
-                início é o horário de início da Janela de Disponibilidade.
-            visit_durations: Tempo de Permanência ajustado por identificação
-                do POI — usado em vez do Tempo de Permanência padrão em todas
-                as simulações do Roteiro.
-            start_location: Coordenada do início do Roteiro replanejado —
-                registrada no ``Itinerary.start_location`` devolvido.
-
-        Returns:
-            O Roteiro construído: subconjunto e sequência de visitas aos
-            Pontos de Interesse, em ordem cronológica, respeitando os
-            Horários de Funcionamento dos POIs e a Janela de Disponibilidade.
-        """
         if start_time is None:
             start_time = datetime.combine(date.today(), availability_window.start)
         route: list[POI] = []
@@ -85,7 +222,7 @@ class OPTWSolver:
                 availability_window,
                 visit_durations,
             )
-            moved = _local_search(
+            moved = _local_search_contingency(
                 route,
                 start_time,
                 travel_time_minutes,
@@ -98,9 +235,461 @@ class OPTWSolver:
             route, start_time, travel_time_minutes, visit_durations, start_location
         )
 
+    def _solve_legacy(
+        self,
+        start_location: Coordinates,
+        end_location: Coordinates,
+        window: TimeWindow,
+        candidates: List[POI],
+        preferences: Optional[PreferencesProfile] = None,
+        reserved_slots: Optional[List[TimeWindow]] = None,
+    ) -> Itinerary:
+        if not candidates:
+            return Itinerary(stops=[], total_utility=0.0, total_duration_minutes=0)
+
+        effective_candidates = self._prepare_candidates(candidates, preferences)
+        reserved_ranges = self._convert_reserved_slots(reserved_slots)
+        window_start_min = time_to_minutes(window.start_time)
+        window_end_min = time_to_minutes(window.end_time)
+
+        context = FeasibilityContext(
+            end_location=end_location,
+            window_end_min=window_end_min,
+            reserved_ranges=reserved_ranges,
+        )
+
+        initial_itinerary, remaining = self._build_greedy_solution(
+            start_location=start_location,
+            window_start_min=window_start_min,
+            candidates=effective_candidates,
+            context=context,
+        )
+
+        if not initial_itinerary.stops:
+            return initial_itinerary
+
+        return self._local_search_legacy(
+            initial_itinerary=initial_itinerary,
+            remaining_candidates=remaining,
+            start_location=start_location,
+            window_start_min=window_start_min,
+            context=context,
+        )
+
+    def _prepare_candidates(
+        self, candidates: List[POI], preferences: Optional[PreferencesProfile]
+    ) -> List[POI]:
+        if preferences is not None:
+            from src.core.services.preferences import PreferencesService
+
+            return PreferencesService().apply_preference_weights(candidates, preferences)
+        return candidates
+
+    def _convert_reserved_slots(
+        self, reserved_slots: Optional[List[TimeWindow]]
+    ) -> List[Tuple[int, int]]:
+        if not reserved_slots:
+            return []
+        ranges = [
+            (time_to_minutes(s.start_time), time_to_minutes(s.end_time))
+            for s in reserved_slots
+        ]
+        return sorted(ranges, key=lambda r: r[0])
+
+    def _skip_reserved_slots(
+        self, current_time_min: int, reserved_ranges: List[Tuple[int, int]]
+    ) -> int:
+        t = current_time_min
+        for r_start, r_end in reserved_ranges:
+            if r_start <= t < r_end:
+                t = r_end
+        return t
+
+    def _find_overlapping_slot(
+        self, start_min: int, end_min: int, reserved_ranges: List[Tuple[int, int]]
+    ) -> Optional[Tuple[int, int]]:
+        for r_start, r_end in reserved_ranges:
+            if max(start_min, r_start) < min(end_min, r_end):
+                return (r_start, r_end)
+        return None
+
+    def _is_feasible_legacy(
+        self,
+        schedule: CandidateSchedule,
+        poi: POI,
+        context: FeasibilityContext,
+    ) -> bool:
+        poi_close = time_to_minutes(poi.window.end_time)
+        if schedule.departure_min > poi_close:
+            return False
+
+        ret_transit = estimate_transit_minutes(
+            poi.location, context.end_location, self.transit_speed_kmh
+        )
+        if schedule.departure_min + ret_transit > context.window_end_min:
+            return False
+
+        for r_start, r_end in context.reserved_ranges:
+            if max(schedule.arrival_min, r_start) < min(schedule.departure_min, r_end):
+                return False
+
+        return True
+
+    def _compute_schedule(
+        self,
+        poi: POI,
+        current_location: Coordinates,
+        current_time_min: int,
+        context: FeasibilityContext,
+    ) -> Optional[CandidateSchedule]:
+        t = current_time_min
+        max_attempts = len(context.reserved_ranges) + 1
+
+        for _ in range(max_attempts):
+            t = self._skip_reserved_slots(t, context.reserved_ranges)
+            transit_min = estimate_transit_minutes(
+                current_location, poi.location, self.transit_speed_kmh
+            )
+            arr_min = t + transit_min
+            poi_open = time_to_minutes(poi.window.start_time)
+            service_start_min = max(arr_min, poi_open)
+            dep_min = service_start_min + poi.stay_duration_minutes
+
+            overlap = self._find_overlapping_slot(
+                arr_min, dep_min, context.reserved_ranges
+            )
+            if overlap is not None:
+                _, r_end = overlap
+                t = r_end
+                continue
+
+            sched = CandidateSchedule(
+                arrival_min=arr_min,
+                departure_min=dep_min,
+                transit_min=transit_min,
+            )
+            if self._is_feasible_legacy(sched, poi, context):
+                return sched
+            return None
+
+        return None
+
+    def _calculate_candidate_score(self, poi: POI, sched: CandidateSchedule) -> float:
+        poi_open = time_to_minutes(poi.window.start_time)
+        wait_min = max(0, poi_open - sched.arrival_min)
+        total_time = float(sched.transit_min + poi.stay_duration_minutes + wait_min)
+        return poi.utility_score / max(1.0, total_time)
+
+    def _find_best_candidate(
+        self,
+        current_location: Coordinates,
+        current_time_min: int,
+        candidates: List[POI],
+        context: FeasibilityContext,
+    ) -> Optional[Tuple[POI, CandidateSchedule]]:
+        best_candidate: Optional[POI] = None
+        best_schedule: Optional[CandidateSchedule] = None
+        best_score = -1.0
+
+        for poi in candidates:
+            sched = self._compute_schedule(
+                poi=poi,
+                current_location=current_location,
+                current_time_min=current_time_min,
+                context=context,
+            )
+            if sched is None:
+                continue
+
+            score = self._calculate_candidate_score(poi, sched)
+            if score > best_score:
+                best_score = score
+                best_candidate = poi
+                best_schedule = sched
+
+        if best_candidate is None or best_schedule is None:
+            return None
+        return (best_candidate, best_schedule)
+
+    def _build_greedy_solution(
+        self,
+        start_location: Coordinates,
+        window_start_min: int,
+        candidates: List[POI],
+        context: FeasibilityContext,
+    ) -> Tuple[Itinerary, List[POI]]:
+        current_location = start_location
+        current_time_min = window_start_min
+        remaining = list(candidates)
+        selected_stops: List[ItineraryStop] = []
+        total_utility = 0.0
+
+        while remaining:
+            best = self._find_best_candidate(
+                current_location=current_location,
+                current_time_min=current_time_min,
+                candidates=remaining,
+                context=context,
+            )
+            if best is None:
+                break
+
+            poi, sched = best
+            selected_stops.append(
+                ItineraryStop(
+                    poi=poi,
+                    arrival_time=minutes_to_time(sched.arrival_min),
+                    departure_time=minutes_to_time(sched.departure_min),
+                    transit_duration_minutes=sched.transit_min,
+                )
+            )
+            total_utility += poi.utility_score
+            current_location = poi.location
+            current_time_min = sched.departure_min
+            remaining.remove(poi)
+
+        final_transit = (
+            estimate_transit_minutes(
+                current_location, context.end_location, self.transit_speed_kmh
+            )
+            if selected_stops
+            else 0
+        )
+        total_duration = (current_time_min + final_transit) - window_start_min
+
+        initial_itinerary = Itinerary(
+            stops=selected_stops,
+            total_utility=total_utility,
+            total_duration_minutes=max(0, total_duration),
+        )
+        return initial_itinerary, remaining
+
+    def _evaluate_route(
+        self,
+        pois: List[POI],
+        start_location: Coordinates,
+        window_start_min: int,
+        context: FeasibilityContext,
+    ) -> Optional[Itinerary]:
+        if not pois:
+            return Itinerary(stops=[], total_utility=0.0, total_duration_minutes=0)
+
+        current_location = start_location
+        current_time_min = window_start_min
+        stops: List[ItineraryStop] = []
+        total_utility = 0.0
+
+        for poi in pois:
+            sched = self._compute_schedule(
+                poi, current_location, current_time_min, context
+            )
+            if sched is None:
+                return None
+
+            stops.append(
+                ItineraryStop(
+                    poi=poi,
+                    arrival_time=minutes_to_time(sched.arrival_min),
+                    departure_time=minutes_to_time(sched.departure_min),
+                    transit_duration_minutes=sched.transit_min,
+                )
+            )
+            total_utility += poi.utility_score
+            current_location = poi.location
+            current_time_min = sched.departure_min
+
+        final_transit = estimate_transit_minutes(
+            current_location, context.end_location, self.transit_speed_kmh
+        )
+        if current_time_min + final_transit > context.window_end_min:
+            return None
+
+        total_duration = (current_time_min + final_transit) - window_start_min
+        return Itinerary(
+            stops=stops,
+            total_utility=total_utility,
+            total_duration_minutes=max(0, total_duration),
+        )
+
+    def _is_better(self, candidate: Itinerary, current: Itinerary) -> bool:
+        if candidate.total_utility > current.total_utility + 1e-6:
+            return True
+        if abs(candidate.total_utility - current.total_utility) > 1e-6:
+            return False
+        cand_transit = sum(
+            s.transit_duration_minutes
+            for s in candidate.stops
+            if isinstance(s, ItineraryStop)
+        )
+        curr_transit = sum(
+            s.transit_duration_minutes
+            for s in current.stops
+            if isinstance(s, ItineraryStop)
+        )
+        if cand_transit < curr_transit:
+            return True
+        return (
+            cand_transit == curr_transit
+            and candidate.total_duration_minutes < current.total_duration_minutes
+        )
+
+    def _try_2opt_improvement(
+        self,
+        current_pois: List[POI],
+        start_location: Coordinates,
+        window_start_min: int,
+        context: FeasibilityContext,
+        best_itinerary: Itinerary,
+    ) -> Optional[Itinerary]:
+        n = len(current_pois)
+        if n < 3:
+            return None
+        for i in range(n - 1):
+            for j in range(i + 1, n):
+                if i == 0 and j == n - 1:
+                    continue
+                candidate_pois = (
+                    current_pois[:i]
+                    + list(reversed(current_pois[i : j + 1]))
+                    + current_pois[j + 1 :]
+                )
+                cand_itinerary = self._evaluate_route(
+                    candidate_pois, start_location, window_start_min, context
+                )
+                if cand_itinerary and self._is_better(cand_itinerary, best_itinerary):
+                    return cand_itinerary
+        return None
+
+    def _try_swap_improvement(
+        self,
+        current_pois: List[POI],
+        start_location: Coordinates,
+        window_start_min: int,
+        context: FeasibilityContext,
+        best_itinerary: Itinerary,
+    ) -> Optional[Itinerary]:
+        n = len(current_pois)
+        if n < 2:
+            return None
+        for i in range(n - 1):
+            for j in range(i + 1, n):
+                candidate_pois = list(current_pois)
+                candidate_pois[i], candidate_pois[j] = candidate_pois[j], candidate_pois[i]
+                cand_itinerary = self._evaluate_route(
+                    candidate_pois, start_location, window_start_min, context
+                )
+                if cand_itinerary and self._is_better(cand_itinerary, best_itinerary):
+                    return cand_itinerary
+        return None
+
+    def _try_candidate_swap(
+        self,
+        current_pois: List[POI],
+        unvisited: List[POI],
+        start_location: Coordinates,
+        window_start_min: int,
+        context: FeasibilityContext,
+        best_itinerary: Itinerary,
+    ) -> Tuple[Optional[Itinerary], List[POI]]:
+        for i in range(len(current_pois)):
+            for cand in unvisited:
+                candidate_pois = list(current_pois)
+                old_poi = candidate_pois[i]
+                candidate_pois[i] = cand
+                cand_itinerary = self._evaluate_route(
+                    candidate_pois, start_location, window_start_min, context
+                )
+                if cand_itinerary and self._is_better(cand_itinerary, best_itinerary):
+                    new_unvisited = [p for p in unvisited if p.id != cand.id] + [old_poi]
+                    return cand_itinerary, new_unvisited
+        return None, unvisited
+
+    def _try_candidate_insert(
+        self,
+        current_pois: List[POI],
+        unvisited: List[POI],
+        start_location: Coordinates,
+        window_start_min: int,
+        context: FeasibilityContext,
+        best_itinerary: Itinerary,
+    ) -> Tuple[Optional[Itinerary], List[POI]]:
+        for i in range(len(current_pois) + 1):
+            for cand in unvisited:
+                candidate_pois = current_pois[:i] + [cand] + current_pois[i:]
+                cand_itinerary = self._evaluate_route(
+                    candidate_pois, start_location, window_start_min, context
+                )
+                if cand_itinerary and self._is_better(cand_itinerary, best_itinerary):
+                    new_unvisited = [p for p in unvisited if p.id != cand.id]
+                    return cand_itinerary, new_unvisited
+        return None, unvisited
+
+    def _local_search_step(
+        self,
+        current_pois: List[POI],
+        unvisited: List[POI],
+        start_location: Coordinates,
+        window_start_min: int,
+        context: FeasibilityContext,
+        best_itinerary: Itinerary,
+    ) -> Optional[Tuple[Itinerary, List[POI]]]:
+        cand_2opt = self._try_2opt_improvement(
+            current_pois, start_location, window_start_min, context, best_itinerary
+        )
+        if cand_2opt:
+            return cand_2opt, unvisited
+
+        cand_swap = self._try_swap_improvement(
+            current_pois, start_location, window_start_min, context, best_itinerary
+        )
+        if cand_swap:
+            return cand_swap, unvisited
+
+        cand_repl, new_unvisited = self._try_candidate_swap(
+            current_pois, unvisited, start_location, window_start_min, context, best_itinerary
+        )
+        if cand_repl:
+            return cand_repl, new_unvisited
+
+        cand_ins, new_unvisited_ins = self._try_candidate_insert(
+            current_pois, unvisited, start_location, window_start_min, context, best_itinerary
+        )
+        if cand_ins:
+            return cand_ins, new_unvisited_ins
+
+        return None
+
+    def _local_search_legacy(
+        self,
+        initial_itinerary: Itinerary,
+        remaining_candidates: List[POI],
+        start_location: Coordinates,
+        window_start_min: int,
+        context: FeasibilityContext,
+        max_iterations: int = 50,
+    ) -> Itinerary:
+        best_itinerary = initial_itinerary
+        current_pois = [s.poi for s in best_itinerary.stops]
+        unvisited = list(remaining_candidates)
+
+        for _ in range(max_iterations):
+            step = self._local_search_step(
+                current_pois,
+                unvisited,
+                start_location,
+                window_start_min,
+                context,
+                best_itinerary,
+            )
+            if step is None:
+                break
+            best_itinerary, unvisited = step
+            current_pois = [s.poi for s in best_itinerary.stops]
+
+        return best_itinerary
+
 
 def _unique_pois(candidate_pois: list[POI]) -> list[POI]:
-    """Remove duplicatas, pelo identificador do POI, mantendo a ordem."""
     seen: set[str] = set()
     unique: list[POI] = []
     for poi in candidate_pois:
@@ -117,11 +706,6 @@ def _simulate(
     visit_durations: Mapping[str, int] | None = None,
     start_location: Coordinates | None = None,
 ) -> Itinerary:
-    """Constrói o ``Itinerary``: ``RouteStop`` por POI com ``start``
-    cronológico, descendo ``cursor`` do ``start_time`` pelo Custo de
-    Deslocamento entre POIs — o Tempo de Permanência do POI é
-    ``visit_durations.get(poi.id, _VISIT_DURATION_MINUTES)`` — e registra
-    ``start_location`` como o início do Roteiro replanejado."""
     durations: Mapping[str, int] = visit_durations or {}
     stops: list[RouteStop] = []
     cursor = start_time
@@ -141,16 +725,11 @@ def _is_feasible(
     availability_window: TimeWindow,
     visit_durations: Mapping[str, int] | None = None,
 ) -> bool:
-    """Verdade quando o Roteiro da sequência não apresenta desvios: cada
-    visita dentro do Horário de Funcionamento do POI e dentro da Janela de
-    Disponibilidade, reportados por ``ScheduleService``."""
     itinerary = _simulate(sequence, start_time, travel_time_minutes, visit_durations)
     return ScheduleService.validate_itinerary(itinerary, availability_window) == []
 
 
 def _completion(itinerary: Itinerary, start_time: datetime) -> datetime:
-    """Momento em que o Roteiro termina: o fim da última visita (ou
-    ``start_time`` quando o Roteiro está vazio)."""
     if not itinerary.stops:
         return start_time
     last_stop = itinerary.stops[-1]
@@ -170,8 +749,6 @@ def _route_completion(
     travel_time_minutes: float,
     visit_durations: Mapping[str, int] | None = None,
 ) -> datetime:
-    """Momento em que o Roteiro da sequência termina: o fim da última visita
-    (ou ``start_time`` quando o Roteiro está vazio)."""
     return _completion(
         _simulate(sequence, start_time, travel_time_minutes, visit_durations),
         start_time,
@@ -179,9 +756,6 @@ def _route_completion(
 
 
 def _weight(poi: POI, marginal_cost: float) -> float:
-    """Valor ponderado da Pontuação de Utilidade do POI pelo Custo Marginal
-    de Tempo de inserção; Custo Marginal nulo com Pontuação de Utilidade
-    positiva configura valor infinito."""
     if marginal_cost <= 0:
         return float("inf") if poi.utility_score > 0 else 0.0
     return poi.utility_score / marginal_cost
@@ -195,10 +769,6 @@ def _insert_pass(
     availability_window: TimeWindow,
     visit_durations: Mapping[str, int] | None = None,
 ) -> int:
-    """Passo de inserção gulosa: em cada ciclo insere o POI com maior
-    Pontuação de Utilidade por Custo Marginal de Tempo — em qualquer
-    posição do Roteiro onde a inserção permanece viável — até que não haja
-    inserção viável. Retorna o número de inserções realizadas."""
     inserted = 0
     while True:
         route_completion = _route_completion(
@@ -246,8 +816,6 @@ def _improving_completion(
     bound: datetime,
     visit_durations: Mapping[str, int] | None = None,
 ) -> datetime | None:
-    """Retorna o término do Roteiro da sequência quando viável e
-    estritamente anterior ao ``bound``; ``None`` caso contrário."""
     if not _is_feasible(
         sequence, start_time, travel_time_minutes, availability_window, visit_durations
     ):
@@ -260,18 +828,13 @@ def _improving_completion(
     return completion
 
 
-def _local_search(
+def _local_search_contingency(
     route: list[POI],
     start_time: datetime,
     travel_time_minutes: float,
     availability_window: TimeWindow,
     visit_durations: Mapping[str, int] | None = None,
 ) -> int:
-    """Busca local: swaps de POIs e 2-opt sobre o Roteiro — a move é
-    aceita quando o Roteiro permanece viável e seu término se antecipa,
-    mantendo a Pontuação de Utilidade acumulada. A cada iteração aplica-se
-    a move que antecipa mais o término. Retorna o número de moves
-    aplicados até a ótima local."""
     moves = 0
     while True:
         current_completion = _route_completion(
@@ -312,51 +875,3 @@ def _local_search(
             return moves
         route = best_route
         moves += 1
-
-
-def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
-    """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
-    r = 6371.0
-    phi1 = math.radians(coord1.latitude)
-    phi2 = math.radians(coord2.latitude)
-    delta_phi = math.radians(coord2.latitude - coord1.latitude)
-    delta_lambda = math.radians(coord2.longitude - coord1.longitude)
-
-    a = (
-        math.sin(delta_phi / 2.0) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
-    )
-    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
-    return r * c
-
-
-def estimate_transit_minutes(
-    coord1: Coordinates, coord2: Coordinates, speed_kmh: float = 25.0
-) -> int:
-    """Estima o tempo de deslocamento em minutos considerando velocidade média urbana."""
-    dist = haversine_distance_km(coord1, coord2)
-    minutes = int(math.ceil((dist / speed_kmh) * 60.0))
-    return max(2, minutes)
-
-
-def minutes_to_time(minutes_since_midnight: int) -> time:
-    """Converte minutos decorridos a partir da meia-noite em um objeto time."""
-    normalized = minutes_since_midnight % (24 * 60)
-    hours = normalized // 60
-    minutes = normalized % 60
-    return time(hour=hours, minute=minutes)
-
-
-def time_to_minutes(t: time) -> int:
-    """Converte um objeto time na quantidade de minutos decorridos desde a meia-noite."""
-    return t.hour * 60 + t.minute
-
-
-@dataclass(frozen=True)
-class FeasibilityContext:
-    """Parâmetros de contorno e restrições temporais para avaliação de viabilidade."""
-
-    availability_window: TimeWindow
-    travel_time_minutes: float
-    visit_durations: Mapping[str, int] | None = None
-    start_time: datetime | None = None
