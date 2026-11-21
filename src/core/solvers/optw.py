@@ -10,8 +10,10 @@ Janela de Disponibilidade (ADR 0001).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
-from datetime import date, datetime, timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 
 from src.core.domain.models import (
     POI,
@@ -22,7 +24,7 @@ from src.core.domain.models import (
 )
 from src.core.services.schedule import ScheduleService
 
-__all__ = ["OPTWSolver"]
+__all__ = ["OPTWSolver", "haversine_distance_km", "estimate_transit_minutes"]
 
 _VISIT_DURATION_MINUTES = 0
 """Tempo de Permanência do POI: o modelo ``POI`` não fornece Tempo de
@@ -302,3 +304,51 @@ def _local_search(
             return moves
         route = best_route
         moves += 1
+
+
+def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
+    """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
+    r = 6371.0
+    phi1 = math.radians(coord1.latitude)
+    phi2 = math.radians(coord2.latitude)
+    delta_phi = math.radians(coord2.latitude - coord1.latitude)
+    delta_lambda = math.radians(coord2.longitude - coord1.longitude)
+
+    a = (
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
+    )
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return r * c
+
+
+def estimate_transit_minutes(
+    coord1: Coordinates, coord2: Coordinates, speed_kmh: float = 25.0
+) -> int:
+    """Estima o tempo de deslocamento em minutos considerando velocidade média urbana."""
+    dist = haversine_distance_km(coord1, coord2)
+    minutes = int(math.ceil((dist / speed_kmh) * 60.0))
+    return max(2, minutes)
+
+
+def minutes_to_time(minutes_since_midnight: int) -> time:
+    """Converte minutos decorridos a partir da meia-noite em um objeto time."""
+    normalized = minutes_since_midnight % (24 * 60)
+    hours = normalized // 60
+    minutes = normalized % 60
+    return time(hour=hours, minute=minutes)
+
+
+def time_to_minutes(t: time) -> int:
+    """Converte um objeto time na quantidade de minutos decorridos desde a meia-noite."""
+    return t.hour * 60 + t.minute
+
+
+@dataclass(frozen=True)
+class FeasibilityContext:
+    """Parâmetros de contorno e restrições temporais para avaliação de viabilidade."""
+
+    availability_window: TimeWindow
+    travel_time_minutes: float
+    visit_durations: Mapping[str, int] | None = None
+    start_time: datetime | None = None

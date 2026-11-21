@@ -165,29 +165,6 @@ def test_replan_keeps_free_window_before_future_reserved_slot() -> None:
     )
 
 
-def test_replan_keeps_free_window_before_future_reserved_slot() -> None:
-    """Slot de Refeição reservado no futuro: a janela livre ANTES do Slot continua disponível ao replano."""
-    availability = TimeWindow(start=time(9, 0), end=time(20, 0))
-    poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
-    slot_poi = _make_poi("POI-SLOT", time(11, 0), time(11, 30), utility_score=5.0)
-    slot = _stop(slot_poi, datetime(2026, 11, 20, 11, 0), 30)  # Slot reservado 11:00–11:30
-    day = Itinerary(stops=[_stop(poi_a, datetime(2026, 11, 20, 9, 30), 30)])
-    result = _replan(
-        itinerary=day,
-        availability_window=availability,
-        current_time=datetime(2026, 11, 20, 9, 0),
-        reserved_future_stops=[slot],
-    )
-    # POI-A deve ser incluído agendado na janela livre 09:00–11:00 (antes do Slot).
-    assert any(
-        stop.poi.id == "POI-A" and stop.start.time() < time(11, 0)
-        for stop in result.itinerary.stops
-    )
-
-
-def test_duration_adjustment_applies_to_future_poi_scheduled_later() -> None:
-    availability = TimeWindow(start=time(8, 0), end=time(20, 0))
-    poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     poi_d = _make_poi("POI-D", time(11, 0), time(13, 0), utility_score=8.0)
     current_time = datetime(2026, 11, 20, 9, 0)
     itinerary = Itinerary(

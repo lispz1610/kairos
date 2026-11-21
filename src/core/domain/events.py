@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 from src.core.domain.models import Coordinates
 
@@ -36,6 +36,10 @@ class DelayEvent(BaseModel):
     coordinates: Coordinates = Field(
         description="Coordenada geográfica atual (latitude, longitude)."
     )
+
+    @field_serializer("coordinates")
+    def serialize_coordinates(self, coordinates: Coordinates) -> tuple[float, float]:
+        return (coordinates.latitude, coordinates.longitude)
 
 
 class ClosureEvent(BaseModel):
