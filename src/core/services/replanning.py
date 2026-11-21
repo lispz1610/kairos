@@ -201,7 +201,7 @@ class ReplanningService:
         prefix: list[RouteStop], effective_start: datetime, availability_window: TimeWindow
     ) -> datetime:
         """Horário de início da janela restante: o horário efetivo pós-evento
-        adiantado pelos términos das paradas preservadas — nunca antes do
+        adiantado pelos términos dos POIs preservados — nunca antes do
         início da Janela de Disponibilidade."""
         replan_start = effective_start
         for stop in prefix:
