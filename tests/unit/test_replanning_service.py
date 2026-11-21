@@ -134,9 +134,34 @@ def test_ac2_slots_de_refeicao_futuros_ja_reservados_sao_preservados():
         reserved_future_stops=[reserved_stop],
     )
 
-    assert result.itinerary.stops[0] == reserved_stop
+    assert reserved_stop in result.itinerary.stops
     assert "POI-C" in result.preserved_pois
     assert ScheduleService.validate_itinerary(result.itinerary, availability) == []
+    # Roteiro cronológico: POIs agendados pelo solver antes do Slot
+    # permanecem antes dele.
+    assert result.itinerary.stops == sorted(
+        result.itinerary.stops, key=lambda stop: stop.start
+    )
+
+
+def test_replan_keeps_free_window_before_future_reserved_slot() -> None:
+    """Slot de Refeição reservado no futuro: a janela livre ANTES do Slot continua disponível ao replano."""
+    availability = TimeWindow(start=time(9, 0), end=time(20, 0))
+    poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
+    slot_poi = _make_poi("POI-SLOT", time(11, 0), time(11, 30), utility_score=5.0)
+    slot = _stop(slot_poi, datetime(2026, 11, 20, 11, 0), 30)  # Slot reservado 11:00–11:30
+    day = Itinerary(stops=[_stop(poi_a, datetime(2026, 11, 20, 9, 30), 30)])
+    result = _replan(
+        itinerary=day,
+        availability_window=availability,
+        current_time=datetime(2026, 11, 20, 9, 0),
+        reserved_future_stops=[slot],
+    )
+    # POI-A deve ser incluído agendado na janela livre 09:00–11:00 (antes do Slot).
+    assert any(
+        stop.poi.id == "POI-A" and stop.start.time() < time(11, 0)
+        for stop in result.itinerary.stops
+    )
 
 
 def test_duration_adjustment_applies_to_future_poi_scheduled_later() -> None:

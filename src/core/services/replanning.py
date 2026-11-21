@@ -93,7 +93,9 @@ class ReplanningService:
         do horário efetivo, excluindo os POIs fechados/pulados
         (``excluded_pois``) e aplicando o teto seguro da Conexão Interurbana
         quando o Dia de Viagem replanejado é o último dia da Etapa de Viagem
-        com partida interurbana.
+        com partida interurbana. O Roteiro replanejado permanece cronológico,
+        mesmo quando o solver agenda POIs antes de Slots de Refeição futuros
+        reservados.
 
         Args:
             itinerary: Roteiro do Dia de Viagem antes do evento de contingência.
@@ -161,7 +163,10 @@ class ReplanningService:
                 visit_durations=duration_adjustments,
             )
 
-        final_stops = prefix + solver_route.stops
+        # Roteiro replanado em ordem cronológica: o solver pode agendar POIs
+        # antes de Slots de Refeição futuros reservados, e o Roteiro permanece
+        # ordenado por horário de início.
+        final_stops = sorted(prefix + solver_route.stops, key=lambda stop: stop.start)
         final_ids = {stop.poi.id for stop in final_stops}
         removed_pois = [
             stop.poi.id for stop in itinerary.stops if stop.poi.id not in final_ids
@@ -201,13 +206,15 @@ class ReplanningService:
         prefix: list[RouteStop], effective_start: datetime, availability_window: TimeWindow
     ) -> datetime:
         """Horário de início da janela restante: o horário efetivo pós-evento
-        adiantado pelos términos dos POIs preservados — nunca antes do
-        início da Janela de Disponibilidade."""
+        adiantado pelos términos dos POIs preservados que já iniciaram antes
+        do horário atual — POIs futuros já reservados não afastam o início
+        da janela — nunca antes do início da Janela de Disponibilidade."""
         replan_start = effective_start
         for stop in prefix:
-            stop_end = stop.end
-            if stop_end > replan_start:
-                replan_start = stop_end
+            if stop.start <= replan_start:
+                stop_end = stop.end
+                if stop_end > replan_start:
+                    replan_start = stop_end
         if replan_start.time() < availability_window.start:
             replan_start = datetime.combine(
                 replan_start.date(), availability_window.start
