@@ -61,6 +61,39 @@ def _payload(
     return payload
 
 
+def test_two_delay_events_are_applied_from_the_accumulated_current_time() -> None:
+    """Dois Eventos de Contingência em sequência — o evento posterior é
+    aplicado a partir do ``current_time`` acumulado (9:00 + 15 + 10 = 9:25),
+    não do ``request.current_time``: o POI-B (início 9:20) é preservado como
+    histórico porque o horário acumulado já o ultrapassou."""
+    availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
+    poi_a = _poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
+    poi_b = _poi("POI-B", time(9, 0), time(12, 0), utility_score=8.0)
+    day = Itinerary(
+        stops=[
+            _stop(poi_a, datetime(2026, 11, 20, 9, 0), 30),
+            _stop(poi_b, datetime(2026, 11, 20, 9, 20), 30),
+        ]
+    )
+    events = [
+        {"type": "delay", "delay_minutes": 15},
+        {"type": "delay", "delay_minutes": 10},
+    ]
+
+    response = client.post(
+        "/api/trip/replan",
+        json=_payload(day, datetime(2026, 11, 20, 9, 0), availability_window, events),
+    )
+
+    data = response.json()
+    assert data["preserved_pois"] == ["POI-A", "POI-B"]
+    assert [stop["poi"]["id"] for stop in data["itinerary"]] == ["POI-A", "POI-B"]
+    assert data["itinerary"][0]["start"] == "2026-11-20T09:00:00"
+    assert data["itinerary"][1]["start"] == "2026-11-20T09:20:00"
+    assert data["removed_pois"] == []
+    assert data["intercity_risk_alert"] is None
+
+
 def test_delay_event_replan_keeps_route_starting_after_the_delayed_time() -> None:
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
