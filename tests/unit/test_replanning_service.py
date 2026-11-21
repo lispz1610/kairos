@@ -335,6 +335,26 @@ def test_ac6_pois_fechados_ou_pulados_excluidos_do_roteiro_replano():
     assert "POI-C" in result.removed_pois
 
 
+def test_replan_passes_current_coordinate_to_reoptimization():
+    """#56: ``ReplanningService.replan`` aplica a coordenada atual do visitante
+    à reotimização via ``OPTWSolver`` — o Roteiro replanejado registra a
+    coordenada como ``start_location``."""
+    availability = TimeWindow(start=time(8, 0), end=time(20, 0))
+    poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=5.0)
+    itinerary = Itinerary(
+        stops=[_stop(poi_a, datetime(2026, 11, 20, 9, 30), duration_minutes=30)]
+    )
+
+    result = _replan(
+        itinerary=itinerary,
+        availability_window=availability,
+        current_time=datetime(2026, 11, 20, 9, 0),
+        coordinates=(-23.55, -46.63),
+    )
+
+    assert result.itinerary.start_location == (-23.55, -46.63)
+
+
 def _stops_at_or_before(itinerary, current_time):
     """Paradas até o ``current_time``: a definição de histórico do Roteiro."""
     return [stop for stop in itinerary.stops if stop.start <= current_time]

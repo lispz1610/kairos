@@ -161,6 +161,7 @@ class ReplanningService:
                 travel_time_minutes,
                 start_time=replan_start,
                 visit_durations=duration_adjustments,
+                start_location=coordinates,
             )
 
         # Roteiro replanado em ordem cronológica: o solver pode agendar POIs
@@ -172,7 +173,7 @@ class ReplanningService:
             stop.poi.id for stop in itinerary.stops if stop.poi.id not in final_ids
         ]
         return ReplanResult(
-            itinerary=Itinerary(stops=final_stops),
+            itinerary=Itinerary(stops=final_stops, start_location=coordinates),
             preserved_pois=[stop.poi.id for stop in prefix],
             removed_pois=removed_pois,
             intercity_risk_alert=alert,

@@ -13,7 +13,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 
-from src.core.domain.models import POI, Itinerary, RouteStop, TimeWindow
+from src.core.domain.models import (
+    Coordinates,
+    POI,
+    Itinerary,
+    RouteStop,
+    TimeWindow,
+)
 from src.core.services.schedule import ScheduleService
 
 __all__ = ["OPTWSolver"]
@@ -36,6 +42,7 @@ class OPTWSolver:
         travel_time_minutes: float,
         start_time: datetime | None = None,
         visit_durations: Mapping[str, int] | None = None,
+        start_location: Coordinates | None = None,
     ) -> Itinerary:
         """Gera o Roteiro para a Janela de Disponibilidade.
 
@@ -55,6 +62,8 @@ class OPTWSolver:
             visit_durations: Tempo de Permanência ajustado por identificação
                 do POI — usado em vez do Tempo de Permanência padrão em todas
                 as simulações do Roteiro.
+            start_location: Coordenada do início do Roteiro replanejado —
+                registrada no ``Itinerary.start_location`` devolvido.
 
         Returns:
             O Roteiro construído: subconjunto e sequência de visitas aos
@@ -83,7 +92,9 @@ class OPTWSolver:
             )
             if inserted == 0 and moved == 0:
                 break
-        return _simulate(route, start_time, travel_time_minutes, visit_durations)
+        return _simulate(
+            route, start_time, travel_time_minutes, visit_durations, start_location
+        )
 
 
 def _unique_pois(candidate_pois: list[POI]) -> list[POI]:
@@ -102,11 +113,13 @@ def _simulate(
     start_time: datetime,
     travel_time_minutes: float,
     visit_durations: Mapping[str, int] | None = None,
+    start_location: Coordinates | None = None,
 ) -> Itinerary:
     """Constrói o ``Itinerary``: ``RouteStop`` por POI com ``start``
     cronológico, descendo ``cursor`` do ``start_time`` pelo Custo de
     Deslocamento entre POIs — o Tempo de Permanência do POI é
-    ``visit_durations.get(poi.id, _VISIT_DURATION_MINUTES)``."""
+    ``visit_durations.get(poi.id, _VISIT_DURATION_MINUTES)`` — e registra
+    ``start_location`` como o início do Roteiro replanejado."""
     durations: Mapping[str, int] = visit_durations or {}
     stops: list[RouteStop] = []
     cursor = start_time
@@ -116,7 +129,7 @@ def _simulate(
             RouteStop(poi=poi, start=cursor, duration_minutes=duration_minutes)
         )
         cursor = cursor + timedelta(minutes=duration_minutes + travel_time_minutes)
-    return Itinerary(stops=stops)
+    return Itinerary(stops=stops, start_location=start_location)
 
 
 def _is_feasible(
