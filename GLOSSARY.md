@@ -22,6 +22,10 @@ _Avoid_: Diária, dia de passeio, bloco diário
 Estabelecimento hoteleiro ou residencial que atua como Ponto de Partida/Retorno obrigatório para os Roteiros de um ou mais Dias de Viagem.
 _Avoid_: Hotel, base, pousada, dormitório
 
+**Dia de Troca de Hospedagem**:
+Dia de Viagem no qual ocorre transição entre estabelecimentos hoteleiros distintos dentro da mesma Etapa de Viagem. O Roteiro matinal parte da Hospedagem anterior e o encerramento noturno dá-se na nova Hospedagem, com suporte opcional a parada intermediária para check-in e depósito de bagagens à tarde.
+_Avoid_: Troca de hotel, dia de checkout, transição hoteleira
+
 **Conexão Interurbana**:
 Transição de longa distância conectando o término de uma Etapa de Viagem ao início da etapa subsequente, operando sob modais intermunicipais (como aéreo `flying` ou rodoviário), com horário de partida e limite operacional (Margem de Embarque e teto de replanejamento).
 _Avoid_: Voo, viagem entre cidades, transição

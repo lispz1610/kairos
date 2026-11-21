@@ -1,378 +1,1839 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Kairos — Dia de Viagem</title>
-<style>
-  :root {
-    --line: #d9e2ec;
-    --text: #1f2933;
-    --muted: #52606d;
-    --primary: #0b4f4a;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: #f4f6f9;
-    color: var(--text);
-  }
-  header.banner {
-    padding: 10px 14px;
-    font-size: 14px;
-    min-height: 18px;
-  }
-  header.banner.hidden { display: none; }
-  main {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-    gap: 16px;
-    padding: 16px;
-  }
-  .panel {
-    background: #fff;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 16px;
-  }
-  h1 { font-size: 18px; margin: 0 0 4px; }
-  h2 { font-size: 14px; margin: 0 0 10px; }
-  #stops { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
-  #stops li {
-    padding: 8px 10px;
-    margin-bottom: 6px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    font-size: 13px;
-  }
-  #stops li:hover { cursor: pointer; background: #f2f7f7; }
-  #stops li.selected {
-    border-color: var(--primary);
-    background: #eef2f1;
-    font-weight: 600;
-  }
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: flex-end;
-    margin-top: 14px;
-    border-top: 1px solid var(--line);
-    padding-top: 12px;
-  }
-  .control {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-  .control input {
-    width: 110px;
-    padding: 6px 8px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    font-size: 13px;
-  }
-  .control button {
-    padding: 6px 10px;
-    border: 1px solid var(--primary);
-    background: var(--primary);
-    color: #fff;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .control button:hover { background: #093f3d; }
-  #map { height: 380px; border: 1px solid var(--line); border-radius: 8px; }
-  footer {
-    text-align: center;
-    font-size: 12px;
-    color: var(--muted);
-    padding: 4px 16px 20px;
-  }
-  footer b { color: var(--text); }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --warning: #f59e0b;
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+    button, .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+    button:hover, .btn:hover { background: var(--primary-dark); }
+    button.btn-secondary { background: var(--surface-border); color: var(--text); }
+    button.btn-secondary:hover { background: #475569; }
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 490px;
+      background: var(--surface);
+      border-right: 1px solid var(--surface-border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .map-container {
+      flex: 1;
+      height: 100%;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      background: #090d16;
+    }
+    .panel {
+      padding: 1rem;
+      border-bottom: 1px solid var(--surface-border);
+    }
+    .panel-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .days-nav {
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+    }
+    .day-pill {
+      background: var(--surface-border);
+      padding: 0.4rem 0.8rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .day-pill.active {
+      background: var(--primary);
+      color: white;
+      font-weight: 600;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-transition {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .card-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+    }
+    .card-label { color: var(--text-muted); }
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .timeline-item {
+      display: flex;
+      gap: 0.75rem;
+      position: relative;
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 18px;
+      bottom: -12px;
+      width: 2px;
+      background: var(--surface-border);
+    }
+    .timeline-item:last-child::before { display: none; }
+    .timeline-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 3px solid var(--surface);
+      flex-shrink: 0;
+      z-index: 1;
+    }
+    .timeline-content {
+      flex: 1;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.375rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.85rem;
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.4rem;
+      font-size: 0.85rem;
+    }
+    .slider-row input[type=range] {
+      width: 140px;
+    }
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.75rem;
+      width: 90%;
+      max-width: 650px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .modal-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--surface-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+    }
+    .modal-body {
+      padding: 1.25rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .modal-footer {
+      padding: 0.75rem 1.25rem;
+      border-top: 1px solid var(--surface-border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+    pre.markdown-view {
+      background: #090d16;
+      border: 1px solid var(--surface-border);
+      padding: 1rem;
+      border-radius: 0.375rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+    .ac-item {
+      padding: 0.5rem 0.75rem;
+      cursor: pointer;
+      border-bottom: 1px solid var(--surface-border);
+      font-size: 0.82rem;
+    }
+    .ac-item:hover {
+      background: rgba(56, 189, 248, 0.15);
+    }
+    .ac-item:last-child {
+      border-bottom: none;
+    }
+  </style>
 </head>
 <body>
-<header id="impact-banner" class="banner hidden" role="status"></header>
-<main>
-  <section class="panel">
-    <h1>Kairos</h1>
-    <h2>Roteiro — Dia de Viagem ativo</h2>
-    <ul id="stops"></ul>
-    <div class="controls">
-      <div class="control">
-        <span>+ Atraso (min)</span>
-        <input id="delay-minutes" type="number" min="0" step="1" value="15"
-               aria-label="Minutos de atraso a aplicar" />
-        <button type="button" id="apply-delay">+ Atraso (min)</button>
+  <header>
+    <div class="logo">
+      <span>🧭</span>
+      <span>Kairos</span>
+      <span style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted); margin-left: 0.5rem;">Traçador Dinâmico</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn-secondary" id="btnHeaderCuration">⭐ Curadoria & Listas</button>
+      <button class="btn-secondary" id="btnImportLinkModal">🔗 Importar Link / Texto</button>
+      <button class="btn-secondary" id="btnExportJson">💾 Backup JSON</button>
+      <button class="btn-secondary" id="btnImportJson">📂 Restaurar</button>
+      <button id="btnExportMarkdown">📝 Exportar Markdown</button>
+    </div>
+  </header>
+
+  <main>
+    <aside class="sidebar">
+      <!-- Visão da Cidade e Etapas -->
+      <div class="panel">
+        <div class="panel-title">
+          <span id="currentCityName">São Paulo</span>
+          <div>
+            <button class="btn-secondary" style="padding: 0.2rem 0.5rem;" id="btnPrevCity">◀</button>
+            <button class="btn-secondary" style="padding: 0.2rem 0.5rem;" id="btnNextCity">▶</button>
+          </div>
+        </div>
+        <div class="card-row">
+          <span class="card-label">Período da Cidade:</span>
+          <span id="cityDates">01/11/2026 – 10/11/2026</span>
+        </div>
+        <div class="card-row" style="margin-top: 0.5rem;">
+          <span class="card-label">Ajustar Dias de Estadia:</span>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <button class="btn-secondary" style="padding: 0.2rem 0.6rem;" id="btnDecDays">-</button>
+            <span id="totalStageDays" style="font-weight: 600;">9 dias</span>
+            <button class="btn-secondary" style="padding: 0.2rem 0.6rem;" id="btnIncDays">+</button>
+          </div>
+        </div>
       </div>
-      <div class="control">
-        <span>Fechou</span>
-        <button type="button" id="apply-closure">Fechou</button>
+
+      <!-- Hospedagem & Dias de Viagem -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Dias de Estadia & Hospedagem</span>
+        </div>
+        <div class="days-nav" id="daysNav">
+          <!-- Pílulas de dias preenchidas via JS -->
+        </div>
+
+        <div class="card" id="hotelCard">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong id="activeHotelName">Hospedagem Base</strong>
+            <span id="hotelTransitionBadge" class="badge badge-transition" style="display: none;">Dia de Troca de Hospedagem</span>
+          </div>
+          <div class="card-row">
+            <span class="card-label">Início da Rota (Partida):</span>
+            <span id="depotStart">Hospedagem Base</span>
+          </div>
+          <div class="card-row">
+            <span class="card-label">Término da Rota (Retorno):</span>
+            <span id="depotReturn">Hospedagem Base</span>
+          </div>
+          <div class="card-row">
+            <span class="card-label">Valor Estimado Diária:</span>
+            <span id="hotelDailyRate">R$ 350,00</span>
+          </div>
+          <div class="card-row" id="luggageOptionRow" style="display: none; margin-top: 0.5rem;">
+            <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+              <input type="checkbox" id="chkLuggageStop" /> Parada para malas na nova hospedagem à tarde
+            </label>
+          </div>
+          <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
+            <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnChangeHotel">Alterar Hospedagem Deste Dia</button>
+            <button class="btn-secondary" style="font-size: 0.75rem; flex: 1;" id="btnResetBaseHotel">Usar Hospedagem Padrão</button>
+          </div>
+        </div>
       </div>
-      <div class="control">
-        <span>Pular parada</span>
-        <button type="button" id="apply-skip">Pular parada</button>
+
+      <!-- Perfil de Preferências (0 a 10) -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Perfil de Preferência (0 a 10)</span>
+        </div>
+        <div class="slider-row">
+          <span>☕ Coffee Lover:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngCoffee" value="8" />
+            <span id="valCoffee" style="font-weight: 600; width: 20px; display: inline-block;">8</span>
+          </div>
+        </div>
+        <div class="slider-row">
+          <span>🍷 Wine Lover:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngWine" value="4" />
+            <span id="valWine" style="font-weight: 600; width: 20px; display: inline-block;">4</span>
+          </div>
+        </div>
+        <div class="slider-row">
+          <span>🏛️ Museum Lover:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngMuseum" value="9" />
+            <span id="valMuseum" style="font-weight: 600; width: 20px; display: inline-block;">9</span>
+          </div>
+        </div>
+        <div class="slider-row">
+          <span>🌳 Nature Lover:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngNature" value="5" />
+            <span id="valNature" style="font-weight: 600; width: 20px; display: inline-block;">5</span>
+          </div>
+        </div>
+        <div class="slider-row">
+          <span>🍽️ Gastronomy &amp; Fine Dining:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngGastronomy" value="7" />
+            <span id="valGastronomy" style="font-weight: 600; width: 20px; display: inline-block;">7</span>
+          </div>
+        </div>
+        <div class="slider-row">
+          <span>🌮 Street Food:</span>
+          <div>
+            <input type="range" min="0" max="10" step="1" id="rngStreetFood" value="6" />
+            <span id="valStreetFood" style="font-weight: 600; width: 20px; display: inline-block;">6</span>
+          </div>
+        </div>
       </div>
-      <div class="control">
-        <span>Ajustar permanência</span>
-        <input id="adjusted-minutes" type="number" min="0" step="1" value="30"
-               aria-label="Tempo de permanência ajustado, em minutos" />
-        <button type="button" id="apply-adjust">Ajustar permanência</button>
+
+      <!-- Listas de Curadoria (Sugeridas e Personalizadas) -->
+      <div class="panel" id="curationPanel">
+        <div class="panel-title">
+          <span>⭐ Listas de Curadoria</span>
+          <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" id="btnOpenCurationManager">Gerenciar</button>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+          Ative listas para bonificar a pontuação de utilidade no roteiro e refeições.
+        </div>
+
+        <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--accent); margin-bottom: 0.35rem; display: flex; justify-content: space-between; align-items: center;">
+          <span>Listas Sugeridas (<span id="curationCityName">São Paulo</span>)</span>
+        </div>
+        <div id="suggestedListsContainer" style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <!-- Carregado via GET /api/curation/suggested -->
+        </div>
+
+        <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--accent); margin-top: 0.75rem; margin-bottom: 0.35rem; display: flex; justify-content: space-between; align-items: center;">
+          <span>Minhas Listas Customizadas</span>
+          <button class="btn-secondary" style="font-size: 0.7rem; padding: 0.15rem 0.4rem;" id="btnNewCustomListInline">+ Nova</button>
+        </div>
+        <div id="customListsContainer" style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <!-- Inserido dinamicamente via JS -->
+        </div>
+      </div>
+
+      <!-- Resumo Orçamentário -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Estimativa Orçamentária</span>
+        </div>
+        <div style="margin-bottom: 0.6rem;">
+          <label class="card-label" for="selFoodProfile" style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem;">Perfil Alimentar:</label>
+          <select id="selFoodProfile" style="width: 100%; padding: 0.35rem 0.5rem; background: var(--bg); color: var(--text); border: 1px solid var(--surface-border); border-radius: 0.25rem; font-size: 0.82rem;">
+            <option value="budget">Econômico: R$ 80</option>
+            <option value="moderate" selected>Moderado: R$ 180</option>
+            <option value="fine_dining">Alta Gastronomia: R$ 400</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 0.75rem;">
+          <label class="card-label" for="numTravelers" style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem;">Número de Viajantes:</label>
+          <input type="number" id="numTravelers" min="1" max="20" value="1" style="width: 100%; padding: 0.35rem 0.5rem; background: var(--bg); color: var(--text); border: 1px solid var(--surface-border); border-radius: 0.25rem; font-size: 0.82rem;" />
+        </div>
+        <div class="card-row">
+          <span class="card-label">Hospedagem (Etapa):</span>
+          <span id="stageHotelCost">R$ 3.150,00</span>
+        </div>
+        <div class="card-row">
+          <span class="card-label">Alimentação Estimada:</span>
+          <span id="stageFoodCost">R$ 1.620,00</span>
+        </div>
+        <div class="card-row" style="border-top: 1px solid var(--surface-border); padding-top: 0.5rem; margin-top: 0.5rem; font-weight: 600;">
+          <span>Total Estimado da Viagem:</span>
+          <span id="totalTripCost" style="color: var(--accent);">R$ 4.770,00</span>
+        </div>
+      </div>
+
+      <!-- Timeline do Roteiro Diário -->
+      <div class="panel" style="flex: 1;">
+        <div class="panel-title">
+          <span>Roteiro do Dia</span>
+          <button id="btnOptimizeDay" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">⚡ Otimizar Rota</button>
+        </div>
+        <div class="timeline" id="dailyTimeline">
+          <!-- Itens da linha do tempo preenchidos via JS -->
+        </div>
+      </div>
+    </aside>
+
+    <section class="map-container">
+      <div id="map"></div>
+    </section>
+  </main>
+
+  <!-- Modal Genérico / Markdown / Ripple Shift / Parser -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="modalTitle">Título</span>
+        <button class="btn-secondary" id="modalCloseBtn" style="padding: 0.2rem 0.5rem;">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <!-- Conteúdo dinâmico -->
+      </div>
+      <div class="modal-footer" id="modalFooter">
+        <button class="btn-secondary" id="modalCancelBtn">Fechar</button>
+        <button id="modalConfirmBtn">Confirmar</button>
       </div>
     </div>
-  </section>
-  <section class="panel">
-    <h2>Rota no mapa</h2>
-    <div id="map"></div>
-  </section>
-</main>
-<footer>Persistido em <b>localStorage</b>; replanejado via <b>POST /api/trip/replan</b>.</footer>
-<script>
-"use strict";
+  </div>
 
-const STORAGE_KEY = "kairos-dia-viagem";
-const API_URL = "/api/trip/replan";
+  <input type="file" id="jsonFileInput" accept=".json" style="display: none;" />
 
-function defaultStop(id, name, start, durationMinutes) {
-  return {
-    poi: {
-      id,
-      name,
-      coordinates: [-23.5505, -46.6333],
-      operating_window: { start: "08:00", end: "23:00" },
-      utility_score: 5.0,
-    },
-    start,
-    duration_minutes: durationMinutes,
-  };
-}
+  <script>
+    const STORAGE_KEY = 'kairos_trip_state_v1';
 
-function defaultState() {
-  return {
-    day_id: "dia-2026-11-20",
-    itinerary: [
-      defaultStop("POI-001", "Mirante da História", "2026-11-20T09:00:00", 45),
-      defaultStop("POI-002", "Café Central", "2026-11-20T09:50:00", 30),
-      defaultStop("POI-003", "Praça da Matriz", "2026-11-20T10:40:00", 30),
-    ],
-    availability_window: { start: "08:00", end: "18:00" },
-    current_time: "2026-11-20T09:00:00",
-    closed_pois: [],
-    skipped_pois: [],
-    intercity_connection: null,
-    travel_time_minutes: 15,
-    selectedIndex: 0,
-  };
-}
+    const PREFERENCE_CATEGORIES = [
+      { id: 'Coffee', key: 'Coffee Lover', defaultVal: 8 },
+      { id: 'Wine', key: 'Wine Lover', defaultVal: 4 },
+      { id: 'Museum', key: 'Museum Lover', defaultVal: 9 },
+      { id: 'Nature', key: 'Nature Lover', defaultVal: 5 },
+      { id: 'Gastronomy', key: 'Gastronomy & Fine Dining', defaultVal: 7 },
+      { id: 'StreetFood', key: 'Street Food', defaultVal: 6 }
+    ];
 
-function loadState() {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
-    if (parsed) {
-      parsed.selectedIndex = parsed.selectedIndex || 0;
-      return parsed;
+    const defaultState = {
+      id: "trip-sp-lima",
+      title: "Viagem Cultural São Paulo e Lima",
+      travelers: 1,
+      food_profile: "moderate",
+      curation_lists: [],
+      preferences: {
+        intensities: {
+          "Coffee Lover": 8.0,
+          "Wine Lover": 4.0,
+          "Museum Lover": 9.0,
+          "Nature Lover": 5.0,
+          "Gastronomy & Fine Dining": 7.0,
+          "Street Food": 6.0
+        }
+      },
+      currentStageIndex: 0,
+      currentDayIndex: 0,
+      stages: [
+        {
+          id: "stage-sp",
+          city_name: "São Paulo",
+          start_date: "2026-11-01",
+          end_date: "2026-11-10",
+          base_accommodation: {
+            id: "hotel-sp-base",
+            name: "Hotel Ibis Paulista",
+            location: { latitude: -23.557, longitude: -46.661 },
+            price_tier: "$$",
+            real_daily_rate: 350.0
+          },
+          days: []
+        },
+        {
+          id: "stage-lima",
+          city_name: "Lima",
+          start_date: "2026-11-10",
+          end_date: "2026-11-15",
+          base_accommodation: {
+            id: "hotel-lima-base",
+            name: "Miraflores Park Hotel",
+            location: { latitude: -12.131, longitude: -77.030 },
+            price_tier: "$$$$",
+            real_daily_rate: 900.0
+          },
+          days: []
+        }
+      ],
+      connections: [
+        {
+          id: "conn-1",
+          from_stage_id: "stage-sp",
+          to_stage_id: "stage-lima",
+          mode: "flying",
+          departure_time: "2026-11-10"
+        }
+      ]
+    };
+
+    let tripState = loadState();
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (!parsed.travelers) parsed.travelers = 1;
+          if (!parsed.food_profile) parsed.food_profile = 'moderate';
+          if (!parsed.curation_lists) parsed.curation_lists = [];
+          if (!parsed.preferences) parsed.preferences = { intensities: {} };
+          if (!parsed.preferences.intensities) parsed.preferences.intensities = {};
+          return parsed;
+        }
+      } catch (e) {
+        console.warn("Falha ao ler localStorage", e);
+      }
+      return initDefaultDays(defaultState);
     }
-  } catch (error) {
-    /* Estado ausente ou corrompido: recuar para a semente padrão. */
-  }
-  return defaultState();
-}
 
-function saveState(state) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tripState));
+      } catch (e) {
+        console.error("Falha ao salvar no localStorage", e);
+      }
+    }
 
-function fmt(iso) {
-  return new Date(iso).toLocaleString("pt-BR");
-}
+    function initDefaultDays(state) {
+      if (!state.curation_lists) state.curation_lists = [];
+      state.stages.forEach(stage => {
+        if (!stage.days || stage.days.length === 0) {
+          const start = new Date(stage.start_date);
+          const end = new Date(stage.end_date);
+          const diffDays = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+          stage.days = [];
+          for (let i = 0; i < diffDays; i++) {
+            const d = new Date(start);
+            d.setDate(d.getDate() + i);
+            const dateStr = d.toISOString().split('T')[0];
+            stage.days.push({
+              date: dateStr,
+              base_accommodation: stage.base_accommodation,
+              custom_accommodation: null,
+              include_luggage_dropoff: false
+            });
+          }
+        }
+      });
+      return state;
+    }
 
-function addMinutes(iso, minutes) {
-  const date = new Date(iso);
-  date.setMinutes(date.getMinutes() + minutes);
-  return date.toISOString();
-}
+    // Mapa Leaflet
+    const map = L.map('map').setView([-23.557, -46.661], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
 
-let map = null;
-let routeLine = null;
+    let routeLayer = L.layerGroup().addTo(map);
 
-function initMap(state) {
-  if (typeof L === "undefined") {
-    return;
-  }
-  map = L.map("map");
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap contributors",
-  }).addTo(map);
-  const first = state.itinerary[0]
-    ? state.itinerary[0].poi.coordinates
-    : [-23.5505, -46.6333];
-  map.setView(first, 10);
-  routeLine = L.polyline([], { color: "#0b4f4a", weight: 4 }).addTo(map);
-  updateMapRoute(state);
-}
+    function renderUI() {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      if (!stage) return;
 
-function updateMapRoute(state) {
-  if (!map || !routeLine) {
-    return;
-  }
-  const coords = state.itinerary.map((item) => item.poi.coordinates);
-  routeLine.setLatLngs(coords);
-  if (coords.length > 1) {
-    map.fitBounds(L.latLngBounds(coords), { padding: [10, 10] });
-  }
-}
+      document.getElementById('currentCityName').innerText = stage.city_name;
+      document.getElementById('cityDates').innerText = `${stage.start_date} – ${stage.end_date}`;
+      document.getElementById('totalStageDays').innerText = `${stage.days.length} dias`;
 
-function renderTimeline(state) {
-  const list = document.getElementById("stops");
-  list.replaceChildren();
-  state.itinerary.forEach((item, index) => {
-    const li = document.createElement("li");
-    li.className = index === state.selectedIndex ? "selected" : "";
-    li.dataset.index = String(index);
-    li.textContent =
-      fmt(item.start) + " — " + item.poi.name + " (" + item.poi.id + ")" +
-      " — Tempo de Permanência " + item.duration_minutes + " min";
-    li.addEventListener("click", () => {
-      state.selectedIndex = index;
-      saveState(state);
-      renderTimeline(state);
+      // Sliders
+      const p = tripState.preferences?.intensities || {};
+      PREFERENCE_CATEGORIES.forEach(cat => {
+        const val = p[cat.key] ?? cat.defaultVal;
+        const slider = document.getElementById(`rng${cat.id}`);
+        const label = document.getElementById(`val${cat.id}`);
+        if (slider && document.activeElement !== slider) slider.value = val;
+        if (label) label.innerText = val;
+      });
+
+      // Controles Orçamentários
+      const selFood = document.getElementById('selFoodProfile');
+      if (selFood && document.activeElement !== selFood) {
+        selFood.value = tripState.food_profile || 'moderate';
+      }
+      const inputTravelers = document.getElementById('numTravelers');
+      if (inputTravelers && document.activeElement !== inputTravelers) {
+        inputTravelers.value = tripState.travelers || 1;
+      }
+
+      // Pílulas de dias
+      const daysNav = document.getElementById('daysNav');
+      daysNav.innerHTML = '';
+      stage.days.forEach((day, idx) => {
+        const pill = document.createElement('div');
+        pill.className = `day-pill ${idx === tripState.currentDayIndex ? 'active' : ''}`;
+        pill.innerText = `Dia ${idx + 1} (${day.date.split('-')[2]}/${day.date.split('-')[1]})`;
+        pill.onclick = () => {
+          tripState.currentDayIndex = idx;
+          renderUI();
+        };
+        daysNav.appendChild(pill);
+      });
+
+      // Hospedagem do dia ativo
+      const currentDay = stage.days[tripState.currentDayIndex] || stage.days[0];
+      const prevDay = tripState.currentDayIndex > 0 ? stage.days[tripState.currentDayIndex - 1] : null;
+
+      const effectiveHotel = currentDay.custom_accommodation || stage.base_accommodation;
+      const departureHotel = prevDay ? (prevDay.custom_accommodation || stage.base_accommodation) : effectiveHotel;
+      const returnHotel = effectiveHotel;
+      const isTransition = departureHotel.id !== returnHotel.id;
+      currentDay.is_transition_day = isTransition;
+
+      document.getElementById('activeHotelName').innerText = effectiveHotel.name;
+      document.getElementById('depotStart').innerText = departureHotel.name;
+      document.getElementById('depotReturn').innerText = returnHotel.name;
+      document.getElementById('hotelDailyRate').innerText = `R$ ${Number(effectiveHotel.real_daily_rate || 350).toFixed(2)}`;
+
+      const badge = document.getElementById('hotelTransitionBadge');
+      badge.style.display = isTransition ? 'inline-flex' : 'none';
+
+      const luggageRow = document.getElementById('luggageOptionRow');
+      luggageRow.style.display = isTransition ? 'flex' : 'none';
+      const chkLuggage = document.getElementById('chkLuggageStop');
+      chkLuggage.checked = !!currentDay.include_luggage_dropoff;
+      chkLuggage.onchange = (e) => {
+        currentDay.include_luggage_dropoff = e.target.checked;
+        saveState();
+        renderTimeline(currentDay, departureHotel, returnHotel);
+      };
+
+      updateBudget();
+      renderTimeline(currentDay, departureHotel, returnHotel);
+      updateMapMarkers(departureHotel, returnHotel, currentDay);
+      renderCurationPanel(stage.city_name);
+
+      saveState();
+    }
+
+    async function updateBudget() {
+      try {
+        const selProfile = document.getElementById('selFoodProfile');
+        const foodProfile = selProfile ? selProfile.value : (tripState.food_profile || 'moderate');
+        const numTravelers = tripState.travelers ? Math.max(1, parseInt(tripState.travelers, 10)) : 1;
+        tripState.food_profile = foodProfile;
+        tripState.travelers = numTravelers;
+
+        const resp = await fetch('/api/trip/budget', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            trip: tripState,
+            food_profile: foodProfile
+          })
+        });
+        if (resp.ok) {
+          const b = await resp.json();
+          const currStageBreakdown = (b.stage_breakdowns && b.stage_breakdowns[tripState.currentStageIndex]) || null;
+          if (currStageBreakdown) {
+            document.getElementById('stageHotelCost').innerText = `R$ ${currStageBreakdown.accommodation_cost.toFixed(2)}`;
+            document.getElementById('stageFoodCost').innerText = `R$ ${currStageBreakdown.dining_cost.toFixed(2)}`;
+          } else {
+            document.getElementById('stageHotelCost').innerText = `R$ ${b.total_accommodation_cost.toFixed(2)}`;
+            document.getElementById('stageFoodCost').innerText = `R$ ${b.total_dining_cost.toFixed(2)}`;
+          }
+          document.getElementById('totalTripCost').innerText = `R$ ${b.total_trip_cost.toFixed(2)}`;
+        }
+      } catch (e) {
+        console.warn("Falha ao calcular orçamento no backend", e);
+      }
+    }
+
+    function renderMealSlotCard(slot) {
+      const isSelected = (cand) => slot.selected_place && slot.selected_place.id === cand.id;
+      const timeStr = `${slot.window.start_time.slice(0, 5)} – ${slot.window.end_time.slice(0, 5)}`;
+
+      let recsHtml = '';
+      if (slot.recommended_places && slot.recommended_places.length > 0) {
+        recsHtml = `
+          <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">TOP 3 SUGESTÕES PRÓXIMAS:</span>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem;">
+              ${slot.recommended_places.map(p => {
+                const selected = isSelected(p);
+                const badges = (p.awards || []).map(a => `<span style="font-size: 0.65rem; background: rgba(56,189,248,0.2); color: var(--accent); padding: 1px 4px; border-radius: 3px;">${a}</span>`).join(' ');
+                return `
+                  <div style="background: ${selected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${selected ? 'var(--success)' : 'var(--surface-border)'}; border-radius: 0.375rem; padding: 0.5rem; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                      <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <strong style="font-size: 0.82rem; color: ${selected ? '#34d399' : 'white'};">${p.name}</strong>
+                        <span style="font-size: 0.75rem; color: #fbbf24; font-weight: bold;">⭐ ${p.rating || 4.5}</span>
+                      </div>
+                      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                        Preço: <strong style="color: var(--accent);">${p.price_tier || '$$'}</strong>
+                        ${badges ? `<div style="margin-top: 0.25rem;">${badges}</div>` : ''}
+                      </div>
+                    </div>
+                    <button onclick="selectMealPlace('${slot.id}', '${p.id}')" style="margin-top: 0.4rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 0.25rem; background: ${selected ? 'var(--success)' : 'var(--primary)'}; border: none; cursor: pointer; color: white;">
+                      ${selected ? '✓ Fixado' : 'Fixar Escolha'}
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        recsHtml = `<div class="card-label">Clique em "Otimizar Rota" para carregar recomendações contextuais</div>`;
+      }
+
+      const dotColor = slot.id.includes('lunch') ? '#f59e0b' : (slot.id.includes('coffee') ? '#38bdf8' : (slot.id.includes('wine') ? '#a855f7' : '#8b5cf6'));
+
+      return `
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background: ${dotColor};"></div>
+          <div class="timeline-content" style="width: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <strong>${timeStr} — ${slot.name}</strong>
+              ${slot.selected_place ? `<span style="font-size: 0.75rem; background: rgba(16,185,129,0.2); color: #34d399; padding: 2px 6px; border-radius: 4px;">Fixado: ${slot.selected_place.name} (${slot.selected_place.price_tier || '$$'})</span>` : ''}
+            </div>
+            ${recsHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    function timeToMinutes(tStr) {
+      if (!tStr) return 0;
+      const parts = tStr.split(':');
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    }
+
+    function renderTimeline(day, depHotel, retHotel) {
+      const timeline = document.getElementById('dailyTimeline');
+      const p = tripState.preferences?.intensities || {};
+      const coffeeLover = (p['Coffee Lover'] ?? 0) >= 5;
+      const wineLover = (p['Wine Lover'] ?? 0) >= 5;
+
+      const timelineEntries = [];
+
+      // 09:00 — Partida
+      timelineEntries.push({
+        timeMin: 540,
+        html: `
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background: #10b981;"></div>
+            <div class="timeline-content">
+              <strong>09:00 — Partida da Hospedagem</strong>
+              <div class="card-label">${depHotel.name}</div>
+            </div>
+          </div>
+        `
+      });
+
+      // Stops do itinerário
+      if (day.itinerary && day.itinerary.stops && day.itinerary.stops.length > 0) {
+        day.itinerary.stops.forEach(stop => {
+          timelineEntries.push({
+            timeMin: timeToMinutes(stop.arrival_time),
+            html: `
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div class="timeline-content">
+                  <strong>${stop.arrival_time.slice(0, 5)} – ${stop.departure_time.slice(0, 5)}: ${stop.poi.name}</strong>
+                  <div class="card-label">Permanência: ${stop.poi.stay_duration_minutes} min | Pontuação de Utilidade: ${stop.poi.utility_score}</div>
+                </div>
+              </div>
+            `
+          });
+        });
+      } else {
+        timelineEntries.push({
+          timeMin: 600,
+          html: `
+            <div class="timeline-item">
+              <div class="timeline-dot"></div>
+              <div class="timeline-content">
+                <strong>10:00 — Visita Principal da Manhã</strong>
+                <div class="card-label">Clique em "Otimizar Rota" para preencher via OPTW</div>
+              </div>
+            </div>
+          `
+        });
+      }
+
+      // Slots de refeição / pausas experienciais
+      if (day.meal_slots && day.meal_slots.length > 0) {
+        day.meal_slots.forEach(slot => {
+          timelineEntries.push({
+            timeMin: timeToMinutes(slot.window.start_time),
+            html: renderMealSlotCard(slot)
+          });
+        });
+      } else {
+        // Fallback default slots
+        timelineEntries.push({
+          timeMin: 750,
+          html: `
+            <div class="timeline-item">
+              <div class="timeline-dot" style="background: #f59e0b;"></div>
+              <div class="timeline-content">
+                <strong>12:30 — Almoço (Slot Gastronômico)</strong>
+                <div class="card-label">Recomendação contextual próxima ao Ponto de Interesse anterior</div>
+              </div>
+            </div>
+          `
+        });
+        if (coffeeLover) {
+          timelineEntries.push({
+            timeMin: 930,
+            html: `
+              <div class="timeline-item">
+                <div class="timeline-dot" style="background: #38bdf8;"></div>
+                <div class="timeline-content">
+                  <strong>15:30 — Pausa para Café (Coffee Lover)</strong>
+                  <div class="card-label">Cafeteria de especialidade próxima</div>
+                </div>
+              </div>
+            `
+          });
+        }
+        if (wineLover) {
+          timelineEntries.push({
+            timeMin: 1080,
+            html: `
+              <div class="timeline-item">
+                <div class="timeline-dot" style="background: #a855f7;"></div>
+                <div class="timeline-content">
+                  <strong>18:00 — Degustação / Wine Bar (Wine Lover)</strong>
+                  <div class="card-label">Enoteca ou wine bar selecionado</div>
+                </div>
+              </div>
+            `
+          });
+        }
+        timelineEntries.push({
+          timeMin: 1170,
+          html: `
+            <div class="timeline-item">
+              <div class="timeline-dot" style="background: #8b5cf6;"></div>
+              <div class="timeline-content">
+                <strong>19:30 — Jantar (Slot Gastronômico)</strong>
+                <div class="card-label">Restaurante premiado/ranqueado</div>
+              </div>
+            </div>
+          `
+        });
+      }
+
+      // Parada de malas se solicitada
+      const isTransition = (depHotel && retHotel && depHotel.id !== retHotel.id) || !!day.is_transition_day;
+      if (isTransition && day.include_luggage_dropoff) {
+        timelineEntries.push({
+          timeMin: 960,
+          html: `
+            <div class="timeline-item">
+              <div class="timeline-dot" style="background: #eab308;"></div>
+              <div class="timeline-content">
+                <strong>16:00 — Check-in e Parada de Malas</strong>
+                <div class="card-label">${retHotel.name}</div>
+              </div>
+            </div>
+          `
+        });
+      }
+
+      // Retorno
+      timelineEntries.push({
+        timeMin: 1290,
+        html: `
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background: #10b981;"></div>
+            <div class="timeline-content">
+              <strong>21:30 — Retorno para Hospedagem</strong>
+              <div class="card-label">${retHotel.name}</div>
+            </div>
+          </div>
+        `
+      });
+
+      timelineEntries.sort((a, b) => a.timeMin - b.timeMin);
+      timeline.innerHTML = timelineEntries.map(e => e.html).join('');
+    }
+
+    window.selectMealPlace = function(slotId, poiId) {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const currentDay = stage.days[tripState.currentDayIndex];
+      if (!currentDay || !currentDay.meal_slots) return;
+
+      const slot = currentDay.meal_slots.find(s => s.id === slotId);
+      if (!slot) return;
+
+      const candidate = (slot.recommended_places || []).find(p => p.id === poiId);
+      if (!candidate) return;
+
+      slot.selected_place = candidate;
+      const tierEstimates = { "$": 45.0, "$$": 95.0, "$$$": 190.0, "$$$$": 380.0 };
+      if (slotId === 'slot-coffee') {
+        slot.estimated_cost = 35.0;
+      } else if (slotId === 'slot-wine') {
+        slot.estimated_cost = 120.0;
+      } else {
+        const tier = candidate.price_tier || (slotId === 'slot-lunch' ? '$$' : '$$$');
+        slot.estimated_cost = tierEstimates[tier] || (slotId === 'slot-lunch' ? 95.0 : 190.0);
+      }
+
+      saveState();
+      updateBudget();
+      renderUI();
+    };
+
+    function updateMapMarkers(depHotel, retHotel, currentDay) {
+      routeLayer.clearLayers();
+      if (depHotel?.location) {
+        L.marker([depHotel.location.latitude, depHotel.location.longitude])
+          .bindPopup(`<b>Partida:</b> ${depHotel.name}`).addTo(routeLayer);
+      }
+      if (retHotel?.location) {
+        L.marker([retHotel.location.latitude, retHotel.location.longitude])
+          .bindPopup(`<b>Retorno:</b> ${retHotel.name}`).addTo(routeLayer);
+      }
+      if (currentDay.itinerary?.stops) {
+        currentDay.itinerary.stops.forEach(s => {
+          L.marker([s.poi.location.latitude, s.poi.location.longitude])
+            .bindPopup(`<b>${s.poi.name}</b><br>${s.arrival_time} - ${s.departure_time}`)
+            .addTo(routeLayer);
+        });
+      }
+    }
+
+    // Handlers dos Sliders de Preferência
+    PREFERENCE_CATEGORIES.forEach(cat => {
+      const slider = document.getElementById(`rng${cat.id}`);
+      if (slider) {
+        slider.oninput = (e) => {
+          const val = parseFloat(e.target.value);
+          const label = document.getElementById(`val${cat.id}`);
+          if (label) label.innerText = val;
+          if (!tripState.preferences) tripState.preferences = { intensities: {} };
+          if (!tripState.preferences.intensities) tripState.preferences.intensities = {};
+          tripState.preferences.intensities[cat.key] = val;
+          saveState();
+          renderUI();
+        };
+      }
     });
-    list.appendChild(li);
-  });
-}
 
-function currentCoordinate(state) {
-  if (map && map.getCenter()) {
-    const center = map.getCenter();
-    return [center.lat, center.lng];
-  }
-  const item = state.itinerary[state.selectedIndex] || state.itinerary[0];
-  return item ? item.poi.coordinates : [-23.5505, -46.6333];
-}
-
-function targetPoiId(state) {
-  const item = state.itinerary[state.selectedIndex];
-  return item ? item.poi.id : null;
-}
-
-function showBanner(data) {
-  const banner = document.getElementById("impact-banner");
-  const notes = [];
-  if (data.removed_pois.length) {
-    notes.push("POIs removidos: " + data.removed_pois.join(", "));
-  }
-  if (data.intercity_risk_alert) {
-    notes.push(
-      "Alerta de Risco da Conexão Interurbana: déficit de " +
-      data.intercity_risk_alert.deficit_minutes + " minutos"
-    );
-  }
-  banner.textContent = notes.join(" · ");
-  banner.classList.toggle("hidden", notes.length === 0);
-}
-
-function showError(message) {
-  const banner = document.getElementById("impact-banner");
-  banner.textContent = message;
-  banner.classList.remove("hidden");
-}
-
-function selectUpcoming(state, route) {
-  const upcoming = route.findIndex(
-    (item) => new Date(item.start) >= new Date(state.current_time)
-  );
-  state.selectedIndex = upcoming >= 0 ? upcoming : Math.max(0, route.length - 1);
-}
-
-async function replan(events, afterReplanned) {
-  const state = loadState();
-  const body = {
-    day_id: state.day_id,
-    itinerary: { stops: state.itinerary },
-    current_time: state.current_time,
-    availability_window: state.availability_window,
-    current_coordinate: currentCoordinate(state),
-    events: events,
-    closed_pois: state.closed_pois,
-    skipped_pois: state.skipped_pois,
-    intercity_connection: state.intercity_connection,
-    travel_time_minutes: state.travel_time_minutes,
-  };
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    showError("O Roteiro não pôde ser replanejado (status " + response.status + ").");
-    return null;
-  }
-  const data = await response.json();
-  state.itinerary = data.itinerary;
-  afterReplanned(state);
-  selectUpcoming(state, state.itinerary);
-  saveState(state);
-  renderTimeline(state);
-  updateMapRoute(state);
-  showBanner(data);
-  return data;
-}
-
-function init() {
-  const state = loadState();
-  renderTimeline(state);
-  initMap(state);
-}
-
-document.getElementById("apply-delay").addEventListener("click", () => {
-  const minutes = Number(document.getElementById("delay-minutes").value);
-  replan(
-    [{ type: "delay", delay_minutes: minutes }],
-    (updated) => {
-      updated.current_time = addMinutes(updated.current_time, minutes);
+    // Handlers dos Controles de Orçamento
+    const selFood = document.getElementById('selFoodProfile');
+    if (selFood) {
+      selFood.onchange = (e) => {
+        tripState.food_profile = e.target.value;
+        saveState();
+        updateBudget();
+      };
     }
-  );
-});
 
-document.getElementById("apply-closure").addEventListener("click", () => {
-  const state = loadState();
-  const poiId = targetPoiId(state);
-  replan([{ type: "closure", poi_id: poiId }], (updated) => {
-    if (poiId && !updated.closed_pois.includes(poiId)) {
-      updated.closed_pois.push(poiId);
+    const inputTravelers = document.getElementById('numTravelers');
+    if (inputTravelers) {
+      inputTravelers.oninput = (e) => {
+        const val = Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1));
+        tripState.travelers = val;
+        saveState();
+        updateBudget();
+      };
     }
-  });
-});
 
-document.getElementById("apply-skip").addEventListener("click", () => {
-  const state = loadState();
-  const poiId = targetPoiId(state);
-  replan([{ type: "skip", poi_id: poiId }], (updated) => {
-    if (poiId && !updated.skipped_pois.includes(poiId)) {
-      updated.skipped_pois.push(poiId);
+    // Ripple Shift: Ajuste de Dias com Confirmação em Modal
+    async function handleRippleShift(delta) {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const resp = await fetch('/api/trip/ripple-shift/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trip: tripState, target_stage_id: stage.id, delta_days: delta })
+      });
+      if (!resp.ok) {
+        alert("Não foi possível alterar a duração da etapa.");
+        return;
+      }
+      const preview = await resp.json();
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = 'Confirmação de Deslocamento em Cascata';
+      document.getElementById('modalBody').innerHTML = `
+        <p>Você está alterando a permanência em <strong>${stage.city_name}</strong> em <strong>${delta > 0 ? '+' + delta : delta} dia(s)</strong>.</p>
+        <div class="card" style="margin-top: 1rem;">
+          <div class="card-row"><span>Nova data de término de ${stage.city_name}:</span><strong>${preview.new_target_end}</strong></div>
+          ${preview.shifted_stages.map(s => `
+            <div class="card-row" style="margin-top: 0.5rem; border-top: 1px solid var(--surface-border); padding-top: 0.5rem;">
+              <span>${s.city_name}:</span>
+              <strong>${s.new_start} a ${s.new_end} (${s.preserved_days_count} dias preservados)</strong>
+            </div>
+          `).join('')}
+          ${preview.shifted_connections.map(c => `
+            <div class="card-row" style="margin-top: 0.5rem; color: var(--accent);">
+              <span>Conexão Interurbana remarcada para:</span>
+              <strong>${c.new_departure}</strong>
+            </div>
+          `).join('')}
+        </div>
+        <p style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-muted);">
+          Os roteiros das cidades seguintes continuarão preservados intactos. Deseja confirmar?
+        </p>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('modalConfirmBtn').onclick = async () => {
+        const applyResp = await fetch('/api/trip/ripple-shift/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trip: tripState, target_stage_id: stage.id, delta_days: delta })
+        });
+        if (applyResp.ok) {
+          const prevStage = tripState.currentStageIndex ?? 0;
+          const prevDay = tripState.currentDayIndex ?? 0;
+          const updatedTrip = await applyResp.json();
+          const safeStage = Math.min(prevStage, Math.max(0, (updatedTrip.stages?.length || 1) - 1));
+          const stageDays = updatedTrip.stages?.[safeStage]?.days || [];
+          const safeDay = Math.min(prevDay, Math.max(0, stageDays.length - 1));
+          tripState = { ...tripState, ...updatedTrip, currentStageIndex: safeStage, currentDayIndex: safeDay };
+          saveState();
+          modal.classList.remove('active');
+          renderUI();
+        }
+      };
     }
-  });
-});
 
-document.getElementById("apply-adjust").addEventListener("click", () => {
-  const state = loadState();
-  const poiId = targetPoiId(state);
-  const minutes = Number(document.getElementById("adjusted-minutes").value);
-  replan(
-    [{ type: "duration_adjustment", poi_id: poiId, new_duration_minutes: minutes }],
-    () => {}
-  );
-});
+    document.getElementById('btnIncDays').onclick = () => handleRippleShift(1);
+    document.getElementById('btnDecDays').onclick = () => handleRippleShift(-1);
 
-if (document.readyState !== "loading") {
-  init();
-} else {
-  document.addEventListener("DOMContentLoaded", init);
-}
-</script>
+    // Otimizar Dia via OPTW
+    document.getElementById('btnOptimizeDay').onclick = async () => {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const currentDay = stage.days[tripState.currentDayIndex];
+      const prevDay = tripState.currentDayIndex > 0 ? stage.days[tripState.currentDayIndex - 1] : null;
+      const depHotel = prevDay ? (prevDay.custom_accommodation || stage.base_accommodation) : (currentDay.custom_accommodation || stage.base_accommodation);
+      const retHotel = currentDay.custom_accommodation || stage.base_accommodation;
+
+      const p = tripState.preferences?.intensities || {};
+      const coffeeLover = (p['Coffee Lover'] ?? 0) >= 5;
+      const wineLover = (p['Wine Lover'] ?? 0) >= 5;
+
+      const reservedSlots = [
+        { start_time: "12:30:00", end_time: "14:00:00" },
+        { start_time: "19:30:00", end_time: "21:00:00" }
+      ];
+      if (coffeeLover) {
+        reservedSlots.push({ start_time: "15:30:00", end_time: "16:15:00" });
+      }
+      if (wineLover) {
+        reservedSlots.push({ start_time: "18:00:00", end_time: "19:15:00" });
+      }
+
+      // Busca POIs para a cidade
+      const placesResp = await fetch(`/api/places/search?query=a&city_name=${encodeURIComponent(stage.city_name)}`);
+      const places = placesResp.ok ? await placesResp.json() : [];
+
+      const optResp = await fetch('/api/trip/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_location: depHotel.location,
+          end_location: retHotel.location,
+          window: { start_time: "09:00:00", end_time: "21:00:00" },
+          candidates: places,
+          preferences: tripState.preferences,
+          reserved_slots: reservedSlots,
+          curation_lists: tripState.curation_lists || []
+        })
+      });
+
+      if (optResp.ok) {
+        const itinerary = await optResp.json();
+        currentDay.itinerary = itinerary;
+
+        // Atualiza meal_slots com Top 3 contextuais
+        const diningResp = await fetch('/api/dining/contextual-slots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            departure_location: depHotel.location,
+            return_location: retHotel.location,
+            restaurant_candidates: places,
+            itinerary: itinerary,
+            preferences: tripState.preferences,
+            curation_lists: tripState.curation_lists || []
+          })
+        });
+
+        if (diningResp.ok) {
+          currentDay.meal_slots = await diningResp.json();
+        }
+
+        saveState();
+        renderUI();
+        alert('Roteiro otimizado com sucesso!');
+      }
+    };
+
+    // Curadoria de Listas (Sugeridas e Personalizadas)
+    let currentSuggestedLists = [];
+
+    async function renderCurationPanel(cityName) {
+      const cityLabel = document.getElementById('curationCityName');
+      if (cityLabel) cityLabel.innerText = cityName;
+
+      const suggContainer = document.getElementById('suggestedListsContainer');
+      const customContainer = document.getElementById('customListsContainer');
+      if (!suggContainer || !customContainer) return;
+
+      renderCustomLists(customContainer);
+
+      try {
+        const resp = await fetch(`/api/curation/suggested?city_name=${encodeURIComponent(cityName)}`);
+        if (resp.ok) {
+          currentSuggestedLists = await resp.json();
+          renderSuggestedLists(suggContainer, currentSuggestedLists);
+        } else {
+          suggContainer.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">Nenhuma lista sugerida para esta cidade.</span>';
+        }
+      } catch (e) {
+        suggContainer.innerHTML = '<span style="font-size:0.75rem; color:#ef4444;">Erro ao carregar listas sugeridas.</span>';
+      }
+    }
+
+    function renderSuggestedLists(container, lists) {
+      if (!lists || lists.length === 0) {
+        container.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">Nenhuma lista sugerida para esta cidade.</span>';
+        return;
+      }
+
+      container.innerHTML = lists.map(l => {
+        const isActive = (tripState.curation_lists || []).some(cl => cl.id === l.id && cl.is_active !== false);
+        return `
+          <div class="card" style="margin: 0; padding: 0.45rem 0.6rem; display: flex; align-items: start; gap: 0.5rem; background: ${isActive ? 'rgba(56,189,248,0.1)' : 'rgba(15,23,42,0.6)'}; border: 1px solid ${isActive ? 'var(--accent)' : 'var(--surface-border)'};">
+            <input type="checkbox" id="chk_sugg_${l.id}" style="margin-top: 0.2rem; cursor: pointer;" ${isActive ? 'checked' : ''} onchange="toggleSuggestedList('${l.id}')" />
+            <div style="flex: 1;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="chk_sugg_${l.id}" style="font-weight: 600; font-size: 0.8rem; cursor: pointer; color: ${isActive ? 'var(--accent)' : 'white'};">${l.title}</label>
+                <span class="badge" style="font-size: 0.65rem;">${(l.items || []).length} locais</span>
+              </div>
+              ${l.description ? `<div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">${l.description}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleSuggestedList(listId) {
+      if (!tripState.curation_lists) tripState.curation_lists = [];
+      const sugg = currentSuggestedLists.find(l => l.id === listId);
+      if (!sugg) return;
+
+      const idx = tripState.curation_lists.findIndex(cl => cl.id === listId);
+      if (idx !== -1) {
+        tripState.curation_lists.splice(idx, 1);
+      } else {
+        tripState.curation_lists.push({
+          id: sugg.id,
+          title: sugg.title,
+          description: sugg.description,
+          items: sugg.items || [],
+          is_active: true,
+          is_custom: false
+        });
+      }
+      saveState();
+      renderUI();
+    }
+
+    function renderCustomLists(container) {
+      if (!tripState.curation_lists) tripState.curation_lists = [];
+      const customLists = tripState.curation_lists.filter(cl => cl.is_custom === true);
+
+      if (customLists.length === 0) {
+        container.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">Nenhuma lista customizada. Clique em "+ Nova" para criar.</span>';
+        return;
+      }
+
+      container.innerHTML = customLists.map(l => {
+        const isActive = l.is_active !== false;
+        return `
+          <div class="card" style="margin: 0; padding: 0.45rem 0.6rem; display: flex; align-items: start; gap: 0.5rem; background: ${isActive ? 'rgba(16,185,129,0.1)' : 'rgba(15,23,42,0.6)'}; border: 1px solid ${isActive ? 'var(--success)' : 'var(--surface-border)'};">
+            <input type="checkbox" id="chk_cust_${l.id}" style="margin-top: 0.2rem; cursor: pointer;" ${isActive ? 'checked' : ''} onchange="toggleCustomListActive('${l.id}')" />
+            <div style="flex: 1;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="chk_cust_${l.id}" style="font-weight: 600; font-size: 0.8rem; cursor: pointer; color: ${isActive ? '#34d399' : 'white'};">${l.title}</label>
+                <div style="display: flex; align-items: center; gap: 0.25rem;">
+                  <span class="badge" style="font-size: 0.65rem;">${(l.items || []).length} locais</span>
+                  <button class="btn-secondary" style="font-size: 0.65rem; padding: 0.1rem 0.35rem;" onclick="openAddPlaceModal('${l.id}')" title="Adicionar Local">+ Local</button>
+                  <button class="btn-secondary" style="font-size: 0.65rem; padding: 0.1rem 0.3rem;" onclick="renameCustomList('${l.id}')" title="Renomear">✏️</button>
+                  <button class="btn-secondary" style="font-size: 0.65rem; padding: 0.1rem 0.3rem; color: #ef4444;" onclick="deleteCustomList('${l.id}')" title="Excluir">🗑️</button>
+                </div>
+              </div>
+              ${l.description ? `<div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">${l.description}</div>` : ''}
+              ${(l.items && l.items.length > 0) ? `
+                <div style="margin-top: 0.35rem; font-size: 0.72rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.15rem;">
+                  ${l.items.slice(0, 3).map(it => `<div>• <strong>${it.name}</strong> (${it.category})${it.notes ? ` — <em>${it.notes}</em>` : ''}</div>`).join('')}
+                  ${l.items.length > 3 ? `<div>... e mais ${l.items.length - 3} local(is)</div>` : ''}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleCustomListActive(id) {
+      const l = (tripState.curation_lists || []).find(cl => cl.id === id);
+      if (l) {
+        l.is_active = !(l.is_active !== false);
+        saveState();
+        renderUI();
+      }
+    }
+
+    function renameCustomList(id) {
+      const l = (tripState.curation_lists || []).find(cl => cl.id === id);
+      if (!l) return;
+      const newTitle = prompt("Novo nome para a lista:", l.title);
+      if (newTitle && newTitle.trim()) {
+        l.title = newTitle.trim();
+        saveState();
+        renderUI();
+      }
+    }
+
+    function deleteCustomList(id) {
+      const l = (tripState.curation_lists || []).find(cl => cl.id === id);
+      if (!l) return;
+      if (!confirm(`Excluir a lista "${l.title}"?`)) return;
+      tripState.curation_lists = (tripState.curation_lists || []).filter(cl => cl.id !== id);
+      saveState();
+      renderUI();
+    }
+
+    function createNewCustomList(title, description = '') {
+      if (!title || !title.trim()) return null;
+      if (!tripState.curation_lists) tripState.curation_lists = [];
+      const newList = {
+        id: `custom-list-${Date.now()}`,
+        title: title.trim(),
+        description: description ? description.trim() : null,
+        items: [],
+        is_active: true,
+        is_custom: true
+      };
+      tripState.curation_lists.push(newList);
+      saveState();
+      renderUI();
+      return newList;
+    }
+
+    function removePlaceFromList(listId, itemIdx) {
+      const list = (tripState.curation_lists || []).find(cl => cl.id === listId);
+      if (list && list.items) {
+        list.items.splice(itemIdx, 1);
+        saveState();
+        renderUI();
+      }
+    }
+
+    // Modal de Adicionar Local com Autocomplete
+    function openAddPlaceModal(listId) {
+      const list = (tripState.curation_lists || []).find(cl => cl.id === listId);
+      if (!list) return;
+
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = `Adicionar Local a: ${list.title}`;
+
+      document.getElementById('modalBody').innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div style="font-size: 0.85rem; color: var(--text-muted);">
+            Busque locais para <strong>${stage.city_name}</strong>. Ao selecionar, coordenadas, categoria e horários são vinculados.
+          </div>
+          <div style="position: relative;">
+            <label style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 0.25rem;">Buscar Local (Autocompletar):</label>
+            <input type="text" id="acPlaceInput" placeholder="Comece a digitar (ex: Coffee Lab, MASP, D.O.M., Central)..." style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" autocomplete="off" />
+            <div id="acSuggestionsBox" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 180px; overflow-y: auto; background: #0f172a; border: 1px solid var(--surface-border); border-radius: 0.375rem; z-index: 1000; display: none;"></div>
+          </div>
+          <div id="selectedPlaceContainer" style="display: none;" class="card">
+            <!-- Detalhes do local selecionado -->
+          </div>
+          <div>
+            <label style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 0.25rem;">Notas / Observações:</label>
+            <input type="text" id="placeNotesInput" placeholder="Ex: Dica de amigos, prato imperdível..." style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+          </div>
+          <button id="btnConfirmAddPlace" style="margin-top: 0.5rem; background: var(--primary); color: white; padding: 0.55rem; font-weight: 600; border: none; border-radius: 0.375rem; cursor: pointer; display: none;">
+            ✓ Adicionar à Lista
+          </button>
+        </div>
+      `;
+      modal.classList.add('active');
+
+      const input = document.getElementById('acPlaceInput');
+      const box = document.getElementById('acSuggestionsBox');
+      const preview = document.getElementById('selectedPlaceContainer');
+      const btnAdd = document.getElementById('btnConfirmAddPlace');
+      let selectedPlace = null;
+      let debounceTimer = null;
+
+      input.oninput = () => {
+        clearTimeout(debounceTimer);
+        const query = input.value.trim();
+        if (query.length < 1) {
+          box.style.display = 'none';
+          box.innerHTML = '';
+          return;
+        }
+        debounceTimer = setTimeout(async () => {
+          try {
+            const resp = await fetch(`/api/places/search?query=${encodeURIComponent(query)}&city_name=${encodeURIComponent(stage.city_name)}`);
+            if (resp.ok) {
+              const places = await resp.json();
+              if (places.length > 0) {
+                box.innerHTML = places.map((p, idx) => `
+                  <div class="ac-item" data-idx="${idx}">
+                    <strong>${p.name}</strong> <span style="color:var(--accent); font-size:0.75rem;">(${p.category})</span>
+                    <div style="font-size:0.72rem; color:var(--text-muted);">
+                      ⭐ ${p.rating || 4.5} • Preço: ${p.price_tier || '$$'} ${p.awards && p.awards.length ? '• ' + p.awards.join(', ') : ''}
+                    </div>
+                  </div>
+                `).join('');
+                box.style.display = 'block';
+
+                box.querySelectorAll('.ac-item').forEach(item => {
+                  item.onclick = () => {
+                    const idx = parseInt(item.getAttribute('data-idx'));
+                    selectedPlace = places[idx];
+                    input.value = selectedPlace.name;
+                    box.style.display = 'none';
+
+                    const winStr = selectedPlace.window ? `${selectedPlace.window.start_time.slice(0,5)} – ${selectedPlace.window.end_time.slice(0,5)}` : '09:00 – 18:00';
+                    preview.innerHTML = `
+                      <div style="font-size: 0.82rem;">
+                        <strong>Local Selecionado:</strong> ${selectedPlace.name}
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                          Categoria: <strong>${selectedPlace.category}</strong> |
+                          Coordenadas: <strong>${selectedPlace.location.latitude.toFixed(4)}, ${selectedPlace.location.longitude.toFixed(4)}</strong>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">
+                          Horário: ${winStr} |
+                          Permanência: ${selectedPlace.stay_duration_minutes || 60} min | Pontuação de Utilidade: ${selectedPlace.utility_score}
+                        </div>
+                      </div>
+                    `;
+                    preview.style.display = 'block';
+                    btnAdd.style.display = 'block';
+                  };
+                });
+              } else {
+                box.innerHTML = '<div style="padding:0.5rem; font-size:0.8rem; color:var(--text-muted);">Nenhum local correspondente encontrado.</div>';
+                box.style.display = 'block';
+              }
+            }
+          } catch (e) {
+            console.error("Erro na busca de locais:", e);
+          }
+        }, 200);
+      };
+
+      btnAdd.onclick = () => {
+        if (!selectedPlace) return;
+        const notes = document.getElementById('placeNotesInput').value.trim();
+        const poiToAdd = {
+          ...selectedPlace,
+          notes: notes || null
+        };
+        if (!list.items) list.items = [];
+        if (!list.items.some(it => it.id === poiToAdd.id)) {
+          list.items.push(poiToAdd);
+        }
+        saveState();
+        renderUI();
+        alert(`"${poiToAdd.name}" adicionado à lista "${list.title}"!`);
+        modal.classList.remove('active');
+      };
+    }
+
+    // Modal Gerenciador Completo de Curadoria
+    function openCurationManagerModal() {
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = 'Gerenciador de Listas de Curadoria';
+      const customLists = (tripState.curation_lists || []).filter(l => l.is_custom === true);
+
+      document.getElementById('modalBody').innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="card" style="margin: 0;">
+            <strong style="font-size: 0.9rem;">Criar Nova Lista Personalizada</strong>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+              <input type="text" id="newListNameInput" placeholder="Nome da Lista (ex: Dicas de Amigos, Restaurantes Favoritos)" style="padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+              <input type="text" id="newListDescInput" placeholder="Descrição opcional (ex: Dicas recebidas de amigos locais)" style="padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+              <button id="btnCreateCustomList" style="padding: 0.5rem; background: var(--primary); color: white; font-weight: 600; border: none; border-radius: 0.375rem; cursor: pointer;">
+                + Criar Lista
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <strong style="font-size: 0.9rem;">Listas Personalizadas Criadas (${customLists.length}):</strong>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; max-height: 250px; overflow-y: auto;">
+              ${customLists.length === 0 ? '<span style="font-size:0.8rem; color:var(--text-muted);">Nenhuma lista criada ainda.</span>' : customLists.map(l => `
+                <div class="card" style="margin: 0; padding: 0.6rem;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong>${l.title}</strong>
+                    <div style="display: flex; gap: 0.3rem;">
+                      <button class="btn-secondary" style="font-size:0.75rem; padding: 0.2rem 0.5rem;" onclick="openAddPlaceModal('${l.id}')">+ Local</button>
+                      <button class="btn-secondary" style="font-size:0.75rem; padding: 0.2rem 0.4rem;" onclick="renameCustomList('${l.id}'); openCurationManagerModal();">✏️</button>
+                      <button class="btn-secondary" style="font-size:0.75rem; padding: 0.2rem 0.4rem; color:#ef4444;" onclick="deleteCustomList('${l.id}'); openCurationManagerModal();">🗑️</button>
+                    </div>
+                  </div>
+                  ${l.description ? `<div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">${l.description}</div>` : ''}
+                  <div style="margin-top: 0.4rem; font-size: 0.78rem;">
+                    <strong>Itens (${(l.items || []).length}):</strong>
+                    ${(l.items && l.items.length > 0) ? `
+                      <ul style="margin: 0.25rem 0 0 1rem; padding: 0;">
+                        ${l.items.map((it, idx) => `
+                          <li>
+                            ${it.name} (${it.category}) ${it.notes ? `— <em>${it.notes}</em>` : ''}
+                            <button onclick="removePlaceFromList('${l.id}', ${idx}); openCurationManagerModal();" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 0.7rem; margin-left: 0.3rem;">[✕]</button>
+                          </li>
+                        `).join('')}
+                      </ul>
+                    ` : '<span style="color:var(--text-muted); margin-left:0.3rem;">Nenhum local na lista.</span>'}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('btnCreateCustomList').onclick = () => {
+        const name = document.getElementById('newListNameInput').value.trim();
+        const desc = document.getElementById('newListDescInput').value.trim();
+        if (!name) {
+          alert('Informe um nome para a lista.');
+          return;
+        }
+        createNewCustomList(name, desc);
+        openCurationManagerModal();
+      };
+    }
+
+    const btnOpenCur = document.getElementById('btnOpenCurationManager');
+    if (btnOpenCur) btnOpenCur.onclick = openCurationManagerModal;
+
+    const btnHeaderCur = document.getElementById('btnHeaderCuration');
+    if (btnHeaderCur) btnHeaderCur.onclick = openCurationManagerModal;
+
+    const btnQuickAddCust = document.getElementById('btnNewCustomListInline');
+    if (btnQuickAddCust) {
+      btnQuickAddCust.onclick = () => {
+        const title = prompt("Nome da nova lista customizada (ex: Dicas de Amigos, Restaurantes Favoritos):");
+        if (title && title.trim()) {
+          const desc = prompt("Descrição opcional:") || '';
+          createNewCustomList(title, desc);
+        }
+      };
+    }
+
+    // Modal Importar Link
+    document.getElementById('btnImportLinkModal').onclick = () => {
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = 'Importar Recomendações de Link ou Texto';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <label style="font-size: 0.85rem;">Cole a URL de um artigo/guia turístico:</label>
+          <input type="text" id="importUrlInput" placeholder="https://exemplo.com/guia-sp" style="padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+          <label style="font-size: 0.85rem; margin-top: 0.5rem;">Ou cole diretamente o texto:</label>
+          <textarea id="importTextInput" rows="4" placeholder="Cole trechos de recomendações aqui..." style="padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;"></textarea>
+          <button id="btnFetchPlaces" style="margin-top: 0.5rem;">🔍 Extrair Estabelecimentos</button>
+          <div id="importResultsContainer" style="margin-top: 0.5rem;"></div>
+        </div>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('btnFetchPlaces').onclick = async () => {
+        const url = document.getElementById('importUrlInput').value.trim();
+        const text = document.getElementById('importTextInput').value.trim();
+        const stage = tripState.stages[tripState.currentStageIndex];
+        const resCont = document.getElementById('importResultsContainer');
+        resCont.innerHTML = '<em>Processando conteúdo com proteção SSRF...</em>';
+
+        try {
+          const resp = await fetch('/api/curation/import-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url || null, text: text || null, city_name: stage.city_name })
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            resCont.innerHTML = `<span style="color: #ef4444;">Erro: ${data.detail || 'Falha na importação'}</span>`;
+            return;
+          }
+          if (data.candidates && data.candidates.length > 0) {
+            const customLists = (tripState.curation_lists || []).filter(l => l.is_custom === true);
+            let selectHtml = `
+              <div style="margin-top: 0.75rem; margin-bottom: 0.5rem;">
+                <label style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 0.25rem;">Salvar estabelecimentos na lista:</label>
+                <select id="importTargetListSelect" style="width: 100%; padding: 0.45rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;">
+                  ${customLists.map(l => `<option value="${l.id}">${l.title} (${(l.items || []).length} itens)</option>`).join('')}
+                  <option value="__new__">+ Criar nova lista com estes itens</option>
+                </select>
+              </div>
+            `;
+
+            let candidatesHtml = `
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                <strong>${data.candidates.length} locais encontrados:</strong>
+                <span style="font-size: 0.75rem; color: var(--text-muted);">Marque os que deseja importar</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 200px; overflow-y: auto; margin-top: 0.4rem;">
+                ${data.candidates.map((c, idx) => `
+                  <div class="card" style="margin: 0; padding: 0.4rem 0.6rem; display: flex; align-items: center; gap: 0.6rem;">
+                    <input type="checkbox" id="import_cand_${idx}" class="import-cand-checkbox" data-idx="${idx}" checked style="cursor: pointer;" />
+                    <label for="import_cand_${idx}" style="flex: 1; cursor: pointer; font-size: 0.82rem;">
+                      <strong>${c.name}</strong> (${c.category})
+                      <div style="font-size: 0.72rem; color: var(--text-muted);">
+                        Pontuação de Utilidade: ${c.utility_score} • Coord: ${c.location.latitude.toFixed(4)}, ${c.location.longitude.toFixed(4)}
+                      </div>
+                    </label>
+                  </div>
+                `).join('')}
+              </div>
+              <button id="btnConfirmImportPlaces" style="margin-top: 0.85rem; width: 100%; background: var(--success); color: white; padding: 0.55rem; font-weight: 600; border: none; border-radius: 0.375rem; cursor: pointer;">
+                ✓ Confirmar Importação
+              </button>
+            `;
+
+            resCont.innerHTML = selectHtml + candidatesHtml;
+
+            document.getElementById('btnConfirmImportPlaces').onclick = () => {
+              const checkboxes = document.querySelectorAll('.import-cand-checkbox');
+              const selectedPois = [];
+              checkboxes.forEach(cb => {
+                if (cb.checked) {
+                  const idx = parseInt(cb.getAttribute('data-idx'));
+                  selectedPois.push(data.candidates[idx]);
+                }
+              });
+
+              if (selectedPois.length === 0) {
+                alert('Selecione pelo menos um estabelecimento para importar.');
+                return;
+              }
+
+              const targetSelect = document.getElementById('importTargetListSelect');
+              const targetVal = targetSelect ? targetSelect.value : '__new__';
+
+              if (!tripState.curation_lists) tripState.curation_lists = [];
+
+              let targetList;
+              if (targetVal === '__new__' || customLists.length === 0) {
+                let listTitle = 'Importados via Artigo';
+                if (url) {
+                  try {
+                    listTitle = 'Importados de ' + new URL(url).hostname;
+                  } catch (_) {
+                    listTitle = 'Importados via Link';
+                  }
+                }
+                targetList = {
+                  id: `custom-list-${Date.now()}`,
+                  title: listTitle,
+                  description: `Importado de ${url || 'texto'} em ${new Date().toLocaleDateString()}`,
+                  items: [],
+                  is_active: true,
+                  is_custom: true
+                };
+                tripState.curation_lists.push(targetList);
+              } else {
+                targetList = tripState.curation_lists.find(l => l.id === targetVal);
+              }
+
+              if (targetList) {
+                if (!targetList.items) targetList.items = [];
+                const existingIds = new Set(targetList.items.map(p => p.id));
+                let addedCount = 0;
+                selectedPois.forEach(poi => {
+                  if (!existingIds.has(poi.id)) {
+                    targetList.items.push(poi);
+                    existingIds.add(poi.id);
+                    addedCount++;
+                  }
+                });
+                targetList.is_active = true;
+
+                saveState();
+                renderUI();
+                alert(`${addedCount} estabelecimento(s) adicionado(s) com sucesso à lista "${targetList.title}"!`);
+                modal.classList.remove('active');
+              }
+            };
+          } else {
+            resCont.innerHTML = '<span>Nenhum local correspondente encontrado.</span>';
+          }
+        } catch (err) {
+          resCont.innerHTML = `<span style="color: #ef4444;">Erro de conexão.</span>`;
+        }
+      };
+    };
+
+    // Alterar hotel
+    document.getElementById('btnChangeHotel').onclick = () => {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      const currentDay = stage.days[tripState.currentDayIndex];
+      const currentHotel = currentDay.custom_accommodation || stage.base_accommodation;
+
+      const modal = document.getElementById('modalOverlay');
+      document.getElementById('modalTitle').innerText = 'Personalizar Hospedagem do Dia';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+          <div>
+            <label style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Nome da Hospedagem:</label>
+            <input type="text" id="hotelNameInput" value="${currentHotel.name || ''}" placeholder="Ex: Hotel Fasano" style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+          </div>
+          <div>
+            <label style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Faixa de Preço:</label>
+            <select id="hotelTierSelect" style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;">
+              <option value="$" ${currentHotel.price_tier === '$' ? 'selected' : ''}>$ (Econômico)</option>
+              <option value="$$" ${currentHotel.price_tier === '$$' || !currentHotel.price_tier ? 'selected' : ''}>$$ (Moderado)</option>
+              <option value="$$$" ${currentHotel.price_tier === '$$$' ? 'selected' : ''}>$$$ (Conforto / Alto Padrão)</option>
+              <option value="$$$$" ${currentHotel.price_tier === '$$$$' ? 'selected' : ''}>$$$$ (Luxo)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Diária Real Estimada (R$):</label>
+            <input type="number" id="hotelDailyRateInput" value="${currentHotel.real_daily_rate ?? 350.0}" step="10" min="0" style="width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--surface-border); color: white; border-radius: 0.375rem;" />
+          </div>
+        </div>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('modalConfirmBtn').onclick = () => {
+        const nameInput = document.getElementById('hotelNameInput');
+        const tierSelect = document.getElementById('hotelTierSelect');
+        const rateInput = document.getElementById('hotelDailyRateInput');
+        const name = nameInput ? nameInput.value.trim() : '';
+        const tier = tierSelect ? tierSelect.value : '$$';
+        const rateVal = rateInput ? parseFloat(rateInput.value) : NaN;
+
+        if (!name) {
+          alert('Por favor, informe o nome da hospedagem.');
+          return;
+        }
+
+        currentDay.custom_accommodation = {
+          id: `hotel-custom-${Date.now()}`,
+          name: name,
+          location: currentHotel.location || stage.base_accommodation?.location || { latitude: -23.565, longitude: -46.666 },
+          price_tier: tier,
+          real_daily_rate: isNaN(rateVal) ? 350.0 : Math.max(0, rateVal)
+        };
+        modal.classList.remove('active');
+        saveState();
+        renderUI();
+      };
+    };
+
+    document.getElementById('btnResetBaseHotel').onclick = () => {
+      const stage = tripState.stages[tripState.currentStageIndex];
+      stage.days[tripState.currentDayIndex].custom_accommodation = null;
+      saveState();
+      renderUI();
+    };
+
+    // Alternar cidades
+    document.getElementById('btnNextCity').onclick = () => {
+      if (tripState.currentStageIndex < tripState.stages.length - 1) {
+        tripState.currentStageIndex++;
+        tripState.currentDayIndex = 0;
+        renderUI();
+      }
+    };
+    document.getElementById('btnPrevCity').onclick = () => {
+      if (tripState.currentStageIndex > 0) {
+        tripState.currentStageIndex--;
+        tripState.currentDayIndex = 0;
+        renderUI();
+      }
+    };
+
+    // Modal e Exportação Markdown
+    const modal = document.getElementById('modalOverlay');
+    document.getElementById('modalCloseBtn').onclick = () => modal.classList.remove('active');
+    document.getElementById('modalCancelBtn').onclick = () => modal.classList.remove('active');
+
+    document.getElementById('btnExportMarkdown').onclick = async () => {
+      const resp = await fetch('/api/trip/export-markdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tripState)
+      });
+      const data = await resp.json();
+      document.getElementById('modalTitle').innerText = 'Exportação de Roteiro em Markdown';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="margin-bottom: 0.75rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+          <button id="btnCopyMd" class="btn-secondary" style="font-size: 0.8rem;">📋 Copiar Markdown</button>
+          <button id="btnDownloadMd" style="font-size: 0.8rem;">📥 Baixar .md</button>
+        </div>
+        <pre class="markdown-view" id="mdContent">${data.markdown}</pre>
+      `;
+      modal.classList.add('active');
+
+      document.getElementById('btnCopyMd').onclick = () => {
+        navigator.clipboard.writeText(data.markdown);
+        alert('Markdown copiado para a área de transferência!');
+      };
+      document.getElementById('btnDownloadMd').onclick = () => {
+        const blob = new Blob([data.markdown], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'viagem-kairos.md';
+        a.click();
+      };
+    };
+
+    // Backup e restauração JSON
+    document.getElementById('btnExportJson').onclick = () => {
+      const blob = new Blob([JSON.stringify(tripState, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'viagem-kairos.json';
+      a.click();
+    };
+
+    document.getElementById('btnImportJson').onclick = () => {
+      document.getElementById('jsonFileInput').click();
+    };
+
+    document.getElementById('jsonFileInput').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target.result);
+          if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            typeof parsed.id !== 'string' ||
+            !parsed.id.trim() ||
+            typeof parsed.title !== 'string' ||
+            !parsed.title.trim() ||
+            !Array.isArray(parsed.stages) ||
+            parsed.stages.length === 0
+          ) {
+            alert('Arquivo JSON inválido: a viagem deve conter id, título e ao menos uma etapa.');
+            e.target.value = '';
+            return;
+          }
+
+          const hasInvalidStage = parsed.stages.some(st => !st.id || !st.city_name || !st.base_accommodation);
+          if (hasInvalidStage) {
+            alert('Arquivo JSON inválido: as etapas da viagem devem conter identificador, cidade e hospedagem base.');
+            e.target.value = '';
+            return;
+          }
+
+          parsed.currentStageIndex = parsed.currentStageIndex ?? 0;
+          parsed.currentDayIndex = parsed.currentDayIndex ?? 0;
+          tripState = initDefaultDays(parsed);
+          saveState();
+          renderUI();
+          alert('Plano de viagem restaurado com sucesso!');
+        } catch (err) {
+          alert('Arquivo JSON inválido ou corrompido.');
+        } finally {
+          e.target.value = '';
+        }
+      };
+      reader.readAsText(file);
+    };
+
+    // Inicialização
+    renderUI();
+  </script>
 </body>
 </html>
