@@ -85,8 +85,8 @@ class ReplanningService:
         """Reotimiza o Roteiro restante do Dia de Viagem a partir do horário
         e da coordenada atuais.
 
-        Paradas até ``current_time`` permanecem travadas como histórico do
-        Roteiro; Paradas futuras já reservadas
+        POIs até ``current_time`` permanecem travadas como histórico do
+        Roteiro; POIs futuras já reservadas
         (``reserved_future_stops``) permanecem preservadas no Roteiro
         replanejado; a janela restante — ``[horário efetivo pós-evento, fim da
         Janela de Disponibilidade]`` — é reotimizada via ``OPTWSolver`` a partir
@@ -107,12 +107,12 @@ class ReplanningService:
                 Etapa de Viagem, quando houver.
             excluded_pois: Identificação dos POIs fechados/pulados pelo Evento de
                 Contingência (``ClosureEvent``/``SkipStopEvent``).
-            reserved_future_stops: Paradas futuras já reservadas (Slots de
+            reserved_future_stops: POIs futuras já reservadas (Slots de
                 Refeição), preservadas no Roteiro replanejado.
             duration_adjustments: Tempo de Permanência ajustado por identificação
-                do POI (``DurationAdjustmentEvent``) — aplicado às Paradas
+                do POI (``DurationAdjustmentEvent``) — aplicado aos POIs
                 preservadas e reservadas e passado ao ``OPTWSolver``
-                (``visit_durations``), de modo que Paradas agendadas pelo
+                (``visit_durations``), de modo que POIs agendadas pelo
                 solver usam o Tempo de Permanência ajustado.
 
         Returns:
@@ -177,8 +177,8 @@ class ReplanningService:
     def _with_adjusted_durations(
         stops: Sequence[RouteStop], duration_adjustments: Mapping[str, int]
     ) -> list[RouteStop]:
-        """Paradas com o Tempo de Permanência ajustado quando há ajuste para o
-        POI (``duration_adjustments``); Paradas sem ajuste inalteradas."""
+        """POIs com o Tempo de Permanência ajustado quando há ajuste para o
+        POI (``duration_adjustments``); POIs sem ajuste inalteradas."""
         return [
             RouteStop(
                 poi=stop.poi,
@@ -192,7 +192,7 @@ class ReplanningService:
 
     @staticmethod
     def _preserved_stops(itinerary: Itinerary, current_time: datetime) -> list[RouteStop]:
-        """Paradas até o ``current_time`` — já iniciadas pelo menos: preservadas
+        """POIs até o ``current_time`` — já iniciadas pelo menos: preservadas
         como histórico do Roteiro, sem alteração."""
         return [stop for stop in itinerary.stops if stop.start <= current_time]
 
