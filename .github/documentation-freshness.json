@@ -1,0 +1,7 @@
+{
+  "managed_by": "sciflow-cicd",
+  "paths": [
+    "docs/documentation-freshness.md"
+  ],
+  "schema": "sciflow-cicd/documentation-freshness/v1"
+}
