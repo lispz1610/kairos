@@ -6,6 +6,7 @@ client = TestClient(app)
 
 
 def test_optimize_endpoint_returns_valid_itinerary() -> None:
+    """Verifica que o endpoint retorna um Roteiro válido dentro da Janela de Disponibilidade."""
     payload = {
         "start_location": {"latitude": -23.5505, "longitude": -46.6333},
         "end_location": {"latitude": -23.5600, "longitude": -46.6500},
@@ -40,6 +41,7 @@ def test_optimize_endpoint_returns_valid_itinerary() -> None:
 
 
 def test_optimize_endpoint_respects_reserved_slots() -> None:
+    """Verifica que o Roteiro gerado não colide com Slots de Refeição reservados."""
     payload = {
         "start_location": {"latitude": -23.5505, "longitude": -46.6333},
         "end_location": {"latitude": -23.5600, "longitude": -46.6500},

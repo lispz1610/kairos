@@ -6,6 +6,7 @@ client = TestClient(app)
 
 
 def test_export_markdown_api_endpoint() -> None:
+    """Verifica que a exportação Markdown inclui cabeçalho e Quadro Orçamentário."""
     payload = {
         "id": "trip-test",
         "title": "Tour Teste",

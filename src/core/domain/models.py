@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class PriceTier(StrEnum):
+    """Faixas de preço usadas na Estimativa de Gastos de Hospedagens e Pontos de Interesse."""
+
     BUDGET = "$"
     MODERATE = "$$"
     COMFORT = "$$$"
@@ -15,31 +17,41 @@ class PriceTier(StrEnum):
 
 
 class FoodProfile(StrEnum):
+    """Perfis de gasto diário com alimentação aplicados à Estimativa de Gastos da Viagem."""
+
     BUDGET = "budget"
     MODERATE = "moderate"
     FINE_DINING = "fine_dining"
 
 
 class Coordinates(BaseModel):
+    """Coordenada geográfica de um Ponto de Interesse ou de uma Hospedagem."""
+
     latitude: float
     longitude: float
 
 
 class TimeWindow(BaseModel):
+    """Janela de Disponibilidade ou Janela de Funcionamento com horários de início e fim."""
+
     start_time: time
     end_time: time
 
     @property
     def duration_minutes(self) -> int:
+        """Calcular a duração da janela em minutos, limitada a zero quando invertida."""
         start_min = self.start_time.hour * 60 + self.start_time.minute
         end_min = self.end_time.hour * 60 + self.end_time.minute
         return max(0, end_min - start_min)
 
     def contains(self, t: time) -> bool:
+        """Informar se o horário informado está dentro da janela, inclusive nas bordas."""
         return self.start_time <= t <= self.end_time
 
 
 class TransportMode(str, Enum):
+    """Modais de Transporte urbanos e interurbanos usados em Deslocamentos e Conexões."""
+
     WALKING = "walking"
     DRIVING = "driving"
     FLYING = "flying"
@@ -47,6 +59,8 @@ class TransportMode(str, Enum):
 
 
 class Accommodation(BaseModel):
+    """Hospedagem que serve como Ponto de Partida/Retorno dos Roteiros de um Dia de Viagem."""
+
     id: str
     name: str
     location: Coordinates
@@ -55,6 +69,8 @@ class Accommodation(BaseModel):
 
 
 class POI(BaseModel):
+    """Ponto de Interesse com Janela de Funcionamento, permanência e Pontuação de Utilidade."""
+
     id: str
     name: str
     location: Coordinates
@@ -71,6 +87,8 @@ class POI(BaseModel):
 
 
 class MealSlot(BaseModel):
+    """Slot de Refeição do Roteiro com janela, estabelecimentos recomendados e custo estimado."""
+
     id: str
     name: str
     window: TimeWindow
@@ -80,6 +98,8 @@ class MealSlot(BaseModel):
 
 
 class ItineraryStop(BaseModel):
+    """Ponto de Interesse de um Roteiro com chegada, partida e Deslocamento."""
+
     poi: POI
     arrival_time: time
     departure_time: time
@@ -87,12 +107,16 @@ class ItineraryStop(BaseModel):
 
 
 class Itinerary(BaseModel):
+    """Roteiro ordenado de Pontos de Interesse com Pontuação de Utilidade e duração totais."""
+
     stops: list[ItineraryStop] = Field(default_factory=list)
     total_utility: float = 0.0
     total_duration_minutes: int = 0
 
 
 class TripDay(BaseModel):
+    """Dia de Viagem com Hospedagem, Janela de Disponibilidade, Slots de Refeição e Roteiro."""
+
     date: date
     base_accommodation: Accommodation
     custom_accommodation: Optional[Accommodation] = None
@@ -106,24 +130,30 @@ class TripDay(BaseModel):
 
     @property
     def effective_accommodation(self) -> Accommodation:
+        """Obter a Hospedagem personalizada do dia ou, na ausência dela, a Hospedagem base."""
         return self.custom_accommodation or self.base_accommodation
 
     @property
     def departure_accommodation(self) -> Accommodation:
+        """Obter a Hospedagem de partida, considerando o dia anterior em uma troca de Hospedagem."""
         return self.previous_day_accommodation or self.effective_accommodation
 
     @property
     def return_accommodation(self) -> Accommodation:
+        """Obter a Hospedagem de retorno do Roteiro ao final do Dia de Viagem."""
         return self.effective_accommodation
 
     @property
     def is_transition_day(self) -> bool:
+        """Informar se o Dia de Viagem troca de Hospedagem em relação ao dia anterior."""
         if self.previous_day_accommodation is None:
             return False
         return self.previous_day_accommodation.id != self.effective_accommodation.id
 
 
 class TripStage(BaseModel):
+    """Etapa de Viagem delimitada por cidade e período, composta por Dias de Viagem."""
+
     id: str
     city_name: str
     start_date: date
@@ -140,6 +170,7 @@ class TripStage(BaseModel):
         end_date: date,
         base_accommodation: Accommodation,
     ) -> TripStage:
+        """Criar uma Etapa de Viagem com os Dias de Viagem gerados entre as datas informadas."""
         stage = cls(
             id=id,
             city_name=city_name,
@@ -172,6 +203,10 @@ class TripStage(BaseModel):
     def override_accommodation(
         self, day_index: int, accommodation: Optional[Accommodation]
     ) -> None:
+        """Substituir a Hospedagem do Dia de Viagem indicado e religar as partidas.
+
+        Índices fora do intervalo de dias são ignorados.
+        """
         if 0 <= day_index < len(self.days):
             self.days[day_index].custom_accommodation = accommodation
             self._relink_accommodations()
@@ -191,6 +226,8 @@ class TripStage(BaseModel):
 
 
 class InterCityConnection(BaseModel):
+    """Conexão Interurbana entre Etapas de Viagem com Modal de Transporte e data de partida."""
+
     id: str
     from_stage_id: str
     to_stage_id: str
@@ -199,16 +236,22 @@ class InterCityConnection(BaseModel):
 
 
 class PreferencesProfile(BaseModel):
+    """Perfil de Preferência com intensidades de 0 a 10 por categoria temática."""
+
     intensities: dict[str, float] = Field(default_factory=dict)
 
     def get_intensity(self, category: str) -> float:
+        """Obter a intensidade configurada para a categoria, ou zero quando ausente."""
         return self.intensities.get(category, 0.0)
 
     def set_intensity(self, category: str, value: float) -> None:
+        """Definir a intensidade da categoria, limitando o valor ao intervalo de 0 a 10."""
         self.intensities[category] = max(0.0, min(10.0, float(value)))
 
 
 class CurationList(BaseModel):
+    """Lista de Curadoria temática com Pontos de Interesse e indicação de atividade."""
+
     id: str
     title: str
     description: Optional[str] = None
@@ -217,6 +260,8 @@ class CurationList(BaseModel):
 
 
 class Trip(BaseModel):
+    """Viagem composta por Etapas de Viagem, Conexões Interurbanas e Perfil de Preferência."""
+
     id: str
     title: str
     travelers: int = 1

@@ -43,6 +43,8 @@ DAILY_FOOD_PROFILES: Dict[str, float] = {
 
 
 class StageBudgetBreakdown(BaseModel):
+    """Estimativa de Gastos de uma Etapa de Viagem por Hospedagem, alimentação e dias."""
+
     accommodation_cost: float
     dining_cost: float
     total_cost: float
@@ -50,6 +52,8 @@ class StageBudgetBreakdown(BaseModel):
 
 
 class BudgetSummary(BaseModel):
+    """Estimativa de Gastos consolidada da Viagem com detalhamento por Etapa de Viagem."""
+
     total_accommodation_cost: float
     total_dining_cost: float
     total_trip_cost: float

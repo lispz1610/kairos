@@ -51,6 +51,8 @@ link_parser_service = LinkParserService(
 
 
 class OptimizeRequest(BaseModel):
+    """Corpo da requisição de otimização do Roteiro de um Dia de Viagem."""
+
     start_location: Coordinates
     end_location: Coordinates
     window: TimeWindow
@@ -61,12 +63,16 @@ class OptimizeRequest(BaseModel):
 
 
 class RippleShiftRequest(BaseModel):
+    """Corpo da requisição de prévia ou aplicação de Deslocamento em Cascata."""
+
     trip: Trip
     target_stage_id: str
     delta_days: int
 
 
 class DiningRecommendRequest(BaseModel):
+    """Corpo da requisição de recomendação de estabelecimentos gastronômicos."""
+
     reference_location: Coordinates
     candidates: List[POI]
     limit: int = 3
@@ -74,6 +80,8 @@ class DiningRecommendRequest(BaseModel):
 
 
 class ContextualDiningRequest(BaseModel):
+    """Corpo da requisição de geração de Slots de Refeição contextuais para o Roteiro."""
+
     departure_location: Coordinates
     return_location: Coordinates
     restaurant_candidates: List[POI]
@@ -85,6 +93,8 @@ class ContextualDiningRequest(BaseModel):
 
 
 class BudgetRequest(BaseModel):
+    """Corpo da requisição de cálculo da Estimativa de Gastos da viagem."""
+
     trip: Trip
     food_profile: str = "moderate"
 
@@ -200,6 +210,8 @@ def search_places(query: str, city_name: Optional[str] = None) -> List[POI]:
 
 
 class ImportLinkRequest(BaseModel):
+    """Corpo da requisição de importação de curadoria a partir de URL ou texto."""
+
     url: Optional[str] = None
     text: Optional[str] = None
     city_name: Optional[str] = None

@@ -25,6 +25,10 @@ class CurationService:
     """Gerencia listas de curadoria pública e listas personalizadas do usuário."""
 
     def __init__(self, places_port: Optional[PlacesPort] = None) -> None:
+        """Inicializar o serviço com a porta informada ou a fábrica padrão registrada.
+
+        Levanta ValueError quando nenhuma das duas está disponível.
+        """
         if places_port is not None:
             self.places_port = places_port
         elif _default_places_port_factory is not None:

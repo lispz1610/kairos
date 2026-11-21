@@ -10,6 +10,7 @@ class MarkdownExportService:
     """Gera guias de viagem detalhados e estruturados em GitHub Flavored Markdown (GFM)."""
 
     def __init__(self) -> None:
+        """Inicializar o exportador com o serviço de Estimativa de Gastos usado no relatório."""
         self.dining_service = DiningService()
 
     def export_trip_markdown(

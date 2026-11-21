@@ -5,6 +5,7 @@ from src.core.services.preferences import PreferencesService
 
 
 def test_preference_intensity_modulates_utility() -> None:
+    """Verifica que a intensidade do Perfil de Preferência modula a Pontuação de Utilidade."""
     service = PreferencesService()
     profile = PreferencesProfile(
         intensities={"Museum Lover": 10.0, "Nature Lover": 0.0}
@@ -36,6 +37,7 @@ def test_preference_intensity_modulates_utility() -> None:
 
 
 def test_thematic_slots_generation_for_coffee_and_wine_lovers() -> None:
+    """Verifica a geração de slots temáticos para café e vinho."""
     service = PreferencesService()
     profile = PreferencesProfile(
         intensities={"Coffee Lover": 8.0, "Wine Lover": 6.0}
@@ -69,6 +71,7 @@ def test_thematic_slots_generation_for_coffee_and_wine_lovers() -> None:
 
 
 def test_all_six_preference_categories_modulate_utility() -> None:
+    """Verifica que as seis categorias de preferência modulam a Pontuação de Utilidade."""
     service = PreferencesService()
     profile = PreferencesProfile(
         intensities={

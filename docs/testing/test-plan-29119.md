@@ -1,0 +1,199 @@
+# Plano de Testes ISO/IEC/IEEE 29119 — Kairos
+
+**Normas de referência**: ISO/IEC/IEEE 29119-2 (Processo de Teste de Software) e ISO/IEC/IEEE 29119-3 (Documentação de Teste).
+**Alinhamento complementar**: ISO/IEC 25010 (Adequação Funcional, Confiabilidade, Segurança e Usabilidade), ISO/IEC 5055 (Qualidade Estrutural de Código).
+**Vocabulário canônico**: [GLOSSARY.md](../../GLOSSARY.md). Todo termo de domínio abaixo (Viagem, Etapa de Viagem, Dia de Viagem, Hospedagem, Dia de Troca de Hospedagem, Conexão Interurbana, Ponto de Interesse, Roteiro, Janela de Disponibilidade, Janela de Funcionamento, Tempo de Permanência, Matriz de Deslocamento, Pontuação de Utilidade, Perfil de Preferência, Slot de Refeição, Estimativa de Gastos, Evento de Contingência, Replanejamento, Deslocamento em Cascata) é empregado no sentido definido no glossário.
+**Requisitos rastreados**: [Especificação de Requisitos Funcionais](../especificacao-requisitos-funcionais.md), RF01–RF08.
+**Decisões arquiteturais relacionadas**: [ADR 0001](../adr/0001-formulacao-algoritmica-optw.md) (OPTW), [ADR 0004](../adr/0004-arquitetura-viagens-multicidades.md), [ADR 0005](../adr/0005-modo-offline-replay-credenciais.md) (Offline Replay), [ADR 0007](../adr/0007-gestao-de-hospedagens-curadoria-e-estado-client-side.md).
+
+---
+
+## 1. Escopo
+
+Este plano cobre a verificação do Kairos nos níveis de teste automatizado presentes no repositório, com rastreabilidade explícita dos requisitos funcionais RF01–RF08 aos casos de teste reais em `tests/unit/`, `tests/integration/` e `tests/property/`.
+
+**Em escopo**
+
+- Domain model e invariantes temporais de Viagem, Etapa de Viagem, Dia de Viagem, Dia de Troca de Hospedagem e Conexão Interurbana (`src/core/domain/models.py`).
+- Solver OPTW e a otimização do Roteiro dentro da Janela de Disponibilidade, respeitando Slots de Refeição e deslocamentos (`src/core/solvers/optw.py`).
+- Serviços de Perfil de Preferência, Curadoria, Parser Seguro de Links, Refeições/Estimativa de Gastos, Deslocamento em Cascata e Exportação em Markdown (`src/core/services/`).
+- Adaptadores HTTP e de Ponto de Interesse, incluindo proteção SSRF, Modo Offline Replay e cache (`src/adapters/`).
+- Interface web FastAPI e o template `src/adapters/web/templates/index.html`.
+
+**Fora de escopo (declarado)**
+
+- Testes de interface gráfica em navegador real (Selenium/Playwright); a camada web é verificada por testes de integração HTTP sobre a aplicação FastAPI.
+- Testes de carga, desempenho e penetração automatizados.
+- Persistência client-side executada dentro do navegador (ver lacunas em §8).
+
+---
+
+## 2. Estratégia em camadas
+
+A estratégia segue o modelo em camadas da ISO/IEC/IEEE 29119-2, com pirâmide invertida em direção à maior retroalimentação:
+
+| Camada | Diretório | Objetivo principal | Técnica dominante |
+| --- | --- | --- | --- |
+| **Unitário** | `tests/unit/` | Invariantes de domínio, regras de serviço e cálculos determinísticos isolados de I/O. | Particionamento em classes de equivalência, análise de valor limite, parametrização. |
+| **Integração** | `tests/integration/` | Contratos HTTP da aplicação FastAPI, composição solver + adaptadores + serviços, Offline Replay. | Casos de teste de interface (request/response), partições de entrada inválidas. |
+| **Propriedade** | `tests/property/` | Invariantes universais que devem valer para qualquer entrada gerada. | Property-Based Testing com `hypothesis`. |
+| **Mutação** | `src/core/` (alvo) | Avaliar a força das camadas anteriores por mutantes sobreviventes. | Teste de Mutação com `mutmut` (modo `--full`). |
+
+A camada de mutação não produz casos de teste novos: ela pontua a qualidade das demais. Um mutante sobrevivente em `src/core/` é tratado como um defeito de cobertura a ser corrigido com um novo caso de teste nas camadas unitária ou de propriedade.
+
+---
+
+## 3. Critérios de entrada e saída
+
+### 3.1 Critérios de entrada (entry criteria)
+
+- Código-fonte e testes presentes no worktree, com dependências de desenvolvimento instaladas (`pytest`, `pytest-cov`, `hypothesis`, `ruff`, `mypy`, `radon`, `mutmut`).
+- Requisitos RF01–RF08 e vocabulário canônico disponíveis para derivação de casos de teste.
+- Variável `GOOGLE_MAPS_API_KEY` **ausente** para execução determinística em Modo Offline Replay (ADR 0005); quando presente, a suíte deve continuar independente de rede via injeção de portas.
+- Ambiente Python 3.12 (alvo de `ruff`/`mypy`) e `PYTHONPATH` com a raiz do repositório.
+
+### 3.2 Critérios de saída (exit criteria)
+
+O gate unificado `verify_quality.sh` define a condição de conclusão:
+
+1. `ruff check src tests` sem violações (estilo, imports e docstrings PEP 257).
+2. `mypy --strict src` sem erros de tipagem.
+3. `radon cc src` sem função/método com complexidade ciclomática `>= 10`.
+4. `pytest --cov=src --cov-report=term-missing --cov-fail-under=85` com cobertura `>= 85%`.
+5. No modo `--full`, `mutmut` executado sobre `src/core/`, com mutation score consolidado e contagem de mutantes sobreviventes. Critério de monitoramento/evidência, não uma checagem automática: o `verify_quality.sh --full` reporta o score e os sobreviventes sem impor threshold; a equipe registra na revisão a justificativa de cada sobrevivente e decide pela conversão em novos casos de teste (§5.4).
+6. Matriz de rastreabilidade (§7) com RF01–RF08 integralmente cobertos por ao menos um caso de teste existente, ou lacuna explicitamente declarada (§8).
+
+Qualquer falha nas verificações automatizadas acima bloqueia o merge, conforme o gate de qualidade do issue-pai #19; o item 5 é monitoramento/evidência, sem threshold automático.
+
+---
+
+## 4. Ambiente Offline Replay
+
+Conforme ADR 0005, a chave `GOOGLE_MAPS_API_KEY` é injetada apenas por variável de ambiente. Na ausência dela, o adaptador de Ponto de Interesse entra em **Modo Offline Replay**, servindo dados pré-gravados para as cidades de demonstração (São Paulo, Lima, Juiz de Fora). Isso garante que:
+
+- a suíte rode com **zero credenciais** e **zero conectividade externa**;
+- a banca examinadora reproduza os mesmos resultados da CI;
+- nenhuma cota ou custo de API seja consumido durante os testes.
+
+Evidências do modo nos testes: `tests/unit/test_curation_service.py` (`test_offline_replay_adapter_curated_lists`, `test_offline_replay_adapter_search_places`, `test_cached_places_adapter_cache_aside_sqlite`, `test_create_places_adapter_factory`) e `tests/integration/test_curation_api.py` (`test_cache_persistence_and_offline_replay`).
+
+**Nota de isolamento**: o cache SQLite do adaptador é global por padrão; testes que o exercitam devem usar `tmp_path` ou limpar o cache para evitar contaminação entre casos (ver lacuna em §8).
+
+---
+
+## 5. Especificação formal de casos de teste e técnicas aplicadas
+
+A especificação abaixo documenta as técnicas exigidas pela ISO/IEC/IEEE 29119-3 com exemplos concretos do Kairos. Cada caso identifica a técnica, a entrada, o resultado esperado e o arquivo de teste que o materializa.
+
+### 5.1 Particionamento em classes de equivalência
+
+Técnica que divide o domínio de entrada em classes cujos elementos produzem o mesmo comportamento, reduzindo a infinitude de entradas a representantes testáveis.
+
+**Exemplo Kairos — perfis alimentares (RF07).** O domínio `food_profile` é particionado em três classes válidas (`budget`, `moderate`, `fine_dining`), cada uma com valor diário esperado distinto (R$ 80, R$ 180, R$ 400), mais a classe dos membros `enum` equivalentes. O caso `test_budget_calculation_varies_by_food_profile` em `tests/unit/test_dining_and_budget.py` parametriza as seis variantes (enum e string), confirmando que cada representante da classe produz o mesmo total — e que classes diferentes produzem totais diferentes.
+
+**Exemplo Kairos — categorias de Perfil de Preferência (RF04).** `test_all_six_preference_categories_modulate_utility` em `tests/unit/test_preferences_service.py` cobre as seis classes temáticas canônicas (Coffee, Wine, Museum, Nature, Gastronomy & Fine Dining, Street Food), verificando que cada categoria modula a Pontuação de Utilidade.
+
+**Exemplo Kairos — URLs proibidas (RF05).** `test_import_link_ssrf_protection_returns_400` em `tests/integration/test_import_link_api.py` e `test_ssrf_validator_blocks_forbidden_urls` em `tests/unit/test_link_parser_service.py` agrupam em uma classe de equivalência os esquemas e hosts proibidos (`file://`, `ftp://`, loopback `127.0.0.1`/`localhost`, redes privadas `10.0.0.0/8`, `192.168.0.0/16`), esperando rejeição HTTP 400/validação negativa para todos os representantes.
+
+### 5.2 Análise de valor limite
+
+Técnica que testa os valores nas fronteiras das classes de equivalência (mínimo, máximo, imediatamente abaixo/acima), onde defeitos de offset são mais prováveis.
+
+**Exemplo Kairos — intensidade do Perfil de Preferência (RF04).** A escala canônica é 0–10, com gatilho de slot temático em `>= 5`. A fronteira 5 é o ponto crítico: `test_thematic_slots_generation_for_coffee_and_wine_lovers` em `tests/unit/test_preferences_service.py` verifica o disparo da Pausa para Café e do slot de Wine Bar exatamente no limite. `test_preference_intensity_modulates_utility` complementa com o comportamento nos extremos da escala.
+
+**Exemplo Kairos — quantidade de POIs e variáveis climáticas (RF03/RF01).** Em `tests/property/test_optw_properties.py`, as estratégias `st.integers(min_value=1, max_value=8)` fixam o limite inferior (1 POI) e superior (8 POIs) do domínio gerado, enquanto `st.floats(min_value=-23.6, max_value=-23.5)` delimita as coordenadas da amostra de São Paulo. `test_budget_calculation_varies_by_travelers_count` em `tests/unit/test_dining_and_budget.py` parametriza `{1, 2, 4}` viajantes, cobrindo o mínimo e valores acima dele.
+
+**Exemplo Kairos — tamanho da Janela de Disponibilidade.** A asserção `itinerary.total_duration_minutes <= window.duration_minutes` em `test_optw_itinerary_never_exceeds_availability_window` (`tests/property/test_optw_properties.py`) verifica explicitamente o limite superior da janela (9h = 540 min), além dos limites de chegada (`>= start_time`) e partida (`<= end_time`).
+
+### 5.3 Property-Based Testing (`hypothesis`)
+
+Técnica que gera entradas arbitrárias e verifica invariantes que devem valer para **todas** elas, muito mais forte que exemplos pontuais para lógica temporal e de otimização.
+
+**Exemplo Kairos — invariantes do solver OPTW (RF03/RF01).** `tests/property/test_optw_properties.py` contém dois casos formais:
+
+- `test_optw_itinerary_never_exceeds_availability_window`: para quaisquer coordenadas de partida/retorno e de 1 a 8 POIs, o Roteiro nunca excede a Janela de Disponibilidade e nenhuma visita a Ponto de Interesse fica fora dela.
+- `test_optw_itinerary_never_collides_with_reserved_slots`: com combinações booleanas de café/vinho e Slots de Refeição reservados, prova que nenhuma visita a Ponto de Interesse sobrepõe um slot reservado — a invariante é expressa como `max(início_visita, início_slot) < min(fim_visita, fim_slot)` deve ser sempre falsa.
+
+**Exemplo Kairos — monotonicidade do Perfil de Preferência (RF04).** `test_preference_monotonicity_property` em `tests/property/test_preferences_properties.py` estabelece que aumentar a intensidade de uma categoria nunca diminui a Pontuação de Utilidade correspondente.
+
+**Exemplo Kairos — invariantes do Deslocamento em Cascata e round-trip (RF06/RF01/RF08).** `test_ripple_shift_invariants` e `test_trip_json_round_trip_idempotence` em `tests/property/test_ripple_shift_properties.py` provam, respectivamente, que estender uma Etapa de Viagem em $+N$ dias propaga exatamente $+N$ para etapas e Conexões Interurbanas subsequentes sem duplicar POIs, e que serializar/desserializar uma Viagem é idempotente.
+
+### 5.4 Teste de Mutação (`mutmut`)
+
+Técnica de avaliação da eficácia dos testes: `mutmut` aplica mutações no código de produção (troca de operadores, constantes, condicionais) e verifica se a suíte "mata" o mutante (falha). Mutantes sobreviventes indicam lacunas de asserção invisíveis à cobertura de linhas.
+
+**Aplicação no Kairos.** Executado no modo `--full` do gate sobre `src/core/` — o núcleo de domínio, solver OPTW e serviços. Os alvos de maior valor são justamente os pontos com asserções de invariante: `src/core/solvers/optw.py` (comparações de tempo, cálculo de janela, bloqueio de slots) e `src/core/services/schedule.py` (cálculo de deslocamento em cascata). Cada mutante sobrevivente nestes módulos deve ser convertido em um novo caso de teste nas camadas unitária/de propriedade descritas acima, fechando o ciclo red→green.
+
+---
+
+## 6. Casos de teste — resumo por técnica
+
+| ID do caso | Técnica | Requisito | Arquivo / função |
+| --- | --- | --- | --- |
+| CT-DOM-01 | Classes de equivalência | RF01 | `tests/unit/test_domain_trip.py::test_trip_stage_days_generation_with_base_hotel` |
+| CT-DOM-02 | Valor limite / transição | RF02 | `tests/unit/test_domain_trip.py::test_trip_stage_custom_hotel_override_and_transition_detection` |
+| CT-OPTW-01 | Property-Based | RF03 | `tests/property/test_optw_properties.py::test_optw_itinerary_never_exceeds_availability_window` |
+| CT-OPTW-02 | Property-Based | RF03 | `tests/property/test_optw_properties.py::test_optw_itinerary_never_collides_with_reserved_slots` |
+| CT-PREF-01 | Valor limite (`>= 5`) | RF04 | `tests/unit/test_preferences_service.py::test_thematic_slots_generation_for_coffee_and_wine_lovers` |
+| CT-PREF-02 | Property-Based (monotonicidade) | RF04 | `tests/property/test_preferences_properties.py::test_preference_monotonicity_property` |
+| CT-CUR-01 | Classes de equivalência | RF05 | `tests/integration/test_import_link_api.py::test_import_link_ssrf_protection_returns_400` |
+| CT-RIPPLE-01 | Invariante / Property-Based | RF06 | `tests/property/test_ripple_shift_properties.py::test_ripple_shift_invariants` |
+| CT-BUD-01 | Classes de equivalência | RF07 | `tests/unit/test_dining_and_budget.py::test_budget_calculation_varies_by_food_profile` |
+| CT-EXP-01 | Round-trip / serialização | RF08 | `tests/property/test_ripple_shift_properties.py::test_trip_json_round_trip_idempotence` |
+
+---
+
+## 7. Matriz de Rastreabilidade RF01–RF08 × testes
+
+Cada requisito é ligado a arquivos e casos de teste **existentes** no worktree. Caminhos em `tests/` e `src/` foram verificados quanto à existência.
+
+| RF | Requisito | Testes unitários | Testes de integração | Testes de propriedade | Código de produção relacionado |
+| --- | --- | --- | --- | --- | --- |
+| **RF01** | Decomposição em Dias de Viagem e Hospedagem Dinâmica | `tests/unit/test_domain_trip.py` — `test_accommodation_creation_and_coordinates`, `test_trip_stage_days_generation_with_base_hotel`, `test_deserialized_trip_relinks_previous_day_accommodations_for_transition_detection` | — | `tests/property/test_ripple_shift_properties.py` — `test_ripple_shift_invariants` (preservação de POIs/roteiros) | `src/core/domain/models.py` |
+| **RF02** | Gestão de Transição de Hospedagem (Dia de Troca) | `tests/unit/test_domain_trip.py` — `test_trip_stage_custom_hotel_override_and_transition_detection`, `test_deserialized_trip_relinks_previous_day_accommodations_for_transition_detection`; `tests/unit/test_markdown_export.py` — `test_markdown_export_service_structure`, `test_markdown_export_relinks_deserialized_trip_accommodations` | — | — | `TripDay.is_transition_day` em `src/core/domain/models.py` |
+| **RF03** | Slots de Refeição e Pausas Experienciais | `tests/unit/test_dining_and_budget.py` — `test_dining_service_proximity_recommendations`; `tests/unit/test_optw_solver.py` — `test_optw_solver_blocks_attractions_during_reserved_slots`, `test_optw_solver_respects_time_budget_and_depots` | `tests/integration/test_dining_api.py` — `test_dining_recommend_endpoint`, `test_contextual_dining_slots_endpoint`; `tests/integration/test_optimize_api.py` — `test_optimize_endpoint_respects_reserved_slots` | `tests/property/test_optw_properties.py` — `test_optw_itinerary_never_exceeds_availability_window`, `test_optw_itinerary_never_collides_with_reserved_slots` | `src/core/solvers/optw.py`, `src/core/services/dining_and_budget.py` |
+| **RF04** | Perfil de Preferência com Intensidade Graduada (0–10) | `tests/unit/test_preferences_service.py` — `test_preference_intensity_modulates_utility`, `test_thematic_slots_generation_for_coffee_and_wine_lovers`, `test_all_six_preference_categories_modulate_utility`; `tests/unit/test_curation_service.py` — `test_apply_curation_boost_to_matching_pois` | `tests/integration/test_curation_api.py` — `test_optimize_endpoint_applies_curation_boost`, `test_optimize_endpoint_respects_inactive_curation_list` | `tests/property/test_preferences_properties.py` — `test_preference_monotonicity_property` | `src/core/services/preferences.py`, `src/core/services/curation.py` |
+| **RF05** | Curadoria Híbrida e Parser Seguro de Links | `tests/unit/test_curation_service.py` — `test_curation_service_with_injected_port`, `test_curation_service_default_instantiation`, `test_offline_replay_adapter_curated_lists`, `test_offline_replay_adapter_search_places`, `test_cached_places_adapter_cache_aside_sqlite`, `test_cached_places_adapter_with_external_api_mock`, `test_create_places_adapter_factory`; `tests/unit/test_link_parser_service.py` — `test_link_parser_service_requires_fetcher_for_network_calls`, `test_link_parser_service_delegates_to_fetcher_port`, `test_ssrf_validator_blocks_forbidden_urls`, `test_fetch_url_content_valid_simulation`, `test_fetch_url_content_size_limit_exceeded`, `test_dns_rebinding_simulation_dual_homed_host_is_rejected`, `test_dns_rebinding_ip_pinning_transport_connects_only_to_validated_ip`, `test_pinned_ip_transport_initializes_with_backend`, `test_fetch_url_rejects_http_redirects`, `test_text_extraction_identifies_matching_places` | `tests/integration/test_curation_api.py` — `test_suggested_curation_endpoint`, `test_places_search_autocomplete_endpoint`, `test_cache_persistence_and_offline_replay`, `test_dining_recommend_with_curation_boost`; `tests/integration/test_import_link_api.py` — `test_import_link_ssrf_protection_returns_400`, `test_import_link_with_raw_text_succeeds`, `test_import_link_with_valid_url_succeeds` | — | `src/core/services/curation.py`, `src/core/services/link_parser.py`, `src/adapters/http/safe_fetcher.py`, `src/adapters/places/offline_adapter.py`, `src/adapters/places/cached_adapter.py` |
+| **RF06** | Deslocamento em Cascata (Ripple Shift) com Confirmação Visual | `tests/unit/test_schedule_service.py` — `test_ripple_shift_extends_stage_and_shifts_subsequent_stages_and_connections` | `tests/integration/test_schedule_api.py` — `test_ripple_shift_preview_endpoint`, `test_ripple_shift_apply_endpoint` | `tests/property/test_ripple_shift_properties.py` — `test_ripple_shift_invariants` | `src/core/services/schedule.py` — **confirmação visual via modal não implementada (ver §8)** |
+| **RF07** | Estimativa Parametrizada de Gastos | `tests/unit/test_dining_and_budget.py` — `test_budget_calculation_consolidates_lodging_and_food`, `test_budget_calculation_varies_by_food_profile`, `test_budget_calculation_varies_by_travelers_count`, `test_budget_calculation_scales_meal_slots_by_travelers` | `tests/integration/test_dining_api.py` — `test_trip_budget_endpoint`, `test_trip_budget_endpoint_with_custom_food_profile_and_multiple_travelers` | — | `src/core/services/dining_and_budget.py` |
+| **RF08** | Persistência Client-Side e Exportação em Markdown | `tests/unit/test_markdown_export.py` — `test_markdown_export_service_structure`, `test_markdown_export_relinks_deserialized_trip_accommodations`; `tests/unit/test_domain_trip.py` — `test_trip_full_json_serialization_round_trip` | `tests/integration/test_export_markdown_api.py` — `test_export_markdown_api_endpoint`; `tests/integration/test_web_app.py` — `test_health_check`, `test_index_page_renders_html` | `tests/property/test_ripple_shift_properties.py` — `test_trip_json_round_trip_idempotence` | `src/core/services/markdown_export.py`, `src/core/domain/models.py`, `src/adapters/web/templates/index.html` — **backup/restauração JSON no navegador não automatizado (ver §8)** |
+| **Extensão dinâmica** | Evento de Contingência / Replanejamento (extensão prevista na especificação, sem RF próprio) | — (sem casos de teste) | — (sem casos de teste) | — (sem casos de teste) | — (sem código); nenhuma cobertura automatizada nesta versão — lacuna declarada em §8. |
+
+**Extensão dinâmica (contingências)**: o requisito de Evento de Contingência/Replanejamento é uma extensão prevista na especificação (§3), mas não possui RF próprio nem implementação/casos de teste nesta versão — registrado na linha de extensão dinâmica desta matriz e em §8.
+
+---
+
+## 8. Lacunas conhecidas
+
+Registro honesto do que **ainda não** possui código e/ou teste automatizado. Nenhuma destas lacunas deve ser lida como cobertura existente.
+
+1. **Backup/restauração JSON no navegador (RF08)**: a persistência reativa em `localStorage` e os botões *Exportar Backup JSON* / *Restaurar Backup JSON* não são exercitados por testes de navegador; a rastreabilidade atual cobre apenas o round-trip de serialização do modelo (`test_trip_full_json_serialization_round_trip`, `test_trip_json_round_trip_idempotence`) e a exportação Markdown via API. A idempotência de import/export em JSON no cliente permanece sem verificação automatizada.
+2. **Modal de Confirmação de Impacto do Deslocamento em Cascata (RF06)**: os endpoints `preview`/`apply` e as invariantes de propagação são testados, mas o Modal de Confirmação Visual exigido pela especificação ainda não possui implementação nem teste; a camada web em `src/adapters/web/templates/index.html` não o materializa.
+3. **Eventos de Contingência e Replanejamento (extensão dinâmica)**: ainda sem código e sem testes. Não há caso de teste para atraso, fechamento prematuro ou cancelamento voluntário, nem para o recálculo do Roteiro restante a partir da coordenada/horário atuais.
+4. **Matriz de Deslocamento aproximada por haversine**: as durações/distâncias de deslocamento entre Pontos de Interesse usam aproximação por haversine, não a API de rotas do Google Maps em todos os cenários. Testes de propriedade validam invariantes temporais, mas não a fidelidade geodésica da Matriz de Deslocamento.
+5. **Teste SSRF com DNS real**: a proteção SSRF é testada com urls proibidas e com simulação de DNS rebinding/ip-pinning (`test_dns_rebinding_simulation_dual_homed_host_is_rejected`, `test_dns_rebinding_ip_pinning_transport_connects_only_to_validated_ip`). Não há teste de integração que resolva um hostname com DNS real; a garantia contra rebinding depende da simulação.
+6. **Cache SQLite global compartilhado entre testes**: o adaptador com cache `cache-aside` usa um banco SQLite global por padrão. Casos que o exercitam (`test_cached_places_adapter_cache_aside_sqlite`, `test_cache_persistence_and_offline_replay`) podem compartilhar estado entre execuções; recomenda-se isolar com `tmp_path` ou limpeza explícita para garantir repetibilidade.
+
+---
+
+## 9. Riscos
+
+| Risco | Impacto | Mitigação |
+| --- | --- | --- |
+| Instabilidade de entradas geradas por `hypothesis` (floats/coordenadas extremos) produzindo falsos negativos | Médio | Restringir estratégias a domínios geográficos válidos (São Paulo/Lima) e fixar sementes quando necessário. |
+| Mutantes sobreviventes em `src/core/` não detectados pelas camadas atuais | Alto | Executar `mutmut` no modo `--full` e converter cada sobrevivente em novo caso de teste (§5.4). |
+| Contaminação do cache SQLite global entre testes | Médio | Isolar com `tmp_path`/limpeza explícita (lacuna §8.6). |
+| Falsa sensação de cobertura de SSRF sem DNS real | Alto | Manter explícita a limitação da simulação de DNS rebinding (lacuna §8.5) e revisar mudanças no validador com atenção. |
+| Funcionalidades ainda sem código/testes (modal do Deslocamento em Cascata, Eventos de Contingência, backup/restauração no navegador) | Alto | Manter as lacunas visíveis na matriz (§7/§8) e atualizar o plano quando forem implementadas. |
+| Dependência involuntária de credenciais/rede | Médio | Garantir `GOOGLE_MAPS_API_KEY` ausente na CI e uso do Modo Offline Replay (§4, ADR 0005). |
+| Deriva de vocabulário em nomes de casos de teste | Baixo | Revisar novos testes contra o `GLOSSARY.md` antes do merge. |
+
+---
+
+## 10. Referências
+
+- ISO/IEC/IEEE 29119-2:2013 — Software and systems engineering — Software testing — Part 2: Test processes.
+- ISO/IEC/IEEE 29119-3:2013 — Part 3: Test documentation.
+- ISO/IEC 25010:2011 — Systems and software quality models.
+- ISO/IEC 5055:2021 — Information technology — Automated source code quality measures.
+- [Especificação de Requisitos Funcionais](../especificacao-requisitos-funcionais.md) e [GLOSSARY.md](../../GLOSSARY.md) deste repositório.
