@@ -13,5 +13,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_index_html_card_title_uses_canonical_vocabulary() -> None:
+    """Verifica que o template index.html utiliza o vocabulário canônico sem o termo evitado."""
     html = (REPO_ROOT / "src/adapters/web/templates/index.html").read_text(encoding="utf-8")
     assert "Rota" not in html

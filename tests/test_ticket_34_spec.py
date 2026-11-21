@@ -22,12 +22,14 @@ SPEC = (REPO_ROOT / "docs" / "especificacao-requisitos-funcionais.md").read_text
 
 
 def test_ac1_define_intercityconnection_departure_datetime_obrigatorio():
+    """Valida especificação de departure_datetime obrigatório."""
     assert "InterCityConnection" in SPEC
     assert "departure_datetime: datetime" in SPEC
     assert "obrigatório" in SPEC
 
 
 def test_ac2_defina_boarding_cutoff_minutes_com_padroes_por_modal():
+    """Valida especificação de boarding_cutoff_minutes com padrões por modal."""
     line = re.search(r"boarding_cutoff_minutes[^\n]*", SPEC).group(0)
     assert "120" in line
     assert "flying" in line
@@ -37,6 +39,7 @@ def test_ac2_defina_boarding_cutoff_minutes_com_padroes_por_modal():
 
 
 def test_ac3_define_schedule_service_valida_roteiro_vs_horarios_de_funcionamento():
+    """Valida especificação de validação de roteiro contra horários pelo ScheduleService."""
     assert "ScheduleService" in SPEC
     assert "Horários de Funcionamento" in SPEC
     assert "Janela de Disponibilidade" in SPEC
@@ -44,18 +47,22 @@ def test_ac3_define_schedule_service_valida_roteiro_vs_horarios_de_funcionamento
 
 
 def test_ac3_define_schedule_service_reporta_desvios():
+    """Valida especificação de reporte de desvios pelo ScheduleService."""
     assert "reportando desvios" in SPEC
 
 
 def test_ac4_inclua_casos_de_teste_padrao_do_modal():
+    """Valida presença do caso de teste de padrão do modal."""
     assert "Padrão do modal" in SPEC
 
 
 def test_ac4_inclua_casos_de_teste_visita_fora_do_horario_de_funcionamento():
+    """Valida presença do caso de teste de visita fora do horário de funcionamento."""
     assert "Visita fora do horário de funcionamento" in SPEC
     assert "desvio reportado" in SPEC
 
 
 def test_ac4_inclua_casos_de_teste_janela_de_disponibilidade_violada():
+    """Valida presença do caso de teste de violação da janela de disponibilidade."""
     assert "Janela de Disponibilidade violada" in SPEC
     assert "desvio reportado" in SPEC

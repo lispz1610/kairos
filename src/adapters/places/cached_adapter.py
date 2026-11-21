@@ -20,6 +20,7 @@ class CachedPlacesAdapter(PlacesPort):
         cache_path: Optional[Path | str] = None,
         fallback_adapter: Optional[PlacesPort] = None,
     ) -> None:
+        """Inicializa o cache SQLite e o fallback Offline Replay da Porta PlacesPort."""
         self.api_key = api_key if api_key is not None else os.getenv("GOOGLE_MAPS_API_KEY")
         self.cache_path = str(cache_path) if cache_path is not None else "cache/places_cache.db"
         self.fallback_adapter = fallback_adapter or OfflineReplayPlacesAdapter()
@@ -61,6 +62,7 @@ class CachedPlacesAdapter(PlacesPort):
             self._conn.execute("DELETE FROM places_cache")
 
     def get_curated_lists(self, city_name: str) -> List[CurationList]:
+        """Recupera listas de curadoria do cache SQLite ou, em miss, do adaptador de fallback."""
         cache_key = f"curated:{city_name.strip().lower()}"
         cached = self._read_cache(cache_key)
         if cached is not None:
@@ -75,6 +77,7 @@ class CachedPlacesAdapter(PlacesPort):
     def search_places(
         self, query: str, city_name: Optional[str] = None
     ) -> List[POI]:
+        """Pesquisa Pontos de Interesse no cache SQLite, com miss na API externa ou no fallback."""
         query_norm = query.strip().lower()
         if not query_norm:
             return []

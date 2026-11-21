@@ -9,6 +9,7 @@ client = TestClient(app)
 
 def test_suggested_curation_endpoint() -> None:
     # Test São Paulo
+    """Verifica que a Lista de Curadoria sugerida é retornada para São Paulo e Lima."""
     response_sp = client.get("/api/curation/suggested?city_name=São%20Paulo")
     assert response_sp.status_code == 200
     data_sp = response_sp.json()
@@ -27,6 +28,7 @@ def test_suggested_curation_endpoint() -> None:
 
 def test_places_search_autocomplete_endpoint() -> None:
     # Search with city
+    """Verifica a busca de Pontos de Interesse por cidade, globalmente e sem resultados."""
     response = client.get("/api/places/search?query=Coffee&city_name=São%20Paulo")
     assert response.status_code == 200
     data = response.json()
@@ -48,6 +50,7 @@ def test_places_search_autocomplete_endpoint() -> None:
 
 def test_cache_persistence_and_offline_replay() -> None:
     # Query twice to exercise Cache-Aside
+    """Verifica que consultas repetidas são servidas pelo cache e reproduzidas offline."""
     resp1 = client.get("/api/places/search?query=Fabrique&city_name=São%20Paulo")
     assert resp1.status_code == 200
     data1 = resp1.json()
@@ -66,6 +69,7 @@ def test_cache_persistence_and_offline_replay() -> None:
 
 
 def test_optimize_endpoint_applies_curation_boost() -> None:
+    """Verifica que curadoria ativa aumenta a Pontuação de Utilidade e altera o Roteiro."""
     hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
     # Two candidates: poi-a has base utility 10.0, poi-b has base utility 12.0
     # Candidate time window allows only 1 attraction
@@ -120,6 +124,7 @@ def test_optimize_endpoint_applies_curation_boost() -> None:
 
 
 def test_optimize_endpoint_respects_inactive_curation_list() -> None:
+    """Verifica que Lista de Curadoria inativa não altera a Pontuação de Utilidade."""
     hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
     candidates = [
         {
@@ -162,6 +167,7 @@ def test_optimize_endpoint_respects_inactive_curation_list() -> None:
 
 
 def test_dining_recommend_with_curation_boost() -> None:
+    """Verifica que a curadoria ativa reordena as recomendações de restaurantes."""
     ref_loc = {"latitude": -23.5600, "longitude": -46.6500}
     # Two restaurants at similar proximity (~0.3 km)
     # rest-normal has slightly higher rating (4.8 vs 4.6)

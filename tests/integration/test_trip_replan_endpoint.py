@@ -43,8 +43,11 @@ def _stop(poi, start, duration_minutes=30):
 def _payload(
     day, current_time, availability_window, events, **overrides
 ) -> dict[str, Any]:
-    """Corpo da requisição de ``POST /api/trip/replan`` — ``events`` no
-    formato ``ContingencyEventRequest``."""
+    """Montar payload da requisição de replanejamento.
+
+    Corpo da requisição de ``POST /api/trip/replan`` — ``events`` no
+    formato ``ContingencyEventRequest``.
+    """
     payload = {
         "day_id": "dia-2026-11-20",
         "itinerary": day.model_dump(mode="json"),
@@ -62,10 +65,13 @@ def _payload(
 
 
 def test_two_delay_events_are_applied_from_the_accumulated_current_time() -> None:
-    """Dois Eventos de Contingência em sequência — o evento posterior é
+    """Valida aplicação sequencial de dois eventos de atraso com tempo acumulado.
+
+    Dois Eventos de Contingência em sequência — o evento posterior é
     aplicado a partir do ``current_time`` acumulado (9:00 + 15 + 10 = 9:25),
     não do ``request.current_time``: o POI-B (início 9:20) é preservado como
-    histórico porque o horário acumulado já o ultrapassou."""
+    histórico porque o horário acumulado já o ultrapassou.
+    """
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     poi_b = _poi("POI-B", time(9, 0), time(12, 0), utility_score=8.0)
@@ -95,6 +101,7 @@ def test_two_delay_events_are_applied_from_the_accumulated_current_time() -> Non
 
 
 def test_delay_event_replan_keeps_route_starting_after_the_delayed_time() -> None:
+    """Valida que o replanejamento com atraso mantém paradas após o tempo com atraso."""
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     poi_b = _poi("POI-B", time(9, 0), time(12, 0), utility_score=8.0)
@@ -120,6 +127,7 @@ def test_delay_event_replan_keeps_route_starting_after_the_delayed_time() -> Non
 
 
 def test_closure_event_replan_excludes_the_closed_poi() -> None:
+    """Valida exclusão do POI fechado no replanejamento."""
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(8, 0), time(10, 0), utility_score=9.0)
     poi_b = _poi("POI-B", time(8, 0), time(11, 0), utility_score=8.0)
@@ -146,6 +154,7 @@ def test_closure_event_replan_excludes_the_closed_poi() -> None:
 
 
 def test_skip_stop_event_replan_excludes_the_skipped_poi() -> None:
+    """Valida exclusão do POI pulado no replanejamento."""
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(8, 0), time(10, 0), utility_score=9.0)
     poi_b = _poi("POI-B", time(8, 0), time(11, 0), utility_score=8.0)
@@ -170,6 +179,7 @@ def test_skip_stop_event_replan_excludes_the_skipped_poi() -> None:
 
 
 def test_duration_adjustment_event_replan_applies_the_new_duration() -> None:
+    """Valida aplicação da duração ajustada no replanejamento."""
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(8, 0), time(12, 0), utility_score=9.0)
     poi_b = _poi("POI-B", time(8, 0), time(12, 0), utility_score=8.0)
@@ -195,6 +205,7 @@ def test_duration_adjustment_event_replan_applies_the_new_duration() -> None:
 
 
 def test_reserved_future_stops_are_preserved() -> None:
+    """Valida preservação de paradas futuras já reservadas no replanejamento."""
     availability_window = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     poi_c = _poi("POI-C", time(11, 0), time(12, 0), utility_score=7.0)
@@ -220,6 +231,7 @@ def test_reserved_future_stops_are_preserved() -> None:
 
 
 def test_intercity_risk_alert_reported_when_boarding_does_not_fit():
+    """Valida reporte de alerta de risco quando o embarque não cabe no tempo disponível."""
     availability_window = TimeWindow(start=time(8, 0), end=time(18, 0))
     poi_a = _poi("POI-A", time(14, 0), time(18, 0), utility_score=9.0)
     connection = InterCityConnection(

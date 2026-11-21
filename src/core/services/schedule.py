@@ -16,6 +16,8 @@ from src.core.domain.models import (
 
 
 class ShiftedStageInfo(BaseModel):
+    """Etapa de Viagem realocada com datas antigas, novas e quantidade de dias preservada."""
+
     stage_id: str
     city_name: str
     old_start: date
@@ -26,12 +28,16 @@ class ShiftedStageInfo(BaseModel):
 
 
 class ShiftedConnectionInfo(BaseModel):
+    """Conexão Interurbana com a data de partida deslocada pelo Deslocamento em Cascata."""
+
     connection_id: str
     old_departure: date
     new_departure: date
 
 
 class RippleShiftPreview(BaseModel):
+    """Prévia do Deslocamento em Cascata com Etapas de Viagem e Conexões Interurbanas afetadas."""
+
     target_stage_id: str
     delta_days: int
     old_target_end: date

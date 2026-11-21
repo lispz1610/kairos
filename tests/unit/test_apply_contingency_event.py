@@ -35,6 +35,7 @@ def _day() -> Itinerary:
 
 
 def test_delay_event_advances_current_time_by_the_delay_minutes():
+    """Verifica que DelayEvent avança o horário atual pelos minutos de atraso."""
     event = DelayEvent(
         delay_minutes=20, current_time=CURRENT_TIME, coordinates=(-23.5505, -46.6333)
     )
@@ -45,6 +46,7 @@ def test_delay_event_advances_current_time_by_the_delay_minutes():
 
 
 def test_closure_event_maps_to_the_closed_poi():
+    """Verifica que ClosureEvent mapeia para a lista de POIs fechados."""
     event = ClosureEvent(poi_id="POI-001")
 
     _, closed_pois, _, _ = apply_contingency_event(_day(), CURRENT_TIME, event)
@@ -53,6 +55,7 @@ def test_closure_event_maps_to_the_closed_poi():
 
 
 def test_skip_stop_event_maps_to_the_skipped_poi():
+    """Verifica que SkipStopEvent mapeia para a lista de POIs pulados."""
     event = SkipStopEvent(poi_id="POI-001")
 
     _, _, skipped_pois, _ = apply_contingency_event(_day(), CURRENT_TIME, event)
@@ -61,6 +64,7 @@ def test_skip_stop_event_maps_to_the_skipped_poi():
 
 
 def test_duration_adjustment_event_maps_to_the_adjusted_duration():
+    """Verifica que DurationAdjustmentEvent mapeia para a duração ajustada."""
     event = DurationAdjustmentEvent(poi_id="POI-001", new_duration_minutes=60)
 
     _, _, _, adjusted_minutes = apply_contingency_event(_day(), CURRENT_TIME, event)

@@ -19,6 +19,7 @@ DEPARTURE_DATETIME = datetime(2026, 11, 20, 8, 0, tzinfo=timezone.utc)
 
 
 def test_intercityconnection_requires_departure_datetime():
+    """Garante que departure_datetime é obrigatório para InterCityConnection."""
     with pytest.raises(ValidationError):
         InterCityConnection(origin="A", destination="B", modal="flying")
 
@@ -28,6 +29,7 @@ def test_intercityconnection_requires_departure_datetime():
     [("flying", 120), ("driving", 30), ("transit", 30)],
 )
 def test_intercityconnection_defaults_boarding_cutoff_per_modal(modal, expected_cutoff):
+    """Valida o valor default de margem de embarque por modal."""
     connection = InterCityConnection(
         origin="A",
         destination="B",
@@ -39,6 +41,7 @@ def test_intercityconnection_defaults_boarding_cutoff_per_modal(modal, expected_
 
 
 def test_intercityconnection_respects_explicit_boarding_cutoff():
+    """Verifica que a margem de embarque explícita é respeitada."""
     connection = InterCityConnection(
         origin="A",
         destination="B",

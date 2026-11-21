@@ -32,11 +32,13 @@ class PreferencesService:
     """Modula a atratividade de POIs por intensidades (0 a 10) e gera pausas experienciais."""
 
     def __init__(self) -> None:
+        """Inicializar o serviço com o serviço de gastronomia usado nas pausas temáticas."""
         self.dining_service = DiningService()
 
     def apply_preference_weights(
         self, candidates: List[POI], profile: PreferencesProfile
     ) -> List[POI]:
+        """Aplicar o Perfil de Preferência à Pontuação de Utilidade dos candidatos."""
         weighted_list: List[POI] = []
         for poi in candidates:
             intensity = self._match_intensity(poi, profile)
@@ -69,6 +71,7 @@ class PreferencesService:
         departure_location: Optional[Coordinates] = None,
         return_location: Optional[Coordinates] = None,
     ) -> List[MealSlot]:
+        """Gerar Slots de Refeição temáticos conforme as intensidades do Perfil de Preferência."""
         slots: List[MealSlot] = []
         dep_loc = departure_location or reference_location
         ret_loc = return_location or reference_location

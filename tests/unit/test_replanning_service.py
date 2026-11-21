@@ -59,6 +59,7 @@ def _replan(**overrides):
 
 
 def test_ac1_paradas_ate_current_time_preservadas_como_historico():
+    """Valida preservação de paradas até o horário atual como histórico."""
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     poi_b = _make_poi("POI-B", time(9, 0), time(12, 0), utility_score=8.0)
@@ -83,6 +84,7 @@ def test_ac1_paradas_ate_current_time_preservadas_como_historico():
 
 
 def test_ac2_janela_restante_reotimizada_via_optw_dentro_da_disponibilidade():
+    """Valida reotimização da janela restante via OPTWSolver."""
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     poi_b = _make_poi("POI-B", time(9, 0), time(12, 0), utility_score=8.0)
@@ -114,6 +116,7 @@ def test_ac2_janela_restante_reotimizada_via_optw_dentro_da_disponibilidade():
 
 
 def test_ac2_slots_de_refeicao_futuros_ja_reservados_sao_preservados():
+    """Valida preservação de slots de refeição futuros já reservados."""
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=8.0)
     poi_b = _make_poi("POI-B", time(9, 0), time(12, 0), utility_score=9.0)
@@ -145,8 +148,11 @@ def test_ac2_slots_de_refeicao_futuros_ja_reservados_sao_preservados():
 
 
 def test_replan_keeps_free_window_before_future_reserved_slot() -> None:
-    """Slot de Refeição reservado no futuro: a janela livre ANTES do Slot
-    continua disponível ao replano."""
+    """Valida janela livre mantida antes de slot futuro reservado.
+
+    Slot de Refeição reservado no futuro: a janela livre ANTES do Slot
+    continua disponível ao replano.
+    """
     availability = TimeWindow(start=time(9, 0), end=time(20, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     slot_poi = _make_poi("POI-SLOT", time(11, 0), time(11, 30), utility_score=5.0)
@@ -189,6 +195,7 @@ def test_replan_keeps_free_window_before_future_reserved_slot() -> None:
 
 
 def test_ac3_teto_seguro_da_conexao_interurbana_aplicado_no_ultimo_dia():
+    """Valida aplicação do teto seguro de conexão interurbana no último dia."""
     availability = TimeWindow(start=time(8, 0), end=time(18, 0))
     pois = [
         _make_poi(poi_id, time(8, 0), time(23, 0), utility_score=utility_score)
@@ -236,6 +243,7 @@ def test_ac3_teto_seguro_da_conexao_interurbana_aplicado_no_ultimo_dia():
 
 
 def test_ac4_alerta_de_risco_com_deficit_em_minutos_quando_embarque_nao_cabe():
+    """Valida emissão de alerta de risco com déficit de minutos para embarque inviável."""
     availability = TimeWindow(start=time(8, 0), end=time(18, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     connection = InterCityConnection(
@@ -260,6 +268,7 @@ def test_ac4_alerta_de_risco_com_deficit_em_minutos_quando_embarque_nao_cabe():
 
 
 def test_ac5_metadados_preservados_removidos_e_alerta_de_risco():
+    """Valida metadados de POIs preservados, removidos e alerta de risco no replanejamento."""
     availability = TimeWindow(start=time(8, 0), end=time(12, 0))
     poi_a = _make_poi("POI-A", time(8, 0), time(9, 0), utility_score=9.0)
     poi_b = _make_poi("POI-B", time(9, 0), time(11, 0), utility_score=8.0)
@@ -289,6 +298,7 @@ def test_ac5_metadados_preservados_removidos_e_alerta_de_risco():
 
 
 def test_ac6_pois_fechados_ou_pulados_excluidos_do_roteiro_replano():
+    """Valida exclusão de POIs fechados ou pulados no roteiro replanejado."""
     availability = TimeWindow(start=time(8, 0), end=time(12, 0))
     poi_a = _make_poi("POI-A", time(8, 0), time(9, 0), utility_score=9.0)
     poi_b = _make_poi("POI-B", time(9, 0), time(11, 0), utility_score=8.0)
@@ -314,9 +324,12 @@ def test_ac6_pois_fechados_ou_pulados_excluidos_do_roteiro_replano():
 
 
 def test_replan_passes_current_coordinate_to_reoptimization():
-    """#56: ``ReplanningService.replan`` aplica a coordenada atual do visitante
+    """Valida repasse da coordenada atual à reotimização.
+
+    #56: ``ReplanningService.replan`` aplica a coordenada atual do visitante
     à reotimização via ``OPTWSolver`` — o Roteiro replanejado registra a
-    coordenada como ``start_location``."""
+    coordenada como ``start_location``.
+    """
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=5.0)
     itinerary = Itinerary(
@@ -340,10 +353,13 @@ def _stops_at_or_before(itinerary, current_time):
 
 @st.composite
 def _replan_inputs(draw):
-    """Gera ``(itinerary, current_time, availability_window)`` para os
+    """Gerar entradas para testes de invariantes do Replanejamento.
+
+    Gera ``(itinerary, current_time, availability_window)`` para os
     invariantes do Replanejamento: Roteiro cronológico com visitas dentro da
     Janela de Funcionamento, e ``current_time`` dentro da Janela de
-    Disponibilidade."""
+    Disponibilidade.
+    """
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     start_minutes = sorted(
         draw(
@@ -366,6 +382,7 @@ def _replan_inputs(draw):
 
 @given(_replan_inputs())
 def test_propriedade_nenhuma_parada_passada_alterada(replan_inputs):
+    """Teste de propriedade: nenhuma parada antes de current_time é alterada."""
     itinerary, current_time, availability = replan_inputs
     preserved = _stops_at_or_before(itinerary, current_time)
 
@@ -382,6 +399,7 @@ def test_propriedade_nenhuma_parada_passada_alterada(replan_inputs):
 def test_propriedade_janelas_de_funcionamento_e_disponibilidade_nao_violadas(
     replan_inputs,
 ):
+    """Teste de propriedade: janelas de funcionamento e disponibilidade nunca violadas."""
     itinerary, current_time, availability = replan_inputs
 
     result = _replan(

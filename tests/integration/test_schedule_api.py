@@ -68,6 +68,7 @@ def _sample_trip_payload() -> Dict[str, Any]:
 
 
 def test_ripple_shift_preview_endpoint() -> None:
+    """Verifica a prévia do Deslocamento em Cascata sem alterar a Viagem."""
     trip_payload = _sample_trip_payload()
     resp = client.post(
         "/api/trip/ripple-shift/preview",
@@ -82,6 +83,7 @@ def test_ripple_shift_preview_endpoint() -> None:
 
 
 def test_ripple_shift_apply_endpoint() -> None:
+    """Verifica o Deslocamento em Cascata nas Etapas e Conexões Interurbanas."""
     trip_payload = _sample_trip_payload()
     resp_apply = client.post(
         "/api/trip/ripple-shift/apply",

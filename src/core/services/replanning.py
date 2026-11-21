@@ -33,9 +33,11 @@ StopUnion = Union[RouteStop, ItineraryStop]
 
 
 class InterCityRiskAlert(BaseModel):
-    """Alerta de Risco de Conexão Interurbana: déficit de tempo em minutos
-    entre o horário efetivo de partida/embarque e o teto seguro da
-    Conexão Interurbana no último dia da Etapa de Viagem."""
+    """Alerta de Risco de Conexão Interurbana.
+
+    Déficit de tempo em minutos entre o horário efetivo de partida/embarque e o
+    teto seguro da Conexão Interurbana no último dia da Etapa de Viagem.
+    """
 
     deficit_minutes: int = Field(
         ge=0,
@@ -47,8 +49,10 @@ class InterCityRiskAlert(BaseModel):
 
 
 class ReplanResult(BaseModel):
-    """Resultado do Replanejamento do Roteiro restante do Dia de Viagem:
-    Roteiro replanejado e metadados de impacto."""
+    """Resultado do Replanejamento do Roteiro restante do Dia de Viagem.
+
+    Contém o Roteiro replanejado e metadados de impacto.
+    """
 
     itinerary: Itinerary = Field(
         description="Roteiro replanejado do Dia de Viagem."
@@ -87,9 +91,9 @@ class ReplanningService:
         reserved_future_stops: Sequence[StopUnion] = (),
         duration_adjustments: Mapping[str, int] | None = None,
     ) -> ReplanResult:
-        """Reotimiza o Roteiro restante do Dia de Viagem a partir do horário
-        e da coordenada atuais.
+        """Reotimizar o Roteiro restante do Dia de Viagem.
 
+        A reotimização ocorre a partir do horário e da coordenada atuais.
         POIs até ``current_time`` permanecem travadas como histórico do
         Roteiro; POIs futuras já reservadas
         (``reserved_future_stops``) permanecem preservadas no Roteiro
@@ -188,8 +192,11 @@ class ReplanningService:
     def _with_adjusted_durations(
         stops: Sequence[StopUnion], duration_adjustments: Mapping[str, int]
     ) -> list[StopUnion]:
-        """POIs com o Tempo de Permanência ajustado quando há ajuste para o
-        POI (``duration_adjustments``); POIs sem ajuste inalteradas."""
+        """Ajustar tempo de permanência das paradas.
+
+        POIs com o Tempo de Permanência ajustado quando há ajuste para o
+        POI (``duration_adjustments``); POIs sem ajuste inalteradas.
+        """
         return [
             RouteStop(
                 poi=stop.poi,
@@ -203,8 +210,11 @@ class ReplanningService:
 
     @staticmethod
     def _preserved_stops(itinerary: Itinerary, current_time: datetime) -> list[StopUnion]:
-        """POIs até o ``current_time`` — já iniciadas pelo menos: preservadas
-        como histórico do Roteiro, sem alteração."""
+        """Obter paradas preservadas até o horário atual.
+
+        POIs até o ``current_time`` — já iniciadas pelo menos: preservadas
+        como histórico do Roteiro, sem alteração.
+        """
         return [
             stop
             for stop in itinerary.stops
@@ -220,10 +230,12 @@ class ReplanningService:
     def _replan_start(
         prefix: list[StopUnion], effective_start: datetime, availability_window: TimeWindow
     ) -> datetime:
-        """Horário de início da janela restante: o horário efetivo pós-evento
-        adiantado pelos términos dos POIs preservados que já iniciaram antes
-        do horário atual — POIs futuros já reservados não afastam o início
-        da janela — nunca antes do início da Janela de Disponibilidade."""
+        """Calcular horário de início da janela restante.
+
+        O horário efetivo pós-evento adiantado pelos términos dos POIs preservados
+        que já iniciaram antes do horário atual — POIs futuros já reservados não
+        afastam o início da janela — nunca antes do início da Janela de Disponibilidade.
+        """
         replan_start = effective_start
         for stop in prefix:
             start_time = (
@@ -248,10 +260,12 @@ class ReplanningService:
         availability_window: TimeWindow,
         intercity_connection: InterCityConnection | None,
     ) -> time:
-        """Teto do quadro replanejado: o fim da Janela de Disponibilidade, ou o
-        limite operacional da Conexão Interurbana quando há embarque
-        interurbano — ``min(availability_window.end_time, departure_datetime -
-        boarding_cutoff_minutes)``."""
+        """Determinar teto do quadro replanejado.
+
+        O fim da Janela de Disponibilidade, ou o limite operacional da Conexão
+        Interurbana quando há embarque interurbano — ``min(availability_window.end_time,
+        departure_datetime - boarding_cutoff_minutes)``.
+        """
         if intercity_connection is None:
             return availability_window.end
         boarding_limit = (
@@ -266,9 +280,12 @@ class ReplanningService:
         window_end: time,
         replan_start: datetime,
     ) -> InterCityRiskAlert | None:
-        """Alerta de Risco de Conexão Interurbana quando nem o embarque cai
+        """Emitir alerta de risco de conexão interurbana se necessário.
+
+        Alerta de Risco de Conexão Interurbana quando nem o embarque cai
         antes do teto seguro: déficit em minutos entre o horário efetivo de
-        partida/embarque e o teto."""
+        partida/embarque e o teto.
+        """
         if intercity_connection is None or replan_start.time() <= window_end:
             return None
         limit = datetime.combine(replan_start.date(), window_end)
@@ -282,9 +299,11 @@ class ReplanningService:
         availability_window: TimeWindow,
         intercity_connection: InterCityConnection | None,
     ) -> bool:
-        """Verdade quando o ``OPTWSolver`` pode gerar a janela restante: sem
-        Alerta de Risco e o quadro replanejado é viável dentro da Janela de
-        Disponibilidade."""
+        """Verificar se o OPTWSolver pode gerar a janela restante.
+
+        Verdade quando não há Alerta de Risco e o quadro replanejado é viável
+        dentro da Janela de Disponibilidade.
+        """
         window_end = ReplanningService._window_end(
             availability_window, intercity_connection
         )

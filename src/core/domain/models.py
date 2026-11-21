@@ -5,10 +5,12 @@ from datetime import date, datetime, time, timedelta
 from enum import Enum, StrEnum
 from typing import Any, Optional, Self
 
-from pydantic import BaseModel, Field, field_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 
 class PriceTier(StrEnum):
+    """Faixas de preço usadas na Estimativa de Gastos de Hospedagens e Pontos de Interesse."""
+
     BUDGET = "$"
     MODERATE = "$$"
     COMFORT = "$$$"
@@ -16,17 +18,22 @@ class PriceTier(StrEnum):
 
 
 class FoodProfile(StrEnum):
+    """Perfis de gasto diário com alimentação aplicados à Estimativa de Gastos da Viagem."""
+
     BUDGET = "budget"
     MODERATE = "moderate"
     FINE_DINING = "fine_dining"
 
 
 class Coordinates(BaseModel):
+    """Coordenada geográfica de um Ponto de Interesse ou de uma Hospedagem."""
+
     latitude: float
     longitude: float
 
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema: Any, handler: Any) -> Any:
+        """Personalizar o schema OpenAPI/JSON gerado para representar tupla de floats."""
         return handler(
             core_schema.tuple_schema(
                 [core_schema.float_schema(), core_schema.float_schema()]
@@ -41,6 +48,7 @@ class Coordinates(BaseModel):
         return data
 
     def __eq__(self, other: object) -> bool:
+        """Comparar coordenadas por igualdade de latitude e longitude ou tupla equivalente."""
         if isinstance(other, Coordinates):
             return self.latitude == other.latitude and self.longitude == other.longitude
         if isinstance(other, tuple):
@@ -55,35 +63,43 @@ class Coordinates(BaseModel):
 
     @field_serializer("latitude", "longitude", when_used="json")
     def serialize_coords(self, value: float) -> float:
+        """Serializar coordenadas individualmente em formato numérico float."""
         return value
 
 
 class TimeWindow(BaseModel):
+    """Janela de Disponibilidade ou Janela de Funcionamento com horários de início e fim."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
     start_time: time = Field(alias="start")
     end_time: time = Field(alias="end")
 
     @property
     def start(self) -> time:
+        """Obter o horário de início da Janela."""
         return self.start_time
 
     @property
     def end(self) -> time:
+        """Obter o horário de fim da Janela."""
         return self.end_time
 
     @property
     def duration_minutes(self) -> int:
+        """Calcular a duração da janela em minutos, limitada a zero quando invertida."""
         start_min = self.start_time.hour * 60 + self.start_time.minute
         end_min = self.end_time.hour * 60 + self.end_time.minute
         return max(0, end_min - start_min)
 
     def contains(self, t: time) -> bool:
+        """Informar se o horário informado está dentro da janela, inclusive nas bordas."""
         return self.start_time <= t <= self.end_time
-
-    class Config:
-        populate_by_name = True
 
 
 class TransportMode(str, Enum):
+    """Modais de Transporte urbanos e interurbanos usados em Deslocamentos e Conexões."""
+
     WALKING = "walking"
     DRIVING = "driving"
     FLYING = "flying"
@@ -91,6 +107,8 @@ class TransportMode(str, Enum):
 
 
 class Accommodation(BaseModel):
+    """Hospedagem que serve como Ponto de Partida/Retorno dos Roteiros de um Dia de Viagem."""
+
     id: str
     name: str
     location: Coordinates
@@ -99,6 +117,8 @@ class Accommodation(BaseModel):
 
 
 class POI(BaseModel):
+    """Ponto de Interesse com Janela de Funcionamento, permanência e Pontuação de Utilidade."""
+
     id: str
     name: str
     location: Coordinates = Field(alias="coordinates")
@@ -116,17 +136,20 @@ class POI(BaseModel):
 
     @property
     def operating_window(self) -> TimeWindow:
+        """Obter a Janela de Funcionamento do Ponto de Interesse."""
         return self.window
 
     @property
     def coordinates(self) -> Coordinates:
+        """Obter as coordenadas geográficas do Ponto de Interesse."""
         return self.location
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class MealSlot(BaseModel):
+    """Slot de Refeição do Roteiro com janela, estabelecimentos recomendados e custo estimado."""
+
     id: str
     name: str
     window: TimeWindow
@@ -136,6 +159,8 @@ class MealSlot(BaseModel):
 
 
 class ItineraryStop(BaseModel):
+    """Ponto de Interesse de um Roteiro com chegada, partida e Deslocamento."""
+
     poi: POI
     arrival_time: time
     departure_time: time
@@ -168,6 +193,8 @@ class RouteStop(BaseModel):
 
 
 class Itinerary(BaseModel):
+    """Roteiro ordenado de Pontos de Interesse com Pontuação de Utilidade e duração totais."""
+
     stops: list[ItineraryStop | RouteStop] = Field(default_factory=list)
     total_utility: float = 0.0
     total_duration_minutes: int = 0
@@ -181,6 +208,8 @@ class Itinerary(BaseModel):
 
 
 class TripDay(BaseModel):
+    """Dia de Viagem com Hospedagem, Janela de Disponibilidade, Slots de Refeição e Roteiro."""
+
     date: date
     base_accommodation: Accommodation
     custom_accommodation: Optional[Accommodation] = None
@@ -194,24 +223,30 @@ class TripDay(BaseModel):
 
     @property
     def effective_accommodation(self) -> Accommodation:
+        """Obter a Hospedagem personalizada do dia ou, na ausência dela, a Hospedagem base."""
         return self.custom_accommodation or self.base_accommodation
 
     @property
     def departure_accommodation(self) -> Accommodation:
+        """Obter a Hospedagem de partida, considerando o dia anterior em uma troca de Hospedagem."""
         return self.previous_day_accommodation or self.effective_accommodation
 
     @property
     def return_accommodation(self) -> Accommodation:
+        """Obter a Hospedagem de retorno do Roteiro ao final do Dia de Viagem."""
         return self.effective_accommodation
 
     @property
     def is_transition_day(self) -> bool:
+        """Informar se o Dia de Viagem troca de Hospedagem em relação ao dia anterior."""
         if self.previous_day_accommodation is None:
             return False
         return self.previous_day_accommodation.id != self.effective_accommodation.id
 
 
 class TripStage(BaseModel):
+    """Etapa de Viagem delimitada por cidade e período, composta por Dias de Viagem."""
+
     id: str
     city_name: str
     start_date: date
@@ -228,6 +263,7 @@ class TripStage(BaseModel):
         end_date: date,
         base_accommodation: Accommodation,
     ) -> TripStage:
+        """Criar uma Etapa de Viagem com os Dias de Viagem gerados entre as datas informadas."""
         stage = cls(
             id=id,
             city_name=city_name,
@@ -260,6 +296,10 @@ class TripStage(BaseModel):
     def override_accommodation(
         self, day_index: int, accommodation: Optional[Accommodation]
     ) -> None:
+        """Substituir a Hospedagem do Dia de Viagem indicado e religar as partidas.
+
+        Índices fora do intervalo de dias são ignorados.
+        """
         if 0 <= day_index < len(self.days):
             self.days[day_index].custom_accommodation = accommodation
             self._relink_accommodations()
@@ -279,6 +319,8 @@ class TripStage(BaseModel):
 
 
 class InterCityConnection(BaseModel):
+    """Conexão Interurbana entre Etapas de Viagem com Modal de Transporte e data de partida."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     from_stage_id: str = ""
     to_stage_id: str = ""
@@ -345,16 +387,22 @@ class InterCityConnection(BaseModel):
 
 
 class PreferencesProfile(BaseModel):
+    """Perfil de Preferência com intensidades de 0 a 10 por categoria temática."""
+
     intensities: dict[str, float] = Field(default_factory=dict)
 
     def get_intensity(self, category: str) -> float:
+        """Obter a intensidade configurada para a categoria, ou zero quando ausente."""
         return self.intensities.get(category, 0.0)
 
     def set_intensity(self, category: str, value: float) -> None:
+        """Definir a intensidade da categoria, limitando o valor ao intervalo de 0 a 10."""
         self.intensities[category] = max(0.0, min(10.0, float(value)))
 
 
 class CurationList(BaseModel):
+    """Lista de Curadoria temática com Pontos de Interesse e indicação de atividade."""
+
     id: str
     title: str
     description: Optional[str] = None
@@ -363,6 +411,8 @@ class CurationList(BaseModel):
 
 
 class Trip(BaseModel):
+    """Viagem composta por Etapas de Viagem, Conexões Interurbanas e Perfil de Preferência."""
+
     id: str
     title: str
     travelers: int = 1

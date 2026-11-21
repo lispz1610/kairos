@@ -14,11 +14,15 @@ from src.core.services.curation import CurationService
 
 
 class DummyPlacesPort(PlacesPort):
+    """Porta de lugares falsa que registra o número de chamadas para testes."""
+
     def __init__(self) -> None:
+        """Inicializa os contadores de chamadas da porta falsa."""
         self.curated_call_count = 0
         self.search_call_count = 0
 
     def get_curated_lists(self, city_name: str) -> list[CurationList]:
+        """Retorna uma Lista de Curadoria fictícia e registra a chamada."""
         self.curated_call_count += 1
         return [
             CurationList(
@@ -37,6 +41,7 @@ class DummyPlacesPort(PlacesPort):
     def search_places(
         self, query: str, city_name: str | None = None
     ) -> list[POI]:
+        """Retorna um Ponto de Interesse fictício e registra a chamada."""
         self.search_call_count += 1
         return [
             POI(
@@ -48,6 +53,7 @@ class DummyPlacesPort(PlacesPort):
 
 
 def test_curation_service_with_injected_port() -> None:
+    """Verifica que o serviço delega à porta injetada."""
     port = DummyPlacesPort()
     service = CurationService(places_port=port)
 
@@ -63,6 +69,7 @@ def test_curation_service_with_injected_port() -> None:
 
 
 def test_curation_service_default_instantiation() -> None:
+    """Verifica que o serviço usa uma porta padrão com curadorias sugeridas."""
     service = CurationService()
     assert isinstance(service.places_port, PlacesPort)
     sp_lists = service.get_suggested_curation_lists("São Paulo")
@@ -70,6 +77,7 @@ def test_curation_service_default_instantiation() -> None:
 
 
 def test_apply_curation_boost_to_matching_pois() -> None:
+    """Verifica o aumento da Pontuação de Utilidade apenas para Pontos de Interesse curados."""
     service = CurationService()
     poi_michelin = POI(
         id="dom",
@@ -127,6 +135,7 @@ def test_apply_curation_boost_to_matching_pois() -> None:
 
 
 def test_offline_replay_adapter_curated_lists() -> None:
+    """Verifica as Listas de Curadoria em modo de reprodução offline."""
     adapter = OfflineReplayPlacesAdapter()
 
     sp_lists = adapter.get_curated_lists("São Paulo")
@@ -145,6 +154,7 @@ def test_offline_replay_adapter_curated_lists() -> None:
 
 
 def test_offline_replay_adapter_search_places() -> None:
+    """Verifica a busca de Pontos de Interesse em modo de reprodução offline."""
     adapter = OfflineReplayPlacesAdapter()
 
     # Search with city filter
@@ -168,6 +178,7 @@ def test_offline_replay_adapter_search_places() -> None:
 
 
 def test_cached_places_adapter_cache_aside_sqlite() -> None:
+    """Verifica o padrão cache-aside em SQLite e a limpeza do cache."""
     port = DummyPlacesPort()
     cached_adapter = CachedPlacesAdapter(
         api_key=None,
@@ -206,6 +217,7 @@ def test_cached_places_adapter_cache_aside_sqlite() -> None:
 
 
 def test_cached_places_adapter_with_external_api_mock() -> None:
+    """Verifica o uso da API externa e o fallback quando ela falha."""
     port = DummyPlacesPort()
     cached_adapter = CachedPlacesAdapter(
         api_key="test_google_key",
@@ -246,6 +258,7 @@ def test_cached_places_adapter_with_external_api_mock() -> None:
 
 
 def test_create_places_adapter_factory(tmp_path: Path) -> None:
+    """Verifica que a fábrica cria o adaptador com cache no caminho informado."""
     cache_file = tmp_path / "custom_cache.db"
     adapter = create_places_adapter(cache_path=cache_file)
     assert isinstance(adapter, CachedPlacesAdapter)

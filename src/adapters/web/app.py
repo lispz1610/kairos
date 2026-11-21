@@ -82,6 +82,8 @@ link_parser_service = LinkParserService(
 
 
 class OptimizeRequest(BaseModel):
+    """Corpo da requisição de otimização do Roteiro de um Dia de Viagem."""
+
     start_location: Coordinates
     end_location: Coordinates
     window: TimeWindow
@@ -92,12 +94,16 @@ class OptimizeRequest(BaseModel):
 
 
 class RippleShiftRequest(BaseModel):
+    """Corpo da requisição de prévia ou aplicação de Deslocamento em Cascata."""
+
     trip: Trip
     target_stage_id: str
     delta_days: int
 
 
 class DiningRecommendRequest(BaseModel):
+    """Corpo da requisição de recomendação de estabelecimentos gastronômicos."""
+
     reference_location: Coordinates
     candidates: List[POI]
     limit: int = 3
@@ -105,6 +111,8 @@ class DiningRecommendRequest(BaseModel):
 
 
 class ContextualDiningRequest(BaseModel):
+    """Corpo da requisição de geração de Slots de Refeição contextuais para o Roteiro."""
+
     departure_location: Coordinates
     return_location: Coordinates
     restaurant_candidates: List[POI]
@@ -116,6 +124,8 @@ class ContextualDiningRequest(BaseModel):
 
 
 class BudgetRequest(BaseModel):
+    """Corpo da requisição de cálculo da Estimativa de Gastos da viagem."""
+
     trip: Trip
     food_profile: str = "moderate"
 
@@ -241,8 +251,10 @@ class ReplanResponse(BaseModel):
 
 @app.post("/api/trip/replan", response_model=ReplanResponse)
 def trip_replan(request: ReplanRequest) -> ReplanResponse:
-    """Aplica os Eventos de Contingência ao Roteiro do Dia de Viagem e
-    devolve o Roteiro replanejado com métricas de impacto."""
+    """Aplicar os Eventos de Contingência ao Roteiro do Dia de Viagem.
+
+    Devolve o Roteiro replanejado com métricas de impacto.
+    """
     day = request.itinerary
     current_time = request.current_time
     closed_pois: list[str] = []
@@ -416,6 +428,8 @@ def search_places(query: str, city_name: Optional[str] = None) -> List[POI]:
 
 
 class ImportLinkRequest(BaseModel):
+    """Corpo da requisição de importação de curadoria a partir de URL ou texto."""
+
     url: Optional[str] = None
     text: Optional[str] = None
     city_name: Optional[str] = None

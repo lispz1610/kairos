@@ -6,6 +6,7 @@ client = TestClient(app)
 
 
 def test_dining_recommend_endpoint() -> None:
+    """Verifica que o endpoint prioriza o restaurante próximo e bem avaliado."""
     payload = {
         "reference_location": {"latitude": -23.5615, "longitude": -46.6559},
         "candidates": [
@@ -38,6 +39,7 @@ def test_dining_recommend_endpoint() -> None:
 
 
 def test_trip_budget_endpoint() -> None:
+    """Verifica a Estimativa de Gastos consolidada de hospedagem e alimentação da Viagem."""
     payload = {
         "trip": {
             "id": "trip-sp",
@@ -88,6 +90,7 @@ def test_trip_budget_endpoint() -> None:
 
 
 def test_trip_budget_endpoint_with_custom_food_profile_and_multiple_travelers() -> None:
+    """Verifica a Estimativa de Gastos por perfil alimentar e número de viajantes."""
     payload = {
         "trip": {
             "id": "trip-sp-group",
@@ -142,6 +145,7 @@ def test_trip_budget_endpoint_with_custom_food_profile_and_multiple_travelers() 
 
 
 def test_contextual_dining_slots_endpoint() -> None:
+    """Verifica os Slots de Refeição contextuais e as recomendações por Ponto de Interesse."""
     dep_hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
     ret_hotel_loc = {"latitude": -23.5700, "longitude": -46.6700}
 

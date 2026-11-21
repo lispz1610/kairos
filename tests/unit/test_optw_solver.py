@@ -21,12 +21,12 @@ from datetime import datetime, time, timedelta
 import hypothesis.strategies as st
 from hypothesis import given
 
-from src.core.domain.models import POI, Itinerary, TimeWindow
+from src.core.domain.models import POI, Accommodation, Coordinates, Itinerary, TimeWindow
 from src.core.services.schedule import ScheduleService
 from src.core.solvers.optw import OPTWSolver
 
 
-def _make_poi(poi_id, opening, closing, utility_score):
+def _make_poi(poi_id: str, opening: time, closing: time, utility_score: float) -> POI:
     return POI(
         id=poi_id,
         name=f"Ponto de Interesse {poi_id}",
@@ -36,11 +36,13 @@ def _make_poi(poi_id, opening, closing, utility_score):
     )
 
 
-def _assert_invariants(itinerary, availability_window):
-    """Invariantes universais da AC2: nenhuma visita fora do Horário de
-    Funcionamento do POI e do término do intervalo da Janela de Disponibilidade;
-    o Roteiro está em ordem cronológica e sem desvios reportados por
-    ``ScheduleService``."""
+def _assert_invariants(itinerary: Itinerary, availability_window: TimeWindow) -> None:
+    """Valida as invariantes universais da AC2.
+
+    Nenhuma visita fora do Horário de Funcionamento do POI e do término do
+    intervalo da Janela de Disponibilidade; o Roteiro está em ordem cronológica
+    e sem desvios reportados por ``ScheduleService``.
+    """
     for stop in itinerary.stops:
         visit_end = stop.start + timedelta(minutes=stop.duration_minutes)
         operating_window = stop.poi.operating_window
@@ -54,6 +56,7 @@ def _assert_invariants(itinerary, availability_window):
 
 
 def test_ac1_ac2_rota_dentro_do_horario_de_funcionamento_e_da_janela():
+    """Valida que a rota respeita horários de funcionamento e janela de disponibilidade."""
     availability = TimeWindow(start=time(8, 0), end=time(18, 0))
     start_time = datetime(2026, 11, 20, 9, 0)
     poi_a = _make_poi("POI-A", time(9, 0), time(10, 30), utility_score=10.0)
@@ -68,6 +71,7 @@ def test_ac1_ac2_rota_dentro_do_horario_de_funcionamento_e_da_janela():
 
 
 def test_sem_pois_candidatos_retorna_roteiro_vazio():
+    """Valida que lista vazia de POIs retorna roteiro vazio."""
     availability = TimeWindow(start=time(8, 0), end=time(18, 0))
     start_time = datetime(2026, 11, 20, 9, 0)
 
@@ -80,6 +84,7 @@ def test_sem_pois_candidatos_retorna_roteiro_vazio():
 
 
 def test_rota_visita_todos_os_pois_candidatos_quando_viáveis():
+    """Valida visitação de todos os POIs quando viáveis."""
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     start_time = datetime(2026, 11, 20, 9, 0)
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=5.0)
@@ -94,6 +99,7 @@ def test_rota_visita_todos_os_pois_candidatos_quando_viáveis():
 
 
 def test_visita_fora_do_horario_de_funcionamento_não_é_agendada():
+    """Valida que POI fora do horário de funcionamento não é agendado."""
     availability = TimeWindow(start=time(8, 0), end=time(18, 0))
     start_time = datetime(2026, 11, 20, 9, 0)
     poi = _make_poi("POI-A", time(9, 30), time(10, 0), utility_score=5.0)
@@ -107,6 +113,7 @@ def test_visita_fora_do_horario_de_funcionamento_não_é_agendada():
 
 
 def test_janela_de_disponibilidade_limitante_bloqueia_visita():
+    """Valida que janela de disponibilidade limitante restringe visitas."""
     availability = TimeWindow(start=time(8, 0), end=time(8, 20))
     start_time = datetime(2026, 11, 20, 8, 0)
     poi_a = _make_poi("POI-01", time(8, 0), time(23, 0), utility_score=10.0)
@@ -121,6 +128,7 @@ def test_janela_de_disponibilidade_limitante_bloqueia_visita():
 
 
 def test_itinerário_está_em_ordem_cronológica():
+    """Valida que as paradas do roteiro seguem estrita ordem cronológica."""
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     start_time = datetime(2026, 11, 20, 9, 0)
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=5.0)
@@ -135,6 +143,7 @@ def test_itinerário_está_em_ordem_cronológica():
 
 
 def test_início_padrão_usa_o_início_da_janela_de_disponibilidade():
+    """Valida que a ausência de start_time adota o início da janela de disponibilidade."""
     availability = TimeWindow(start=time(9, 0), end=time(12, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(11, 0), utility_score=5.0)
 
@@ -164,6 +173,7 @@ def _poi_strategy(draw):
     st.integers(min_value=0, max_value=30),
 )
 def test_propriedade_invariantes_ac2(pois, travel_minutes):
+    """Teste de propriedade para as invariantes universais AC2 com start_time explícito."""
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     start_time = datetime(2026, 11, 20, 8, 0)
 
@@ -179,8 +189,176 @@ def test_propriedade_invariantes_ac2(pois, travel_minutes):
     st.integers(min_value=0, max_value=30),
 )
 def test_propriedade_invariantes_ac2_início_padrão(pois, travel_minutes):
+    """Teste de propriedade para as invariantes universais AC2 com início padrão."""
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
 
     itinerary = OPTWSolver.solve(pois, availability, float(travel_minutes))
 
     _assert_invariants(itinerary, availability)
+
+
+def test_optw_solver_respects_time_budget_and_depots() -> None:
+    """Verifica que o solver respeita orçamento temporal e pontos de partida e retorno."""
+    hotel_a = Accommodation(
+        id="hotel-a",
+        name="Hotel A (Partida)",
+        location=Coordinates(latitude=-23.5505, longitude=-46.6333),
+    )
+    hotel_b = Accommodation(
+        id="hotel-b",
+        name="Hotel B (Retorno)",
+        location=Coordinates(latitude=-23.5600, longitude=-46.6500),
+    )
+
+    # 3 POIs with varying utilities and locations
+    poi1 = POI(
+        id="poi-1",
+        name="Museu de Arte",
+        location=Coordinates(latitude=-23.5615, longitude=-46.6559),
+        window=TimeWindow(start_time=time(10, 0), end_time=time(18, 0)),
+        stay_duration_minutes=90,
+        utility_score=10.0,
+    )
+    poi2 = POI(
+        id="poi-2",
+        name="Parque Central",
+        location=Coordinates(latitude=-23.5874, longitude=-46.6576),
+        window=TimeWindow(start_time=time(8, 0), end_time=time(20, 0)),
+        stay_duration_minutes=60,
+        utility_score=7.0,
+    )
+    poi3 = POI(
+        id="poi-3",
+        name="Atração Distante",
+        location=Coordinates(latitude=-23.9000, longitude=-46.9000),
+        window=TimeWindow(start_time=time(14, 0), end_time=time(16, 0)),
+        stay_duration_minutes=120,
+        utility_score=1.0,
+    )
+
+    solver = OPTWSolver()
+    itinerary = solver.solve(
+        start_location=hotel_a.location,
+        end_location=hotel_b.location,
+        window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
+        candidates=[poi1, poi2, poi3],
+    )
+
+    assert len(itinerary.stops) >= 1
+    assert itinerary.total_utility >= 10.0
+    # The distant POI with low utility should be pruned if time is tight
+    stop_ids = [stop.poi.id for stop in itinerary.stops]
+    assert "poi-1" in stop_ids
+    # Check stops are in order and non-overlapping
+    for i in range(len(itinerary.stops)):
+        stop = itinerary.stops[i]
+        assert stop.arrival_time <= stop.departure_time
+        if i > 0:
+            prev_stop = itinerary.stops[i - 1]
+            assert prev_stop.departure_time <= stop.arrival_time
+
+
+def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
+    """Verifica que a busca local 2-opt e troca desentrelaça a ordem dos Pontos de Interesse."""
+    start_loc = Coordinates(latitude=0.0, longitude=0.0)
+    end_loc = Coordinates(latitude=0.0, longitude=0.06)
+
+    # Placing POIs in a geometry where greedy insertion order can be optimized by 2-opt/swap
+    # Coordinates along a line: A(0.01), B(0.05), C(0.02), D(0.04)
+    # If visited 0 -> B -> A -> D -> C -> end, total distance is much higher
+    # than 0 -> A -> C -> D -> B -> end
+    poi_a = POI(
+        id="poi-a",
+        name="Ponto de Interesse A",
+        location=Coordinates(latitude=0.0, longitude=0.01),
+        window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
+        stay_duration_minutes=30,
+        utility_score=10.0,
+    )
+    poi_b = POI(
+        id="poi-b",
+        name="Ponto de Interesse B",
+        location=Coordinates(latitude=0.0, longitude=0.05),
+        window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
+        stay_duration_minutes=30,
+        utility_score=10.0,
+    )
+    poi_c = POI(
+        id="poi-c",
+        name="Ponto de Interesse C",
+        location=Coordinates(latitude=0.0, longitude=0.02),
+        window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
+        stay_duration_minutes=30,
+        utility_score=10.0,
+    )
+    poi_d = POI(
+        id="poi-d",
+        name="Ponto de Interesse D",
+        location=Coordinates(latitude=0.0, longitude=0.04),
+        window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
+        stay_duration_minutes=30,
+        utility_score=10.0,
+    )
+
+    solver = OPTWSolver(transit_speed_kmh=20.0)
+    itinerary = solver.solve(
+        start_location=start_loc,
+        end_location=end_loc,
+        window=TimeWindow(start_time=time(9, 0), end_time=time(18, 0)),
+        candidates=[poi_a, poi_b, poi_c, poi_d],
+    )
+
+    assert len(itinerary.stops) == 4
+    assert itinerary.total_utility == 40.0
+
+    # Ensure monotonic sequence along longitude due to 2-opt / swap untangling
+    longitudes = [s.poi.location.longitude for s in itinerary.stops]
+    assert longitudes == sorted(longitudes)
+
+
+def test_optw_solver_blocks_attractions_during_reserved_slots() -> None:
+    """Verifica que nenhum Ponto de Interesse sobrepõe Slots de Refeição reservados."""
+    start_loc = Coordinates(latitude=-23.5505, longitude=-46.6333)
+    end_loc = Coordinates(latitude=-23.5600, longitude=-46.6500)
+
+    # 4 reserved slots: almoço, café, wine bar, jantar
+    lunch = TimeWindow(start_time=time(12, 30), end_time=time(14, 0))
+    coffee = TimeWindow(start_time=time(15, 30), end_time=time(16, 15))
+    wine = TimeWindow(start_time=time(18, 0), end_time=time(19, 15))
+    dinner = TimeWindow(start_time=time(19, 30), end_time=time(21, 0))
+    reserved = [lunch, coffee, wine, dinner]
+
+    # POIs spanning throughout the day
+    pois = [
+        POI(
+            id=f"poi-{i}",
+            name=f"Atração {i}",
+            location=Coordinates(latitude=-23.5510 - (i * 0.005), longitude=-46.6350 - (i * 0.005)),
+            window=TimeWindow(start_time=time(9, 0), end_time=time(21, 0)),
+            stay_duration_minutes=60,
+            utility_score=5.0 + i,
+        )
+        for i in range(6)
+    ]
+
+    solver = OPTWSolver()
+    itinerary = solver.solve(
+        start_location=start_loc,
+        end_location=end_loc,
+        window=TimeWindow(start_time=time(9, 0), end_time=time(21, 30)),
+        candidates=pois,
+        reserved_slots=reserved,
+    )
+
+    assert len(itinerary.stops) >= 2
+
+    # Check zero overlap with any reserved slot
+    for stop in itinerary.stops:
+        for slot in reserved:
+            overlap = max(stop.arrival_time, slot.start_time) < min(
+                stop.departure_time, slot.end_time
+            )
+            assert not overlap, (
+                f"Ponto de Interesse {stop.poi.name} ({stop.arrival_time}-{stop.departure_time}) "
+                f"sobrepõe slot reservado ({slot.start_time}-{slot.end_time})"
+            )

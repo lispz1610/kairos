@@ -40,6 +40,7 @@ class DelayEvent(BaseModel):
 
     @model_serializer(mode="wrap")
     def serialize_model(self, handler: Any) -> Any:
+        """Serializar modelo customizando a representação de coordenadas."""
         data = handler(self)
         # Serialize coordinates as tuple
         if "coordinates" in data:
