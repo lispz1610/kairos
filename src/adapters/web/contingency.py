@@ -4,11 +4,17 @@
 Dia de Viagem, o horário atual e um Evento de Contingência (de #35), devolve
 ``(new_current_time, closed_pois, skipped_pois, adjusted_duration_minutes)``
 — os valores que alimentam ``ReplanningService.replan``.
+
+``to_domain_event`` e ``orchestrate_trip_replan`` isolam da camada HTTP a
+conversão dos pedidos de Evento de Contingência e a orquestração sequencial do
+Replanejamento.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
+from typing import Literal, Protocol, cast
 
 from src.core.domain.events import (
     ClosureEvent,
@@ -16,12 +22,50 @@ from src.core.domain.events import (
     DurationAdjustmentEvent,
     SkipStopEvent,
 )
-from src.core.domain.models import Itinerary
+from src.core.domain.models import (
+    Coordinates,
+    InterCityConnection,
+    Itinerary,
+    ItineraryStop,
+    RouteStop,
+    TimeWindow,
+)
+from src.core.services.replanning import ReplanningService, ReplanResult
 
-__all__ = ["ContingencyEvent", "apply_contingency_event"]
+__all__ = [
+    "ContingencyEvent",
+    "ContingencyEventInput",
+    "apply_contingency_event",
+    "orchestrate_trip_replan",
+    "to_domain_event",
+]
 
 ContingencyEvent = DelayEvent | ClosureEvent | SkipStopEvent | DurationAdjustmentEvent
 """Union dos Eventos de Contingência aplicáveis ao Roteiro do Dia de Viagem."""
+
+
+class ContingencyEventInput(Protocol):
+    """Contrato estrutural para entrada de Evento de Contingência da camada HTTP."""
+
+    @property
+    def type(self) -> Literal["delay", "closure", "skip", "duration_adjustment"]:
+        """Tipo do Evento de Contingência."""
+        ...
+
+    @property
+    def poi_id(self) -> str | None:
+        """Identificação do POI afetado pelo Evento, quando aplicável."""
+        ...
+
+    @property
+    def delay_minutes(self) -> int | None:
+        """Minutos de atraso a partir do horário atual (Evento ``delay``)."""
+        ...
+
+    @property
+    def new_duration_minutes(self) -> int | None:
+        """Novo Tempo de Permanência em minutos (Evento ``duration_adjustment``)."""
+        ...
 
 
 def apply_contingency_event(
@@ -51,3 +95,70 @@ def apply_contingency_event(
     if isinstance(event, SkipStopEvent):
         return current_time, [], [event.poi_id], None
     return current_time, [], [], event.new_duration_minutes
+
+
+def to_domain_event(
+    event_req: ContingencyEventInput,
+    current_time: datetime,
+    coordinates: Coordinates,
+) -> ContingencyEvent:
+    """Construir o Evento de Contingência de domínio a partir da entrada HTTP."""
+    if event_req.type == "delay":
+        return DelayEvent(
+            delay_minutes=cast(int, event_req.delay_minutes),
+            current_time=current_time,
+            coordinates=coordinates,
+        )
+    if event_req.type == "closure":
+        return ClosureEvent(poi_id=cast(str, event_req.poi_id))
+    if event_req.type == "skip":
+        return SkipStopEvent(poi_id=cast(str, event_req.poi_id))
+    return DurationAdjustmentEvent(
+        poi_id=cast(str, event_req.poi_id),
+        new_duration_minutes=cast(int, event_req.new_duration_minutes),
+    )
+
+
+def orchestrate_trip_replan(
+    *,
+    itinerary: Itinerary,
+    availability_window: TimeWindow,
+    current_time: datetime,
+    current_coordinate: Coordinates,
+    events: Sequence[ContingencyEventInput] = (),
+    reserved_future_stops: Sequence[RouteStop | ItineraryStop] = (),
+    closed_pois: Sequence[str] = (),
+    skipped_pois: Sequence[str] = (),
+    intercity_connection: InterCityConnection | None = None,
+    travel_time_minutes: float = 15.0,
+) -> ReplanResult:
+    """Aplicar sequência de Eventos de Contingência e executar o Replanejamento."""
+    effective_time = current_time
+    event_closed_pois: list[str] = []
+    event_skipped_pois: list[str] = []
+    duration_adjustments: dict[str, int] = {}
+    for event_req in events:
+        event = to_domain_event(event_req, effective_time, current_coordinate)
+        effective_time, event_closed, event_skipped, _ = apply_contingency_event(
+            itinerary, effective_time, event
+        )
+        event_closed_pois.extend(event_closed)
+        event_skipped_pois.extend(event_skipped)
+        if isinstance(event, DurationAdjustmentEvent):
+            duration_adjustments[event.poi_id] = event.new_duration_minutes
+    return ReplanningService.replan(
+        itinerary=itinerary,
+        availability_window=availability_window,
+        current_time=effective_time,
+        travel_time_minutes=travel_time_minutes,
+        coordinates=current_coordinate,
+        intercity_connection=intercity_connection,
+        excluded_pois=[
+            *closed_pois,
+            *event_closed_pois,
+            *skipped_pois,
+            *event_skipped_pois,
+        ],
+        reserved_future_stops=reserved_future_stops,
+        duration_adjustments=duration_adjustments,
+    )

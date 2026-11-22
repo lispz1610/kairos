@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import List, Literal, Optional, cast
+from typing import List, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -14,13 +14,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from src.adapters.http.safe_fetcher import SafeHttpFetcher
 from src.adapters.places import create_places_adapter
-from src.adapters.web.contingency import ContingencyEvent, apply_contingency_event
-from src.core.domain.events import (
-    ClosureEvent,
-    DelayEvent,
-    DurationAdjustmentEvent,
-    SkipStopEvent,
-)
+from src.adapters.web.contingency import orchestrate_trip_replan
+from src.adapters.web.contingency import to_domain_event as _to_domain_event
 from src.core.domain.models import (
     POI,
     Coordinates,
@@ -37,11 +32,7 @@ from src.core.services.curation import CurationService
 from src.core.services.dining_and_budget import BudgetSummary, DiningService
 from src.core.services.link_parser import LinkParserService, SSRFValidationError
 from src.core.services.markdown_export import MarkdownExportService
-from src.core.services.replanning import (
-    InterCityRiskAlert,
-    ReplanningService,
-    ReplanResult,
-)
+from src.core.services.replanning import InterCityRiskAlert, ReplanResult
 from src.core.services.schedule import RippleShiftPreview, ScheduleService
 from src.core.solvers.optw import OPTWSolver
 
@@ -255,65 +246,23 @@ def trip_replan(request: ReplanRequest) -> ReplanResponse:
 
     Devolve o Roteiro replanejado com métricas de impacto.
     """
-    day = request.itinerary
-    current_time = request.current_time
-    closed_pois: list[str] = []
-    skipped_pois: list[str] = []
-    duration_adjustments: dict[str, int] = {}
-    for event_req in request.events:
-        event = _to_domain_event(
-            event_req, current_time, request.current_coordinate
-        )
-        current_time, event_closed, event_skipped, _ = apply_contingency_event(
-            day, current_time, event
-        )
-        closed_pois.extend(event_closed)
-        skipped_pois.extend(event_skipped)
-        if isinstance(event, DurationAdjustmentEvent):
-            duration_adjustments[event.poi_id] = event.new_duration_minutes
-    result: ReplanResult = ReplanningService.replan(
-        itinerary=day,
+    result: ReplanResult = orchestrate_trip_replan(
+        itinerary=request.itinerary,
         availability_window=request.availability_window,
-        current_time=current_time,
-        travel_time_minutes=request.travel_time_minutes,
-        coordinates=request.current_coordinate,
-        intercity_connection=request.intercity_connection,
-        excluded_pois=[
-            *request.closed_pois,
-            *closed_pois,
-            *request.skipped_pois,
-            *skipped_pois,
-        ],
+        current_time=request.current_time,
+        current_coordinate=request.current_coordinate,
+        events=request.events,
         reserved_future_stops=request.reserved_future_stops,
-        duration_adjustments=duration_adjustments,
+        closed_pois=request.closed_pois,
+        skipped_pois=request.skipped_pois,
+        intercity_connection=request.intercity_connection,
+        travel_time_minutes=request.travel_time_minutes,
     )
     return ReplanResponse(
         itinerary=result.itinerary.stops,
         preserved_pois=result.preserved_pois,
         removed_pois=result.removed_pois,
         intercity_risk_alert=result.intercity_risk_alert,
-    )
-
-
-def _to_domain_event(
-    event_req: ContingencyEventRequest,
-    current_time: datetime,
-    coordinates: Coordinates,
-) -> ContingencyEvent:
-    """Constrói o Evento de Contingência de domínio a partir do Evento da requisição."""
-    if event_req.type == "delay":
-        return DelayEvent(
-            delay_minutes=cast(int, event_req.delay_minutes),
-            current_time=current_time,
-            coordinates=coordinates,
-        )
-    if event_req.type == "closure":
-        return ClosureEvent(poi_id=cast(str, event_req.poi_id))
-    if event_req.type == "skip":
-        return SkipStopEvent(poi_id=cast(str, event_req.poi_id))
-    return DurationAdjustmentEvent(
-        poi_id=cast(str, event_req.poi_id),
-        new_duration_minutes=cast(int, event_req.new_duration_minutes),
     )
 
 

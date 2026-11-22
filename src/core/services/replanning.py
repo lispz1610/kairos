@@ -131,16 +131,9 @@ class ReplanningService:
             POIs removidos/substituídos e Alerta de Risco de Conexão Interurbana,
             quando o retorno/embarque não couber antes do limite operacional.
         """
-        preserved: list[StopUnion] = ReplanningService._preserved_stops(itinerary, current_time)
-        reserved: list[StopUnion] = list(reserved_future_stops)
-        if duration_adjustments:
-            preserved = ReplanningService._with_adjusted_durations(
-                preserved, duration_adjustments
-            )
-            reserved = ReplanningService._with_adjusted_durations(
-                reserved, duration_adjustments
-            )
-        prefix: list[StopUnion] = sorted(preserved + reserved, key=lambda stop: stop.start)
+        prefix = ReplanningService._build_prefix_stops(
+            itinerary, current_time, reserved_future_stops, duration_adjustments
+        )
         prefix_ids = {stop.poi.id for stop in prefix}
 
         replan_start = ReplanningService._replan_start(
@@ -153,25 +146,23 @@ class ReplanningService:
             intercity_connection, window_end, replan_start
         )
 
-        solver_route = Itinerary(stops=[])
-        if ReplanningService._can_solve(
-            alert, replan_start, availability_window, intercity_connection
-        ):
-            excluded_ids = set(excluded_pois)
-            candidates = [
-                stop.poi
-                for stop in itinerary.stops
-                if stop.poi.id not in prefix_ids and stop.poi.id not in excluded_ids
-            ]
-            solver_window = TimeWindow(start_time=availability_window.start, end_time=window_end)
-            solver_route = OPTWSolver.replan_remaining(
-                candidates,
-                solver_window,
-                travel_time_minutes,
-                start_time=replan_start,
-                visit_durations=duration_adjustments,
-                start_location=coordinates,
+        solver_route = (
+            ReplanningService._solve_remaining_window(
+                itinerary=itinerary,
+                prefix_ids=prefix_ids,
+                excluded_pois=excluded_pois,
+                availability_window=availability_window,
+                window_end=window_end,
+                travel_time_minutes=travel_time_minutes,
+                replan_start=replan_start,
+                duration_adjustments=duration_adjustments,
+                coordinates=coordinates,
             )
+            if ReplanningService._can_solve(
+                alert, replan_start, availability_window, intercity_connection
+            )
+            else Itinerary(stops=[])
+        )
 
         # Roteiro replanado em ordem cronológica: o solver pode agendar POIs
         # antes de Slots de Refeição futuros reservados, e o Roteiro permanece
@@ -186,6 +177,58 @@ class ReplanningService:
             preserved_pois=[stop.poi.id for stop in prefix],
             removed_pois=removed_pois,
             intercity_risk_alert=alert,
+        )
+
+    @staticmethod
+    def _build_prefix_stops(
+        itinerary: Itinerary,
+        current_time: datetime,
+        reserved_future_stops: Sequence[StopUnion],
+        duration_adjustments: Mapping[str, int] | None,
+    ) -> list[StopUnion]:
+        """Construir lista cronológica de paradas preservadas e futuras reservadas."""
+        preserved: list[StopUnion] = ReplanningService._preserved_stops(
+            itinerary, current_time
+        )
+        reserved: list[StopUnion] = list(reserved_future_stops)
+        if duration_adjustments:
+            preserved = ReplanningService._with_adjusted_durations(
+                preserved, duration_adjustments
+            )
+            reserved = ReplanningService._with_adjusted_durations(
+                reserved, duration_adjustments
+            )
+        return sorted(preserved + reserved, key=lambda stop: stop.start)
+
+    @staticmethod
+    def _solve_remaining_window(
+        itinerary: Itinerary,
+        prefix_ids: set[str],
+        excluded_pois: Sequence[str],
+        availability_window: TimeWindow,
+        window_end: time,
+        travel_time_minutes: float,
+        replan_start: datetime,
+        duration_adjustments: Mapping[str, int] | None,
+        coordinates: Coordinates,
+    ) -> Itinerary:
+        """Filtrar POIs elegíveis e reotimizar a janela restante via ``OPTWSolver``."""
+        excluded_ids = set(excluded_pois)
+        candidates = [
+            stop.poi
+            for stop in itinerary.stops
+            if stop.poi.id not in prefix_ids and stop.poi.id not in excluded_ids
+        ]
+        solver_window = TimeWindow(
+            start_time=availability_window.start, end_time=window_end
+        )
+        return OPTWSolver.replan_remaining(
+            candidates,
+            solver_window,
+            travel_time_minutes,
+            start_time=replan_start,
+            visit_durations=duration_adjustments,
+            start_location=coordinates,
         )
 
     @staticmethod
