@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
-from typing import Any, List
+from typing import List
 
 from pydantic import BaseModel
 
@@ -9,6 +9,8 @@ from src.core.domain.models import (
     POI,
     InterCityConnection,
     Itinerary,
+    ItineraryStop,
+    RouteStop,
     TimeWindow,
     Trip,
     TripDay,
@@ -172,15 +174,17 @@ class ScheduleService:
                 )
 
     @staticmethod
-    def _normalize_stop_window(stop: Any) -> tuple[datetime, datetime] | None:
+    def _normalize_stop_window(
+        stop: RouteStop | ItineraryStop,
+    ) -> tuple[datetime, datetime] | None:
         """Normaliza início e término de uma parada para datetime."""
-        if not hasattr(stop, "start") or not hasattr(stop, "duration_minutes"):
+        if not isinstance(stop, RouteStop):
             return None
-        raw_start = stop.start
-        if isinstance(raw_start, time) and not isinstance(raw_start, datetime):
-            start_datetime = datetime.combine(date.today(), raw_start)
-        else:
+        raw_start: datetime | time = stop.start
+        if isinstance(raw_start, datetime):
             start_datetime = raw_start
+        else:
+            start_datetime = datetime.combine(date.today(), raw_start)
         visit_end = start_datetime + timedelta(minutes=stop.duration_minutes)
         return (start_datetime, visit_end)
 
