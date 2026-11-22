@@ -18,17 +18,15 @@ class LinkParserService:
         curation_service: Optional[CurationService] = None,
         places_port: Optional[PlacesPort] = None,
     ) -> None:
-        """Inicializar o analisador com o buscador e o serviço de curadoria informados.
-
-        Quando não há serviço informado, cria um a partir da porta de lugares ou do padrão.
-        """
+        """Inicializa o analisador com o buscador e o serviço de curadoria ou porta de lugares."""
         self.fetcher = fetcher
+        self.curation_service: Optional[CurationService]
         if curation_service is not None:
             self.curation_service = curation_service
         elif places_port is not None:
             self.curation_service = CurationService(places_port=places_port)
         else:
-            self.curation_service = CurationService()
+            self.curation_service = None
 
     def validate_url_safety(self, url: str) -> None:
         """Delega a validação da URL à porta de busca configurada."""
@@ -46,6 +44,9 @@ class LinkParserService:
         self, text: str, city_name: Optional[str] = None
     ) -> List[POI]:
         """Extrair até oito Pontos de Interesse citados no texto, deduplicados por identificador."""
+        if self.curation_service is None:
+            raise RuntimeError("CurationService não configurado no LinkParserService.")
+
         candidates: List[POI] = []
         found_ids: set[str] = set()
 

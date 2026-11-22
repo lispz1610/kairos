@@ -9,6 +9,7 @@ from src.adapters.http.safe_fetcher import (
     PinnedIPTransport,
     SafeHttpFetcher,
 )
+from src.adapters.places import OfflineReplayPlacesAdapter
 from src.core.ports.fetcher import SSRFValidationError, UrlFetcherPort
 from src.core.services.link_parser import LinkParserService
 
@@ -216,9 +217,17 @@ def test_fetch_url_rejects_http_redirects() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_link_parser_service_requires_curation_service_for_extraction() -> None:
+    """Verifica que a extração falha sem CurationService ou PlacesPort configurados."""
+    parser = LinkParserService()
+
+    with pytest.raises(RuntimeError, match="CurationService não configurado"):
+        parser.extract_places_from_text("Coffee Lab em São Paulo")
+
+
 def test_text_extraction_identifies_matching_places() -> None:
     """Verifica a extração de Pontos de Interesse mencionados em texto livre."""
-    parser = LinkParserService()
+    parser = LinkParserService(places_port=OfflineReplayPlacesAdapter())
     sample_article = """
     Guia de São Paulo:
     Não deixe de visitar o Coffee Lab na Vila Madalena para provar cafés incríveis.
