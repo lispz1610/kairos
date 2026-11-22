@@ -6,6 +6,7 @@ descritivos (lista de strings).
 """
 
 from datetime import date, datetime, time
+from types import SimpleNamespace
 
 from src.core.domain.models import (
     POI,
@@ -13,6 +14,7 @@ from src.core.domain.models import (
     Coordinates,
     InterCityConnection,
     Itinerary,
+    ItineraryStop,
     RouteStop,
     TimeWindow,
     Trip,
@@ -158,3 +160,31 @@ def test_ripple_shift_extends_stage_and_shifts_subsequent_stages_and_connections
     assert updated_trip.stages[1].days[-1].date == date(2026, 11, 15)
 
     assert updated_trip.connections[0].departure_time == date(2026, 11, 11)
+
+
+def test_validate_itinerary_ignores_itinerary_stop_without_duration() -> None:
+    """Garante que paradas sem duration_minutes (ItineraryStop) são ignoradas."""
+    poi = make_poi(opening=time(9, 0), closing=time(12, 0))
+    availability = TimeWindow(start=time(9, 0), end=time(18, 0))
+    itinerary = Itinerary(
+        stops=[
+            ItineraryStop(poi=poi, arrival_time=time(8, 0), departure_time=time(8, 30)),
+            RouteStop(poi=poi, start=datetime(2026, 11, 20, 10, 0), duration_minutes=30),
+        ]
+    )
+
+    assert ScheduleService.validate_itinerary(itinerary, availability) == []
+
+
+def test_normalize_stop_window_supports_time_start() -> None:
+    """Garante que _normalize_stop_window converte stop.start do tipo time para datetime."""
+    stop = SimpleNamespace(start=time(10, 0), duration_minutes=45)
+
+    normalized = ScheduleService._normalize_stop_window(stop)
+
+    assert normalized is not None
+    start_dt, visit_end, start_t, end_t = normalized
+    assert start_dt.time() == time(10, 0)
+    assert visit_end.time() == time(10, 45)
+    assert start_t == time(10, 0)
+    assert end_t == time(10, 45)

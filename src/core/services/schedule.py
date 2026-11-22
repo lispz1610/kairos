@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
-from typing import List
+from typing import Any, List
 
 from pydantic import BaseModel
 
 from src.core.domain.models import (
+    POI,
     InterCityConnection,
     Itinerary,
     TimeWindow,
@@ -171,53 +172,75 @@ class ScheduleService:
                 )
 
     @staticmethod
+    def _normalize_stop_window(stop: Any) -> tuple[datetime, datetime, time, time] | None:
+        """Normaliza início e término de uma parada para datetime e time."""
+        if not hasattr(stop, "start") or not hasattr(stop, "duration_minutes"):
+            return None
+        raw_start = stop.start
+        if isinstance(raw_start, time) and not isinstance(raw_start, datetime):
+            start_datetime = datetime.combine(date.today(), raw_start)
+        else:
+            start_datetime = raw_start
+        visit_end = start_datetime + timedelta(minutes=stop.duration_minutes)
+        return (start_datetime, visit_end, start_datetime.time(), visit_end.time())
+
+    @staticmethod
+    def _validate_stop_against_windows(
+        poi: POI,
+        start_datetime: datetime,
+        visit_end: datetime,
+        start_time: time,
+        visit_end_time: time,
+        availability_window: TimeWindow,
+    ) -> list[str]:
+        """Verifica os quatro limites das janelas de funcionamento e disponibilidade."""
+        deviations: list[str] = []
+        operating_window = poi.operating_window
+        if start_time < operating_window.start:
+            deviations.append(
+                f"Visita ao POI {poi.id} ({poi.name}) iniciada em "
+                f"{start_datetime:%d/%m/%Y %H:%M} antes do início do horário de "
+                f"funcionamento do POI ({operating_window.start:%H:%M})."
+            )
+        if visit_end_time > operating_window.end:
+            deviations.append(
+                f"Visita ao POI {poi.id} ({poi.name}) encerrada em "
+                f"{visit_end:%d/%m/%Y %H:%M} após o fechamento do horário de "
+                f"funcionamento do POI ({operating_window.end:%H:%M})."
+            )
+        if start_time < availability_window.start:
+            deviations.append(
+                f"Visita ao POI {poi.id} ({poi.name}) iniciada em "
+                f"{start_datetime:%d/%m/%Y %H:%M} antes do início da Janela de "
+                f"Disponibilidade ({availability_window.start:%H:%M})."
+            )
+        if visit_end_time > availability_window.end:
+            deviations.append(
+                f"Visita ao POI {poi.id} ({poi.name}) encerrada em "
+                f"{visit_end:%d/%m/%Y %H:%M} após o término da Janela de "
+                f"Disponibilidade ({availability_window.end:%H:%M})."
+            )
+        return deviations
+
+    @staticmethod
     def validate_itinerary(
         itinerary: Itinerary, availability_window: TimeWindow
     ) -> list[str]:
         """Valida visitas no formato legado de contingência."""
         deviations: list[str] = []
         for stop in itinerary.stops:
-            if not hasattr(stop, "start") or not hasattr(stop, "duration_minutes"):
+            normalized = ScheduleService._normalize_stop_window(stop)
+            if normalized is None:
                 continue
-            poi = stop.poi
-            # Handle both time and datetime for stop.start
-            start_time = stop.start
-            if isinstance(start_time, time) and not isinstance(start_time, datetime):
-                # Convert time to datetime for calculation
-                start_datetime = datetime.combine(date.today(), start_time)
-            else:
-                start_datetime = start_time
-            visit_end = start_datetime + timedelta(minutes=stop.duration_minutes)
-            operating_window = poi.operating_window
-            # Extract time for comparison
-            start_time = (
-                start_datetime.time() if isinstance(start_datetime, datetime) else start_time
+            start_datetime, visit_end, start_time, visit_end_time = normalized
+            deviations.extend(
+                ScheduleService._validate_stop_against_windows(
+                    stop.poi,
+                    start_datetime,
+                    visit_end,
+                    start_time,
+                    visit_end_time,
+                    availability_window,
+                )
             )
-            visit_end_time = (
-                visit_end.time() if isinstance(visit_end, datetime) else visit_end
-            )
-            if start_time < operating_window.start:
-                deviations.append(
-                    f"Visita ao POI {poi.id} ({poi.name}) iniciada em "
-                    f"{start_datetime:%d/%m/%Y %H:%M} antes do início do horário de "
-                    f"funcionamento do POI ({operating_window.start:%H:%M})."
-                )
-            if visit_end_time > operating_window.end:
-                deviations.append(
-                    f"Visita ao POI {poi.id} ({poi.name}) encerrada em "
-                    f"{visit_end:%d/%m/%Y %H:%M} após o fechamento do horário de "
-                    f"funcionamento do POI ({operating_window.end:%H:%M})."
-                )
-            if start_time < availability_window.start:
-                deviations.append(
-                    f"Visita ao POI {poi.id} ({poi.name}) iniciada em "
-                    f"{start_datetime:%d/%m/%Y %H:%M} antes do início da Janela de "
-                    f"Disponibilidade ({availability_window.start:%H:%M})."
-                )
-            if visit_end_time > availability_window.end:
-                deviations.append(
-                    f"Visita ao POI {poi.id} ({poi.name}) encerrada em "
-                    f"{visit_end:%d/%m/%Y %H:%M} após o término da Janela de "
-                    f"Disponibilidade ({availability_window.end:%H:%M})."
-                )
         return deviations
