@@ -84,46 +84,77 @@ run_fast_gate() {
   ' "$work_dir/pytest.log")"
 }
 
+resolve_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    printf 'python3\n'
+  else
+    printf 'python\n'
+  fi
+}
+
 run_mutation() {
   echo "==> [5/5] mutmut run (mutation testing restricted to src/core)"
   local mutmut_dir="$work_dir/mutmut"
+  local python_bin
+  python_bin="$(resolve_python)"
+
   mkdir -p "$mutmut_dir"
   cp -R src tests "$mutmut_dir/"
+  if [[ -d docs ]]; then
+    cp -R docs "$mutmut_dir/"
+  fi
   cp pyproject.toml "$mutmut_dir/pyproject.toml"
   if [[ -f README.md ]]; then
     cp README.md "$mutmut_dir/README.md"
   fi
+  find "$mutmut_dir" -type d -name "__pycache__" -exec rm -rf {} +
 
   # mutmut 3.x reads [tool.mutmut] from pyproject.toml in the current directory.
   # Generate that config in an isolated workspace so the repository's pyproject.toml
   # is never touched.
   #
-  # The project imports modules as `from src...`, but mutmut 3.x rejects mutating
-  # modules whose trampoline name starts with `src.`. Expose `core` and `adapters`
-  # as top-level packages for mutmut, while keeping a `src/` package shim so tests
-  # that import `from src...` resolve to the same files. Only `core` is mutated.
-  cp -R "$mutmut_dir/src/core" "$mutmut_dir/core"
-  cp -R "$mutmut_dir/src/adapters" "$mutmut_dir/adapters"
-  rm -rf "$mutmut_dir/src/core" "$mutmut_dir/src/adapters"
-  ln -s ../core "$mutmut_dir/src/core"
-  ln -s ../adapters "$mutmut_dir/src/adapters"
+  # mutmut 3.x rejects trampolines whose runtime __module__ starts with `src.`
+  # (record_trampoline_hit asserts `not name.startswith("src.")`), and its
+  # also_copy step dereferences symlinks into unmutated copies. In the isolated
+  # workspace, promote `core` and `adapters` to top-level packages and rewrite
+  # `from src.` / `import src.` imports to match, while preserving non-Python
+  # template assets under `src/adapters/web/templates` for contract tests.
+  mv "$mutmut_dir/src/core" "$mutmut_dir/core"
+  mv "$mutmut_dir/src/adapters" "$mutmut_dir/adapters"
+  rm -rf "$mutmut_dir/src"
+  if [[ -d "$mutmut_dir/adapters/web/templates" ]]; then
+    mkdir -p "$mutmut_dir/src/adapters/web"
+    cp -R "$mutmut_dir/adapters/web/templates" "$mutmut_dir/src/adapters/web/templates"
+  fi
 
-  printf '\n[tool.mutmut]\npaths_to_mutate = ["core"]\nalso_copy = ["src", "core", "adapters", "tests"]\n' >> "$mutmut_dir/pyproject.toml"
+  "$python_bin" - "$mutmut_dir" <<'PY'
+import pathlib
+import re
+import sys
+
+root = pathlib.Path(sys.argv[1])
+import_re = re.compile(r"^([ \t]*(?:from|import)[ \t]+)src\.", re.MULTILINE)
+for folder in ("core", "adapters", "tests"):
+    for py_file in (root / folder).rglob("*.py"):
+        text = py_file.read_text(encoding="utf-8")
+        updated = import_re.sub(r"\1", text)
+        if updated != text:
+            py_file.write_text(updated, encoding="utf-8")
+PY
+
+  printf '\n[tool.mutmut]\nsource_paths = ["core"]\nalso_copy = ["src", "adapters", "tests", "docs"]\n' >> "$mutmut_dir/pyproject.toml"
 
   (
     cd "$mutmut_dir"
-    PYTHONPATH="$mutmut_dir${PYTHONPATH:+:$PYTHONPATH}" mutmut run
+    mutmut run
     mutmut export-cicd-stats
   )
   mutation_stats="$mutmut_dir/mutants/mutmut-cicd-stats.json"
 }
 
 print_summary() {
-  if command -v python3 >/dev/null 2>&1; then
-    local python_bin=python3
-  else
-    local python_bin=python
-  fi
+  local python_bin
+  python_bin="$(resolve_python)"
 
   "$python_bin" - "$coverage" "$max_complexity" "$typing_errors" "$mutation_stats" <<'PY'
 import json
@@ -146,6 +177,7 @@ else:
     score = 0.0 if tested <= 0 else (killed + timeout) / tested * 100
     print(f"  Mutants killed:            {killed}")
     print(f"  Mutants survived:          {survived}")
+    print(f"  Mutants timeout:           {timeout}")
     print(f"  Mutation score (src/core): {score:.1f}% ({killed + timeout}/{tested} tested)")
 PY
 }
