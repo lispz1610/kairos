@@ -3,7 +3,11 @@
 Construção dos Eventos de Contingência a partir dos pedidos de Evento.
 """
 
+from dataclasses import dataclass
 from datetime import datetime, time
+from typing import Literal
+
+import pytest
 
 from src.adapters.web.app import ContingencyEventRequest, _to_domain_event
 from src.adapters.web.contingency import orchestrate_trip_replan, to_domain_event
@@ -100,3 +104,45 @@ def test_orchestrate_trip_replan_applies_events_in_sequence() -> None:
     assert result.preserved_pois == ["POI-A"]
     assert result.removed_pois == ["POI-B"]
     assert result.intercity_risk_alert is None
+
+
+@dataclass
+class _StubContingencyInput:
+    """Stub de entrada que permite valores None em campos obrigatórios."""
+
+    type: Literal["delay", "closure", "skip", "duration_adjustment"]
+    poi_id: str | None = None
+    delay_minutes: int | None = None
+    new_duration_minutes: int | None = None
+
+
+@pytest.mark.parametrize(
+    ("event_input", "missing_field"),
+    [
+        (_StubContingencyInput(type="delay", delay_minutes=None), "delay_minutes"),
+        (_StubContingencyInput(type="closure", poi_id=None), "poi_id"),
+        (_StubContingencyInput(type="skip", poi_id=None), "poi_id"),
+        (
+            _StubContingencyInput(
+                type="duration_adjustment", poi_id=None, new_duration_minutes=30
+            ),
+            "poi_id",
+        ),
+        (
+            _StubContingencyInput(
+                type="duration_adjustment", poi_id="POI-1", new_duration_minutes=None
+            ),
+            "new_duration_minutes",
+        ),
+    ],
+)
+def test_to_domain_event_rejects_missing_required_field(
+    event_input: _StubContingencyInput, missing_field: str
+) -> None:
+    """Verifica que to_domain_event rejeita entrada com campo obrigatório None."""
+    with pytest.raises(ValueError, match=missing_field):
+        to_domain_event(
+            event_input,
+            current_time=datetime(2026, 11, 21, 10, 0),
+            coordinates=(-23.5505, -46.6333),
+        )
