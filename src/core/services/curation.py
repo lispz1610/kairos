@@ -1,42 +1,22 @@
 from __future__ import annotations
 
-from typing import Callable, List, Optional
+from typing import List, Optional
 
 from src.core.domain.models import POI, CurationList
 from src.core.ports.places import PlacesPort
-
-_default_places_port_factory: Optional[Callable[[], PlacesPort]] = None
-
-
-def set_default_places_port_factory(
-    factory: Optional[Callable[[], PlacesPort]],
-) -> None:
-    """Registra uma fábrica padrão para criar instâncias de PlacesPort sem acoplar o Core."""
-    global _default_places_port_factory
-    _default_places_port_factory = factory
-
-
-def get_default_places_port_factory() -> Optional[Callable[[], PlacesPort]]:
-    """Retorna a fábrica padrão registrada para PlacesPort."""
-    return _default_places_port_factory
 
 
 class CurationService:
     """Gerencia listas de curadoria pública e listas personalizadas do usuário."""
 
-    def __init__(self, places_port: Optional[PlacesPort] = None) -> None:
-        """Inicializar o serviço com a porta informada ou a fábrica padrão registrada.
+    def __init__(self, places_port: PlacesPort) -> None:
+        """Inicializa o serviço exigindo uma implementação explícita de PlacesPort.
 
-        Levanta ValueError quando nenhuma das duas está disponível.
+        Levanta ValueError caso places_port seja None.
         """
-        if places_port is not None:
-            self.places_port = places_port
-        elif _default_places_port_factory is not None:
-            self.places_port = _default_places_port_factory()
-        else:
-            raise ValueError(
-                "places_port é obrigatório ou uma fábrica padrão deve ser configurada."
-            )
+        if places_port is None:
+            raise ValueError("places_port é obrigatório.")
+        self.places_port = places_port
 
     def get_suggested_curation_lists(self, city_name: str) -> List[CurationList]:
         """Retorna listas de curadoria sugeridas para a cidade especificada."""
