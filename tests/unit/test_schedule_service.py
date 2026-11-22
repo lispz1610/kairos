@@ -13,6 +13,7 @@ from src.core.domain.models import (
     Coordinates,
     InterCityConnection,
     Itinerary,
+    ItineraryStop,
     RouteStop,
     TimeWindow,
     Trip,
@@ -158,3 +159,42 @@ def test_ripple_shift_extends_stage_and_shifts_subsequent_stages_and_connections
     assert updated_trip.stages[1].days[-1].date == date(2026, 11, 15)
 
     assert updated_trip.connections[0].departure_time == date(2026, 11, 11)
+
+
+def test_validate_itinerary_ignores_itinerary_stop_without_duration() -> None:
+    """Garante que paradas sem duration_minutes (ItineraryStop) são ignoradas."""
+    poi = make_poi(opening=time(9, 0), closing=time(12, 0))
+    availability = TimeWindow(start=time(9, 0), end=time(18, 0))
+    itinerary = Itinerary(
+        stops=[
+            ItineraryStop(poi=poi, arrival_time=time(8, 0), departure_time=time(8, 30)),
+            RouteStop(poi=poi, start=datetime(2026, 11, 20, 10, 0), duration_minutes=30),
+        ]
+    )
+
+    assert ScheduleService.validate_itinerary(itinerary, availability) == []
+
+
+def test_validate_itinerary_supports_time_based_stop_start() -> None:
+    """Garante que validate_itinerary aceita paradas com start do tipo time."""
+    poi = make_poi(opening=time(9, 0), closing=time(12, 0))
+    availability = TimeWindow(start=time(9, 0), end=time(18, 0))
+    valid_stop = RouteStop.model_construct(
+        poi=poi, start=time(10, 0), duration_minutes=45
+    )
+    late_stop = RouteStop.model_construct(
+        poi=poi, start=time(11, 30), duration_minutes=45
+    )
+
+    assert (
+        ScheduleService.validate_itinerary(
+            Itinerary.model_construct(stops=[valid_stop]), availability
+        )
+        == []
+    )
+    deviations = ScheduleService.validate_itinerary(
+        Itinerary.model_construct(stops=[late_stop]), availability
+    )
+    assert len(deviations) == 1
+    assert "fechamento" in deviations[0]
+    assert "12:15" in deviations[0]

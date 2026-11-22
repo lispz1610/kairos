@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.adapters.places import (
     CachedPlacesAdapter,
     OfflineReplayPlacesAdapter,
@@ -68,9 +70,15 @@ def test_curation_service_with_injected_port() -> None:
     assert port.search_call_count == 1
 
 
-def test_curation_service_default_instantiation() -> None:
-    """Verifica que o serviço usa uma porta padrão com curadorias sugeridas."""
-    service = CurationService()
+def test_curation_service_requires_places_port() -> None:
+    """Verifica que o serviço exige PlacesPort e funciona com OfflineReplayPlacesAdapter."""
+    with pytest.raises(TypeError):
+        CurationService()  # type: ignore[call-arg]
+
+    with pytest.raises(ValueError, match="places_port é obrigatório."):
+        CurationService(places_port=None)  # type: ignore[arg-type]
+
+    service = CurationService(places_port=OfflineReplayPlacesAdapter())
     assert isinstance(service.places_port, PlacesPort)
     sp_lists = service.get_suggested_curation_lists("São Paulo")
     assert len(sp_lists) >= 3
@@ -78,7 +86,7 @@ def test_curation_service_default_instantiation() -> None:
 
 def test_apply_curation_boost_to_matching_pois() -> None:
     """Verifica o aumento da Pontuação de Utilidade apenas para Pontos de Interesse curados."""
-    service = CurationService()
+    service = CurationService(places_port=DummyPlacesPort())
     poi_michelin = POI(
         id="dom",
         name="D.O.M.",

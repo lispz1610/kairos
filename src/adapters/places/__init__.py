@@ -7,7 +7,6 @@ from typing import Optional
 from src.adapters.places.cached_adapter import CachedPlacesAdapter
 from src.adapters.places.offline_adapter import OfflineReplayPlacesAdapter
 from src.core.ports.places import PlacesPort
-from src.core.services.curation import set_default_places_port_factory
 
 
 def create_places_adapter(
@@ -22,10 +21,6 @@ def create_places_adapter(
         cache_path=cache_path,
         fallback_adapter=fallback_adapter,
     )
-
-
-# Registra a fábrica padrão para o CurationService sem que o core precise importar este módulo
-set_default_places_port_factory(create_places_adapter)
 
 
 __all__ = [
