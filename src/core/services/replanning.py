@@ -164,7 +164,7 @@ class ReplanningService:
                 if stop.poi.id not in prefix_ids and stop.poi.id not in excluded_ids
             ]
             solver_window = TimeWindow(start_time=availability_window.start, end_time=window_end)
-            solver_route = OPTWSolver.solve(
+            solver_route = OPTWSolver.replan_remaining(
                 candidates,
                 solver_window,
                 travel_time_minutes,
