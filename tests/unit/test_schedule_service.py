@@ -6,7 +6,6 @@ descritivos (lista de strings).
 """
 
 from datetime import date, datetime, time
-from types import SimpleNamespace
 
 from src.core.domain.models import (
     POI,
@@ -176,15 +175,26 @@ def test_validate_itinerary_ignores_itinerary_stop_without_duration() -> None:
     assert ScheduleService.validate_itinerary(itinerary, availability) == []
 
 
-def test_normalize_stop_window_supports_time_start() -> None:
-    """Garante que _normalize_stop_window converte stop.start do tipo time para datetime."""
-    stop = SimpleNamespace(start=time(10, 0), duration_minutes=45)
+def test_validate_itinerary_supports_time_based_stop_start() -> None:
+    """Garante que validate_itinerary aceita paradas com start do tipo time."""
+    poi = make_poi(opening=time(9, 0), closing=time(12, 0))
+    availability = TimeWindow(start=time(9, 0), end=time(18, 0))
+    valid_stop = RouteStop.model_construct(
+        poi=poi, start=time(10, 0), duration_minutes=45
+    )
+    late_stop = RouteStop.model_construct(
+        poi=poi, start=time(11, 30), duration_minutes=45
+    )
 
-    normalized = ScheduleService._normalize_stop_window(stop)
-
-    assert normalized is not None
-    start_dt, visit_end, start_t, end_t = normalized
-    assert start_dt.time() == time(10, 0)
-    assert visit_end.time() == time(10, 45)
-    assert start_t == time(10, 0)
-    assert end_t == time(10, 45)
+    assert (
+        ScheduleService.validate_itinerary(
+            Itinerary.model_construct(stops=[valid_stop]), availability
+        )
+        == []
+    )
+    deviations = ScheduleService.validate_itinerary(
+        Itinerary.model_construct(stops=[late_stop]), availability
+    )
+    assert len(deviations) == 1
+    assert "fechamento" in deviations[0]
+    assert "12:15" in deviations[0]

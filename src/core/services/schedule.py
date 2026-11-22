@@ -172,8 +172,8 @@ class ScheduleService:
                 )
 
     @staticmethod
-    def _normalize_stop_window(stop: Any) -> tuple[datetime, datetime, time, time] | None:
-        """Normaliza início e término de uma parada para datetime e time."""
+    def _normalize_stop_window(stop: Any) -> tuple[datetime, datetime] | None:
+        """Normaliza início e término de uma parada para datetime."""
         if not hasattr(stop, "start") or not hasattr(stop, "duration_minutes"):
             return None
         raw_start = stop.start
@@ -182,44 +182,35 @@ class ScheduleService:
         else:
             start_datetime = raw_start
         visit_end = start_datetime + timedelta(minutes=stop.duration_minutes)
-        return (start_datetime, visit_end, start_datetime.time(), visit_end.time())
+        return (start_datetime, visit_end)
 
     @staticmethod
     def _validate_stop_against_windows(
         poi: POI,
         start_datetime: datetime,
         visit_end: datetime,
-        start_time: time,
-        visit_end_time: time,
         availability_window: TimeWindow,
     ) -> list[str]:
         """Verifica os quatro limites das janelas de funcionamento e disponibilidade."""
+        start_time = start_datetime.time()
+        visit_end_time = visit_end.time()
         deviations: list[str] = []
-        operating_window = poi.operating_window
-        if start_time < operating_window.start:
-            deviations.append(
-                f"Visita ao POI {poi.id} ({poi.name}) iniciada em "
-                f"{start_datetime:%d/%m/%Y %H:%M} antes do início do horário de "
-                f"funcionamento do POI ({operating_window.start:%H:%M})."
-            )
-        if visit_end_time > operating_window.end:
-            deviations.append(
-                f"Visita ao POI {poi.id} ({poi.name}) encerrada em "
-                f"{visit_end:%d/%m/%Y %H:%M} após o fechamento do horário de "
-                f"funcionamento do POI ({operating_window.end:%H:%M})."
-            )
-        if start_time < availability_window.start:
-            deviations.append(
-                f"Visita ao POI {poi.id} ({poi.name}) iniciada em "
-                f"{start_datetime:%d/%m/%Y %H:%M} antes do início da Janela de "
-                f"Disponibilidade ({availability_window.start:%H:%M})."
-            )
-        if visit_end_time > availability_window.end:
-            deviations.append(
-                f"Visita ao POI {poi.id} ({poi.name}) encerrada em "
-                f"{visit_end:%d/%m/%Y %H:%M} após o término da Janela de "
-                f"Disponibilidade ({availability_window.end:%H:%M})."
-            )
+        for window, label, end_noun in (
+            (poi.operating_window, "do horário de funcionamento do POI", "fechamento"),
+            (availability_window, "da Janela de Disponibilidade", "término"),
+        ):
+            if start_time < window.start:
+                deviations.append(
+                    f"Visita ao POI {poi.id} ({poi.name}) iniciada em "
+                    f"{start_datetime:%d/%m/%Y %H:%M} antes do início {label} "
+                    f"({window.start:%H:%M})."
+                )
+            if visit_end_time > window.end:
+                deviations.append(
+                    f"Visita ao POI {poi.id} ({poi.name}) encerrada em "
+                    f"{visit_end:%d/%m/%Y %H:%M} após o {end_noun} {label} "
+                    f"({window.end:%H:%M})."
+                )
         return deviations
 
     @staticmethod
@@ -232,14 +223,12 @@ class ScheduleService:
             normalized = ScheduleService._normalize_stop_window(stop)
             if normalized is None:
                 continue
-            start_datetime, visit_end, start_time, visit_end_time = normalized
+            start_datetime, visit_end = normalized
             deviations.extend(
                 ScheduleService._validate_stop_against_windows(
                     stop.poi,
                     start_datetime,
                     visit_end,
-                    start_time,
-                    visit_end_time,
                     availability_window,
                 )
             )

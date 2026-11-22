@@ -125,7 +125,7 @@ class OPTWSolver:
         if not initial_itinerary.stops:
             return initial_itinerary
 
-        return self._local_search_legacy(
+        return self._local_search(
             initial_itinerary=initial_itinerary,
             remaining_candidates=remaining,
             start_location=start_location,
@@ -206,7 +206,7 @@ class OPTWSolver:
                 return (r_start, r_end)
         return None
 
-    def _is_feasible_legacy(
+    def _is_feasible_route(
         self,
         schedule: CandidateSchedule,
         poi: POI,
@@ -261,7 +261,7 @@ class OPTWSolver:
                 departure_min=dep_min,
                 transit_min=transit_min,
             )
-            if self._is_feasible_legacy(sched, poi, context):
+            if self._is_feasible_route(sched, poi, context):
                 return sched
             return None
 
@@ -552,7 +552,7 @@ class OPTWSolver:
 
         return None
 
-    def _local_search_legacy(
+    def _local_search(
         self,
         initial_itinerary: Itinerary,
         remaining_candidates: List[POI],
