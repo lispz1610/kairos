@@ -62,7 +62,7 @@ def test_ac1_ac2_rota_dentro_do_horario_de_funcionamento_e_da_janela():
     poi_a = _make_poi("POI-A", time(9, 0), time(10, 30), utility_score=10.0)
     poi_b = _make_poi("POI-B", time(9, 30), time(11, 0), utility_score=1.0)
 
-    itinerary = OPTWSolver.solve(
+    itinerary = OPTWSolver.replan_remaining(
         [poi_a, poi_b], availability, travel_time_minutes=15, start_time=start_time
     )
 
@@ -75,7 +75,7 @@ def test_sem_pois_candidatos_retorna_roteiro_vazio():
     availability = TimeWindow(start=time(8, 0), end=time(18, 0))
     start_time = datetime(2026, 11, 20, 9, 0)
 
-    itinerary = OPTWSolver.solve(
+    itinerary = OPTWSolver.replan_remaining(
         [], availability, travel_time_minutes=15, start_time=start_time
     )
 
@@ -90,7 +90,7 @@ def test_rota_visita_todos_os_pois_candidatos_quando_viáveis():
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=5.0)
     poi_b = _make_poi("POI-B", time(9, 0), time(12, 0), utility_score=3.0)
 
-    itinerary = OPTWSolver.solve(
+    itinerary = OPTWSolver.replan_remaining(
         [poi_a, poi_b], availability, travel_time_minutes=0, start_time=start_time
     )
 
@@ -104,7 +104,7 @@ def test_visita_fora_do_horario_de_funcionamento_não_é_agendada():
     start_time = datetime(2026, 11, 20, 9, 0)
     poi = _make_poi("POI-A", time(9, 30), time(10, 0), utility_score=5.0)
 
-    itinerary = OPTWSolver.solve(
+    itinerary = OPTWSolver.replan_remaining(
         [poi], availability, travel_time_minutes=0, start_time=start_time
     )
 
@@ -119,7 +119,7 @@ def test_janela_de_disponibilidade_limitante_bloqueia_visita():
     poi_a = _make_poi("POI-01", time(8, 0), time(23, 0), utility_score=10.0)
     poi_b = _make_poi("POI-02", time(8, 0), time(23, 0), utility_score=1.0)
 
-    itinerary = OPTWSolver.solve(
+    itinerary = OPTWSolver.replan_remaining(
         [poi_a, poi_b], availability, travel_time_minutes=30, start_time=start_time
     )
 
@@ -134,7 +134,7 @@ def test_itinerário_está_em_ordem_cronológica():
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=5.0)
     poi_b = _make_poi("POI-B", time(9, 0), time(12, 0), utility_score=3.0)
 
-    itinerary = OPTWSolver.solve(
+    itinerary = OPTWSolver.replan_remaining(
         [poi_a, poi_b], availability, travel_time_minutes=30, start_time=start_time
     )
 
@@ -147,7 +147,7 @@ def test_início_padrão_usa_o_início_da_janela_de_disponibilidade():
     availability = TimeWindow(start=time(9, 0), end=time(12, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(11, 0), utility_score=5.0)
 
-    itinerary = OPTWSolver.solve([poi_a], availability, travel_time_minutes=15)
+    itinerary = OPTWSolver.replan_remaining([poi_a], availability, travel_time_minutes=15)
 
     assert itinerary.stops[0].poi.id == "POI-A"
     assert itinerary.stops[0].start.time() == time(9, 0)
@@ -177,7 +177,7 @@ def test_propriedade_invariantes_ac2(pois, travel_minutes):
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     start_time = datetime(2026, 11, 20, 8, 0)
 
-    itinerary = OPTWSolver.solve(
+    itinerary = OPTWSolver.replan_remaining(
         pois, availability, float(travel_minutes), start_time=start_time
     )
 
@@ -192,7 +192,7 @@ def test_propriedade_invariantes_ac2_início_padrão(pois, travel_minutes):
     """Teste de propriedade para as invariantes universais AC2 com início padrão."""
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
 
-    itinerary = OPTWSolver.solve(pois, availability, float(travel_minutes))
+    itinerary = OPTWSolver.replan_remaining(pois, availability, float(travel_minutes))
 
     _assert_invariants(itinerary, availability)
 

@@ -6,7 +6,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import Any, List, Optional, Tuple, cast, overload
+from typing import List, Optional, Tuple
 
 from src.core.domain.models import (
     POI,
@@ -91,153 +91,7 @@ class OPTWSolver:
         """Inicializar o solver com a velocidade média usada nos Deslocamentos urbanos."""
         self.transit_speed_kmh = transit_speed_kmh
 
-    @classmethod
-    def _is_legacy_call(cls, actual_args: tuple[Any, ...], kwargs: dict[str, Any]) -> bool:
-        return bool(
-            "end_location" in kwargs
-            or "candidates" in kwargs
-            or "preferences" in kwargs
-            or "reserved_slots" in kwargs
-            or (len(actual_args) >= 1 and isinstance(actual_args[0], Coordinates))
-            or (
-                len(actual_args) >= 3
-                and isinstance(actual_args[0], Coordinates)
-                and isinstance(actual_args[1], Coordinates)
-            )
-        )
-
-    @overload
-    @classmethod
     def solve(
-        cls,
-        candidate_pois: list[POI],
-        availability_window: TimeWindow,
-        travel_time_minutes: float = 15.0,
-        start_time: datetime | None = None,
-        visit_durations: Mapping[str, int] | None = None,
-        start_location: Coordinates | None = None,
-        **kwargs: Any,
-    ) -> Itinerary: ...
-
-    @overload
-    @classmethod
-    def solve(
-        cls,
-        start_location: Coordinates,
-        end_location: Coordinates,
-        window: TimeWindow,
-        candidates: List[POI],
-        preferences: Optional[PreferencesProfile] = None,
-        reserved_slots: Optional[List[TimeWindow]] = None,
-    ) -> Itinerary: ...
-
-    @classmethod
-    def solve(
-        cls,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Itinerary:
-        """Resolve o problema de roteamento OPTW suportando ambas as interfaces.
-
-        1. Interface legada (planejamento otimizado com coordenadas, janelas e slots reservados)
-        2. Interface de contingência (inserção gulosa com busca local para replanejamento)
-        """
-        solver_instance = cls()
-        actual_args = args
-
-        if cls._is_legacy_call(actual_args, kwargs):
-            start_location = kwargs.get("start_location") or (
-                actual_args[0] if len(actual_args) > 0 else None
-            )
-            end_location = kwargs.get("end_location") or (
-                actual_args[1] if len(actual_args) > 1 else None
-            )
-            window = kwargs.get("window") or (
-                actual_args[2] if len(actual_args) > 2 else None
-            )
-            candidates = kwargs.get("candidates") or (
-                actual_args[3] if len(actual_args) > 3 else []
-            )
-            preferences = kwargs.get("preferences") or (
-                actual_args[4] if len(actual_args) > 4 else None
-            )
-            reserved_slots = kwargs.get("reserved_slots") or (
-                actual_args[5] if len(actual_args) > 5 else None
-            )
-
-            return solver_instance._solve_legacy(
-                start_location=cast(Coordinates, start_location),
-                end_location=cast(Coordinates, end_location),
-                window=cast(TimeWindow, window),
-                candidates=cast(List[POI], candidates),
-                preferences=cast(Optional[PreferencesProfile], preferences),
-                reserved_slots=cast(Optional[List[TimeWindow]], reserved_slots),
-            )
-
-        candidate_pois = kwargs.get("candidate_pois") or (
-            actual_args[0] if len(actual_args) > 0 else []
-        )
-        availability_window = kwargs.get("availability_window") or (
-            actual_args[1] if len(actual_args) > 1 else None
-        )
-        travel_time_minutes = kwargs.get("travel_time_minutes") or (
-            actual_args[2] if len(actual_args) > 2 else 15.0
-        )
-        start_time = kwargs.get("start_time") or (
-            actual_args[3] if len(actual_args) > 3 else None
-        )
-        visit_durations = kwargs.get("visit_durations") or (
-            actual_args[4] if len(actual_args) > 4 else None
-        )
-        start_location = kwargs.get("start_location") or (
-            actual_args[5] if len(actual_args) > 5 else None
-        )
-
-        return OPTWSolver._solve_contingency(
-            candidate_pois=cast(list[POI], candidate_pois),
-            availability_window=cast(TimeWindow, availability_window),
-            travel_time_minutes=float(travel_time_minutes),
-            start_time=cast(Optional[datetime], start_time),
-            visit_durations=cast(Optional[Mapping[str, int]], visit_durations),
-            start_location=cast(Optional[Coordinates], start_location),
-        )
-
-    @staticmethod
-    def _solve_contingency(
-        candidate_pois: list[POI],
-        availability_window: TimeWindow,
-        travel_time_minutes: float,
-        start_time: datetime | None = None,
-        visit_durations: Mapping[str, int] | None = None,
-        start_location: Coordinates | None = None,
-    ) -> Itinerary:
-        if start_time is None:
-            start_time = datetime.combine(date.today(), availability_window.start)
-        route: list[POI] = []
-        remaining = _unique_pois(candidate_pois)
-        while True:
-            inserted = _insert_pass(
-                route,
-                remaining,
-                start_time,
-                travel_time_minutes,
-                availability_window,
-                visit_durations,
-            )
-            moved = _local_search_contingency(
-                route,
-                start_time,
-                travel_time_minutes,
-                availability_window,
-                visit_durations,
-            )
-            if inserted == 0 and moved == 0:
-                break
-        return _simulate(
-            route, start_time, travel_time_minutes, visit_durations, start_location
-        )
-
-    def _solve_legacy(
         self,
         start_location: Coordinates,
         end_location: Coordinates,
@@ -246,6 +100,7 @@ class OPTWSolver:
         preferences: Optional[PreferencesProfile] = None,
         reserved_slots: Optional[List[TimeWindow]] = None,
     ) -> Itinerary:
+        """Planejar o Roteiro diário respeitando restrições temporais e slots reservados."""
         if not candidates:
             return Itinerary(stops=[], total_utility=0.0, total_duration_minutes=0)
 
@@ -276,6 +131,42 @@ class OPTWSolver:
             start_location=start_location,
             window_start_min=window_start_min,
             context=context,
+        )
+
+    @staticmethod
+    def replan_remaining(
+        candidate_pois: list[POI],
+        availability_window: TimeWindow,
+        travel_time_minutes: float = 15.0,
+        start_time: datetime | None = None,
+        visit_durations: Mapping[str, int] | None = None,
+        start_location: Coordinates | None = None,
+    ) -> Itinerary:
+        """Executar o Replanejamento do Roteiro restante após um Evento de Contingência."""
+        if start_time is None:
+            start_time = datetime.combine(date.today(), availability_window.start)
+        route: list[POI] = []
+        remaining = _unique_pois(candidate_pois)
+        while True:
+            inserted = _insert_pass(
+                route,
+                remaining,
+                start_time,
+                travel_time_minutes,
+                availability_window,
+                visit_durations,
+            )
+            moved = _local_search_contingency(
+                route,
+                start_time,
+                travel_time_minutes,
+                availability_window,
+                visit_durations,
+            )
+            if inserted == 0 and moved == 0:
+                break
+        return _simulate(
+            route, start_time, travel_time_minutes, visit_durations, start_location
         )
 
     def _prepare_candidates(
