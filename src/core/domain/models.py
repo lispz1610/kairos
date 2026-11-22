@@ -341,34 +341,40 @@ class InterCityConnection(BaseModel):
         ),
     )
 
+    @staticmethod
+    def _parse_departure_value(dep_time: Any) -> datetime | None:
+        """Transformar departure_time legado (datetime, date ou ISO str) em datetime."""
+        if isinstance(dep_time, datetime):
+            return dep_time
+        if isinstance(dep_time, date):
+            return datetime.combine(dep_time, time(0, 0))
+        if isinstance(dep_time, str):
+            try:
+                return datetime.fromisoformat(dep_time)
+            except ValueError:
+                return datetime.combine(date.fromisoformat(dep_time), time(0, 0))
+        return None
+
+    @staticmethod
+    def _resolve_boarding_cutoff(modal: Any) -> int:
+        """Resolve a Margem de Embarque padrão em minutos para o Modal de Transporte."""
+        return {"flying": 120, "driving": 30, "transit": 30}.get(modal or "driving", 30)
+
     @model_validator(mode="before")
     @classmethod
     def _apply_modal_default(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if "departure_datetime" not in data or data["departure_datetime"] is None:
-                dep_time = data.get("departure_time")
-                if dep_time is not None:
-                    if isinstance(dep_time, datetime):
-                        data = {**data, "departure_datetime": dep_time}
-                    elif isinstance(dep_time, date):
-                        combined = datetime.combine(dep_time, time(0, 0))
-                        data = {**data, "departure_datetime": combined}
-                    elif isinstance(dep_time, str):
-                        try:
-                            parsed = datetime.fromisoformat(dep_time)
-                        except ValueError:
-                            parsed = datetime.combine(
-                                date.fromisoformat(dep_time), time(0, 0)
-                            )
-                        data = {**data, "departure_datetime": parsed}
-            if data.get("boarding_cutoff_minutes") is None:
-                modal = data.get("modal") or "driving"
-                data = {
-                    **data,
-                    "boarding_cutoff_minutes": {"flying": 120, "driving": 30, "transit": 30}.get(
-                        modal, 30
-                    ),
-                }
+        """Normaliza departure_datetime legado e aplica Margem de Embarque padrão do modal."""
+        if not isinstance(data, dict):
+            return data
+        if data.get("departure_datetime") is None:
+            parsed_departure = cls._parse_departure_value(data.get("departure_time"))
+            if parsed_departure is not None:
+                data = {**data, "departure_datetime": parsed_departure}
+        if data.get("boarding_cutoff_minutes") is None:
+            data = {
+                **data,
+                "boarding_cutoff_minutes": cls._resolve_boarding_cutoff(data.get("modal")),
+            }
         return data
 
     @model_validator(mode="after")
