@@ -356,9 +356,15 @@ class InterCityConnection(BaseModel):
         return None
 
     @staticmethod
-    def _resolve_boarding_cutoff(modal: Any) -> int:
+    def _resolve_boarding_cutoff(modal: TransportMode | str | None) -> int:
         """Resolve a Margem de Embarque padrão em minutos para o Modal de Transporte."""
-        return {"flying": 120, "driving": 30, "transit": 30}.get(modal or "driving", 30)
+        cutoffs: dict[str, int] = {
+            TransportMode.FLYING: 120,
+            TransportMode.DRIVING: 30,
+            TransportMode.TRANSIT: 30,
+        }
+        key = modal if isinstance(modal, str) and modal else TransportMode.DRIVING
+        return cutoffs.get(key, 30)
 
     @model_validator(mode="before")
     @classmethod
@@ -371,9 +377,11 @@ class InterCityConnection(BaseModel):
             if parsed_departure is not None:
                 data = {**data, "departure_datetime": parsed_departure}
         if data.get("boarding_cutoff_minutes") is None:
+            raw_modal = data.get("modal")
+            modal = raw_modal if isinstance(raw_modal, str) else None
             data = {
                 **data,
-                "boarding_cutoff_minutes": cls._resolve_boarding_cutoff(data.get("modal")),
+                "boarding_cutoff_minutes": cls._resolve_boarding_cutoff(modal),
             }
         return data
 

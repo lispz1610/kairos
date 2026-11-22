@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from src.core.domain.models import (
     InterCityConnection,
+    TransportMode,
 )
 
 DEPARTURE_DATETIME = datetime(2026, 11, 20, 8, 0, tzinfo=timezone.utc)
@@ -26,7 +27,15 @@ def test_intercityconnection_requires_departure_datetime():
 
 @pytest.mark.parametrize(
     ("modal", "expected_cutoff"),
-    [("flying", 120), ("driving", 30), ("transit", 30)],
+    [
+        (TransportMode.FLYING, 120),
+        (TransportMode.DRIVING, 30),
+        (TransportMode.TRANSIT, 30),
+        ("flying", 120),
+        ("driving", 30),
+        ("transit", 30),
+        ("ferry", 30),
+    ],
 )
 def test_intercityconnection_defaults_boarding_cutoff_per_modal(modal, expected_cutoff):
     """Valida o valor default de margem de embarque por modal."""
@@ -38,6 +47,18 @@ def test_intercityconnection_defaults_boarding_cutoff_per_modal(modal, expected_
     )
 
     assert connection.boarding_cutoff_minutes == expected_cutoff
+
+
+def test_intercityconnection_defaults_boarding_cutoff_when_modal_omitted_or_none():
+    """Garante fallback de margem de embarque quando modal é omitido ou None."""
+    connection = InterCityConnection(departure_datetime=DEPARTURE_DATETIME)
+
+    assert connection.boarding_cutoff_minutes == 30
+    assert InterCityConnection._resolve_boarding_cutoff(None) == 30
+    assert InterCityConnection._resolve_boarding_cutoff("") == 30
+    assert InterCityConnection._resolve_boarding_cutoff("unknown") == 30
+    assert InterCityConnection._resolve_boarding_cutoff(TransportMode.FLYING) == 120
+    assert InterCityConnection._resolve_boarding_cutoff("flying") == 120
 
 
 def test_intercityconnection_respects_explicit_boarding_cutoff():
