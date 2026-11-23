@@ -82,6 +82,37 @@ def test_ripple_shift_preview_endpoint() -> None:
     assert preview["shifted_stages"][0]["new_start"] == "2026-11-11"
 
 
+def test_ripple_shift_preview_exposes_old_and_new_dates_for_negative_delta() -> None:
+    """Verifica que a prévia negativa informa datas anteriores e recalculadas ao modal."""
+    trip_payload = _sample_trip_payload()
+    trip_payload["connections"][0].update(
+        {
+            "departure_datetime": "2026-11-10T09:00:00",
+            "modal": "flying",
+            "boarding_cutoff_minutes": 120,
+        }
+    )
+    response = client.post(
+        "/api/trip/ripple-shift/preview",
+        json={"trip": trip_payload, "target_stage_id": "st-sp", "delta_days": -1},
+    )
+    assert response.status_code == 200
+    preview = response.json()
+    assert preview["old_target_end"] == "2026-11-10"
+    assert preview["new_target_end"] == "2026-11-09"
+
+    shifted_stage = preview["shifted_stages"][0]
+    assert shifted_stage["stage_id"] == "st-lima"
+    assert (shifted_stage["old_start"], shifted_stage["old_end"]) == ("2026-11-10", "2026-11-15")
+    assert (shifted_stage["new_start"], shifted_stage["new_end"]) == ("2026-11-09", "2026-11-14")
+
+    shifted_connection = preview["shifted_connections"][0]
+    assert (shifted_connection["old_departure"], shifted_connection["new_departure"]) == (
+        "2026-11-10",
+        "2026-11-09",
+    )
+
+
 def test_ripple_shift_apply_endpoint() -> None:
     """Verifica o Deslocamento em Cascata nas Etapas e Conexões Interurbanas."""
     trip_payload = _sample_trip_payload()

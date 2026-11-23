@@ -87,7 +87,57 @@
     cursor: pointer;
   }
   .control button:hover { background: #093f3d; }
+  .controls > button {
+    padding: 6px 10px;
+    border: 1px solid var(--primary);
+    background: var(--primary);
+    color: #fff;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #trip-planning { grid-column: 1 / -1; }
+  #trip-stages { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  #trip-stages li { padding: 6px 8px; border-bottom: 1px solid var(--line); }
   #map { height: 380px; border: 1px solid var(--line); border-radius: 8px; }
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.55);
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    width: min(520px, 100%);
+    max-height: 80vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .modal-header, .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .modal-footer { justify-content: flex-end; }
+  .modal-header h2 { margin: 0; }
+  .modal-body { margin: 12px 0; font-size: 13px; }
+  .modal-body p { margin: 6px 0; }
+  .modal button {
+    padding: 6px 10px;
+    border: 1px solid var(--primary);
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #modal-cancel-btn { background: #fff; color: var(--primary); }
+  #modal-confirm-btn { background: var(--primary); color: #fff; }
+  #modal-confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   footer {
     text-align: center;
     font-size: 12px;
@@ -100,6 +150,22 @@
 <body>
 <header id="impact-banner" class="banner hidden" role="status"></header>
 <main>
+  <section class="panel" id="trip-planning">
+    <h2>Planejamento da Viagem</h2>
+    <ul id="trip-stages"></ul>
+    <div class="controls">
+      <label class="control">
+        <span>Etapa de Viagem</span>
+        <select id="stage-selector" aria-label="Etapa de Viagem alvo"></select>
+      </label>
+      <label class="control">
+        <span>Variação de dias (delta_days)</span>
+        <input id="delta-days" type="number" step="1" value="1"
+               aria-label="Variação de dias, positiva ou negativa" />
+      </label>
+      <button type="button" id="preview-ripple-shift">Pré-visualizar Deslocamento em Cascata</button>
+    </div>
+  </section>
   <section class="panel">
     <h1>Kairos</h1>
     <h2>Roteiro — Dia de Viagem ativo</h2>
@@ -132,12 +198,232 @@
     <div id="map"></div>
   </section>
 </main>
+<div class="modal-overlay hidden" id="modal-overlay" role="dialog" aria-modal="true"
+     aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Modal de Confirmação de Impacto</h2>
+      <button type="button" id="modal-close-btn" aria-label="Fechar modal">×</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <p><strong>Datas anteriores</strong> e <strong>Datas recalculadas</strong>
+         das Etapas de Viagem e Conexões Interurbanas afetadas:</p>
+      <div id="modal-impact-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="modal-cancel-btn">Cancelar</button>
+      <!-- A confirmação é habilitada pela aplicação do Deslocamento em Cascata. -->
+      <button type="button" id="modal-confirm-btn" disabled>Confirmar</button>
+    </div>
+  </div>
+</div>
 <footer>Persistido em <b>localStorage</b>; replanejado via <b>POST /api/trip/replan</b>.</footer>
 <script>
 "use strict";
 
 const STORAGE_KEY = "kairos_trip_state_v1";
 const API_URL = "/api/trip/replan";
+const TRIP_STORAGE_KEY = "kairos_trip_v1";
+const RIPPLE_PREVIEW_URL = "/api/trip/ripple-shift/preview";
+
+function makeTripDays(startDate, endDate, accommodation) {
+  const days = [];
+  const dayMs = 24 * 60 * 60 * 1000;
+  for (let date = parseDate(startDate); date < parseDate(endDate); date += dayMs) {
+    days.push({
+      date: new Date(date).toISOString().slice(0, 10),
+      base_accommodation: accommodation,
+      previous_day_accommodation: days.length ? days[days.length - 1].base_accommodation : null,
+    });
+  }
+  return days;
+}
+
+function defaultTrip() {
+  const accommodation = (id, name, latitude, longitude) => ({
+    id,
+    name,
+    location: { latitude, longitude },
+  });
+  const spAccommodation = accommodation("h-sp", "Hospedagem SP", -23.55, -46.66);
+  const limaAccommodation = accommodation("h-lima", "Hospedagem Lima", -12.04, -77.03);
+  return {
+    id: "trip-sp-lima",
+    title: "São Paulo e Lima",
+    travelers: 1,
+    stages: [
+      {
+        id: "stage-sp",
+        city_name: "São Paulo",
+        start_date: "2026-11-01",
+        end_date: "2026-11-10",
+        base_accommodation: spAccommodation,
+        days: makeTripDays("2026-11-01", "2026-11-10", spAccommodation),
+      },
+      {
+        id: "stage-lima",
+        city_name: "Lima",
+        start_date: "2026-11-10",
+        end_date: "2026-11-15",
+        base_accommodation: limaAccommodation,
+        days: makeTripDays("2026-11-10", "2026-11-15", limaAccommodation),
+      },
+    ],
+    connections: [
+      {
+        id: "conn-1",
+        from_stage_id: "stage-sp",
+        to_stage_id: "stage-lima",
+        mode: "flying",
+        departure_time: "2026-11-10",
+        departure_datetime: "2026-11-10T09:00:00",
+        modal: "flying",
+        boarding_cutoff_minutes: 120,
+      },
+    ],
+    preferences: { intensities: {} },
+    curation_lists: [],
+  };
+}
+
+function saveTrip(trip) {
+  window.localStorage.setItem(TRIP_STORAGE_KEY, JSON.stringify(trip));
+}
+
+function loadTrip() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(TRIP_STORAGE_KEY));
+    if (parsed && Array.isArray(parsed.stages) && Array.isArray(parsed.connections)) {
+      return parsed;
+    }
+  } catch (error) {
+    /* Estado de Viagem ausente ou ilegível: recuar para a semente determinística. */
+  }
+  const trip = defaultTrip();
+  saveTrip(trip);
+  return trip;
+}
+
+function parseDate(isoDate) {
+  const parts = isoDate.split("-").map(Number);
+  return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+}
+
+function formatDate(isoDate) {
+  const parts = isoDate.split("-");
+  return parts[2] + "/" + parts[1] + "/" + parts[0];
+}
+
+function stageDurationDays(stage) {
+  return Math.round(
+    (parseDate(stage.end_date) - parseDate(stage.start_date)) / (24 * 60 * 60 * 1000)
+  );
+}
+
+function renderTripStages(trip) {
+  const list = document.getElementById("trip-stages");
+  list.replaceChildren();
+  trip.stages.forEach((stage) => {
+    const item = document.createElement("li");
+    item.textContent =
+      stage.city_name + " — " + formatDate(stage.start_date) +
+      " a " + formatDate(stage.end_date) + " · " + stageDurationDays(stage) + " dias";
+    list.appendChild(item);
+  });
+}
+
+function renderStageSelector(trip) {
+  const selector = document.getElementById("stage-selector");
+  selector.replaceChildren();
+  trip.stages.forEach((stage) => {
+    const option = document.createElement("option");
+    option.value = stage.id;
+    option.textContent = stage.city_name;
+    selector.appendChild(option);
+  });
+}
+
+function initTripPlanning() {
+  const trip = loadTrip();
+  renderTripStages(trip);
+  renderStageSelector(trip);
+}
+
+function openImpactModal() {
+  document.getElementById("modal-overlay").classList.remove("hidden");
+}
+
+function closeImpactModal() {
+  document.getElementById("modal-overlay").classList.add("hidden");
+  document.getElementById("modal-impact-list").replaceChildren();
+}
+
+function addImpactRow(label, oldValue, newValue) {
+  const row = document.createElement("p");
+  row.textContent = label + ": " + oldValue + " → " + newValue;
+  document.getElementById("modal-impact-list").appendChild(row);
+}
+
+function showImpactModal(trip, preview) {
+  const target = trip.stages.find((stage) => stage.id === preview.target_stage_id);
+  const city = target ? target.city_name : preview.target_stage_id;
+  document.getElementById("modal-impact-list").replaceChildren();
+  addImpactRow(
+    city + " — término da Etapa de Viagem",
+    formatDate(preview.old_target_end),
+    formatDate(preview.new_target_end)
+  );
+  preview.shifted_stages.forEach((stage) => {
+    addImpactRow(
+      stage.city_name + " — Etapa de Viagem (" + stage.preserved_days_count + " dias preservados)",
+      formatDate(stage.old_start) + " a " + formatDate(stage.old_end),
+      formatDate(stage.new_start) + " a " + formatDate(stage.new_end)
+    );
+  });
+  preview.shifted_connections.forEach((connection) => {
+    addImpactRow(
+      "Conexão Interurbana " + connection.connection_id,
+      formatDate(connection.old_departure),
+      formatDate(connection.new_departure)
+    );
+  });
+  openImpactModal();
+}
+
+async function previewRippleShift() {
+  const trip = loadTrip();
+  const targetStageId = document.getElementById("stage-selector").value;
+  const rawDelta = document.getElementById("delta-days").value;
+  const deltaDays = Number(rawDelta);
+  if (rawDelta === "" || !Number.isInteger(deltaDays)) {
+    showError("Informe um número inteiro de dias para o Deslocamento em Cascata.");
+    return;
+  }
+  let response;
+  try {
+    response = await fetch(RIPPLE_PREVIEW_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        trip: trip,
+        target_stage_id: targetStageId,
+        delta_days: deltaDays,
+      }),
+    });
+  } catch (error) {
+    showError("Não foi possível consultar a prévia do Deslocamento em Cascata.");
+    return;
+  }
+  if (!response.ok) {
+    showError(
+      "A prévia do Deslocamento em Cascata falhou (status " + response.status +
+      "). A Viagem salva não foi alterada."
+    );
+    return;
+  }
+  const preview = await response.json();
+  showImpactModal(trip, preview);
+}
 
 function defaultStop(id, name, start, durationMinutes) {
   return {
@@ -328,7 +614,12 @@ function init() {
   const state = loadState();
   renderTimeline(state);
   initMap(state);
+  initTripPlanning();
 }
+
+document.getElementById("preview-ripple-shift").addEventListener("click", previewRippleShift);
+document.getElementById("modal-cancel-btn").addEventListener("click", closeImpactModal);
+document.getElementById("modal-close-btn").addEventListener("click", closeImpactModal);
 
 document.getElementById("apply-delay").addEventListener("click", () => {
   const minutes = Number(document.getElementById("delay-minutes").value);
