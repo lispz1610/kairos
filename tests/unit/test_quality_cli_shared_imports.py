@@ -44,19 +44,29 @@ def test_coleta_de_marcadores_e_titulos_tem_uma_unica_implementacao() -> None:
     ):
         assert definition in shared
 
-    for source in CLI_SOURCES[:2]:
+    for source in CLI_SOURCES:
         text = _source(source)
-        assert "quality_cli_common import" in text, f"{source.name} não reutiliza o módulo"
+        assert "from scripts import quality_cli_common as qc" in text, (
+            f"{source.name} não importa o módulo compartilhado como objeto"
+        )
+        assert "import quality_cli_common as qc" in text, (
+            f"{source.name} não tem fallback direto equivalente"
+        )
         assert "def extract_markers(" not in text, f"{source.name} duplica a coleta"
 
-    assert "def extract_markers(" not in _source(CLI_SOURCES[2])
 
-
-def test_validador_docs_as_code_reutiliza_leitura_secoes_e_caminhos() -> None:
+def test_validador_docs_as_code_reutiliza_leitura_agrupamento_e_caminhos() -> None:
     """O terceiro CLI consome os mesmos utilitários de documento e árvore."""
     text = _source(CLI_SOURCES[2])
-    for helper in ("read_utf8", "iter_markdown_sections", "resolve_code_tree"):
+    for helper in ("qc.read_utf8", "qc.document_blocks", "qc.resolve_code_tree"):
         assert helper in text, f"validate_docs_as_code não usa {helper}"
+
+
+def test_agrupamento_de_blocos_com_secao_vem_do_modulo_compartilhado() -> None:
+    """A extração de blocos e da seção ## correspondente tem implementação única."""
+    shared = _source(SHARED_SOURCE)
+    assert "class MarkdownBlock" in shared
+    assert "def document_blocks(" in shared
 
 
 def test_clis_funcionam_como_script_e_como_modulo() -> None:
@@ -91,13 +101,14 @@ def test_utilitarios_compartilhados_preservam_leitura_secoes_e_caminhos(tmp_path
     from scripts.quality_cli_common import (
         iter_markdown_sections,
         read_utf8,
+        read_utf8_preserving_newlines,
         resolve_code_tree,
     )
 
     document = tmp_path / "documento.md"
     document.write_bytes(b"# Titulo\r\n## 1. Primeira\r\ntexto\r\n## 2. Segunda\r\n")
 
-    assert read_utf8(document, preserve_newlines=True).count("\r\n") == 4
+    assert read_utf8_preserving_newlines(document).count("\r\n") == 4
     sections = list(iter_markdown_sections(read_utf8(document).splitlines()))
     assert [(section.title, section.start, section.end) for section in sections] == [
         ("1. Primeira", 1, 3),
@@ -112,3 +123,40 @@ def test_utilitarios_compartilhados_preservam_leitura_secoes_e_caminhos(tmp_path
 
     explicit = resolve_code_tree(root, tmp_path / "suited externa")
     assert explicit.tests == tmp_path / "suited externa"
+
+
+def test_document_blocks_agrupa_continuacao_e_para_em_delimitadores(tmp_path: Path) -> None:
+    """A continuação preguiçosa não cruza item, cabeçalho, tabela, cerca ou break."""
+    from scripts.quality_cli_common import document_blocks
+
+    document = tmp_path / "blocos.md"
+    document.write_text(
+        """---
+title: documento
+---
+## 8. Lacunas
+
+1. Item sem
+continue aqui
+2. Outro item
+
+| coluna | valor |
+| --- | --- |
+
+---
+
+```
+sem código e sem testes
+```
+""",
+        encoding="utf-8",
+    )
+
+    blocks = document_blocks(document)
+    first = next(block for block in blocks if block.text.startswith("1. Item sem"))
+
+    assert first.line == 6
+    assert first.section == "8. Lacunas"
+    assert "continue aqui" in first.text
+    assert "2. Outro item" not in first.text
+    assert all("sem código e sem testes" not in block.text for block in blocks if block.line != 16)

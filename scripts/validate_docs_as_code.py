@@ -5,10 +5,12 @@ Confronta afirmações verificáveis no Plano de Testes ISO/IEC/IEEE 29119 e as
 pendências do HANDOFF com módulos, endpoints, scripts e suítes de teste
 efetivamente presentes na árvore de código informada.
 
-Uma lacuna parcial de interação em navegador (por exemplo, backup/restauração
-JSON ou modal de confirmação) não é contradição: apenas ausências totais de
-código/testes e tarefas marcadas como pendentes são verificadas. Leitura UTF-8,
-descoberta de seções ``##`` e resolução de caminhos vêm de
+Critério de isenção: uma lacuna parcial de navegador só é ignorada quando a
+própria ausência citada é de automação/interface/navegador na mesma oração
+(por exemplo, "sem testes de navegador" ou "sem automação de interface"). Uma
+afirmação de ausência total de código/testes de um componente presente NÃO é
+isenção, ainda que o item também mencione navegador. Leitura UTF-8, agrupamento
+de blocos com sua seção ``##`` e resolução de caminhos vêm de
 ``quality_cli_common``. A ferramenta é estritamente offline e não acessa rede.
 """
 
@@ -17,24 +19,13 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from scripts.quality_cli_common import (
-        CodeTree,
-        iter_markdown_sections,
-        read_utf8,
-        resolve_code_tree,
-    )
+    from scripts import quality_cli_common as qc
 except ImportError:  # pragma: no cover - execução direta do script
-    from quality_cli_common import (
-        CodeTree,
-        iter_markdown_sections,
-        read_utf8,
-        resolve_code_tree,
-    )
+    import quality_cli_common as qc
 
 
 @dataclass(frozen=True)
@@ -93,13 +84,30 @@ TOTAL_ABSENCE_RE = re.compile(
     rf"(?:{CODE_ABSENCE_RE.pattern})|(?:{TEST_ABSENCE_RE.pattern})",
     re.IGNORECASE,
 )
-PARTIAL_BROWSER_RE = re.compile(
-    r"navegador|browser|selenium|playwright|localstorage|modal"
-    r"|intera[cç][aã]o\s+gr[aá]fica|testes?\s+de\s+interface",
+PARTIAL_BROWSER_GAP_RE = re.compile(
+    r"(?:sem|n[aã]o\s+(?:h[aá]|existe|possui|s[aã]o)|faltam?|aus[eê]ncia\s+de|fora\s+de)"
+    r"(?:[^\n.;,]*?\s+)?"
+    r"(?:testes?|casos\s+de\s+teste|cobertura|automa[cç][aã]o|verifica[cç][aã]o"
+    r"|exercitad[oa]s?|controles?)"
+    r"(?:[^\n.;,]*?\s+)?"
+    r"(?:de\s+|em\s+|por\s+|na\s+|no\s+|da\s+)?"
+    r"(?:navegador|browser|selenium|playwright|localstorage|interface"
+    r"|intera[cç][aã]o\s+gr[aá]fica|timeline)"
+    r"|(?:n[aã]o\s+automatizado|fora\s+da\s+automa[cç][aã]o)"
+    r"(?:[^\n.;,]*?\s+)?"
+    r"(?:navegador|browser|interface|intera[cç][aã]o|timeline)",
     re.IGNORECASE,
 )
+CLAUSE_SEPARATOR_RE = re.compile(r"[.;,]")
 PENDING_TITLE_RE = re.compile(r"^\d+\.\s*Pr[oó]ximos\s+Passos", re.IGNORECASE)
-LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+
+EPILOG = """Critério da isenção de lacuna parcial de navegador:
+  Somente uma ausência explicitamente limitada a automação/interface/navegador
+  na mesma oração (por exemplo, "sem testes de navegador" ou "sem automação de
+  interface") deixa de ser contradição. Dizer que um componente está "sem
+  código e sem testes" continua sendo ausência total e falha, ainda que o item
+  mencione navegador em outra oração.
+"""
 
 RULES: tuple[ComponentRule, ...] = (
     ComponentRule(
@@ -158,56 +166,50 @@ def _matches_rule(rule: ComponentRule, text: str) -> bool:
     return any(re.search(term, text, re.IGNORECASE) for term in rule.terms)
 
 
-def _is_continuation(line: str) -> bool:
-    """Informar se a linha dá continuidade a um item de lista Markdown."""
-    return not line.strip() or line[0].isspace()
-
-
-def _document_blocks(text: str) -> Iterator[tuple[int, str]]:
-    """Agrupar as linhas de cada item de lista em uma única afirmação."""
-    lines = text.splitlines()
-    start = 0
-    while start < len(lines):
-        end = start + 1
-        if LIST_ITEM_RE.match(lines[start]):
-            while end < len(lines) and _is_continuation(lines[end]):
-                end += 1
-        yield start + 1, "\n".join(lines[start:end])
-        start = end
+def _has_total_absence(text: str) -> bool:
+    """Detectar ausência total após remover lacunas escopeadas de navegador."""
+    for clause in CLAUSE_SEPARATOR_RE.split(text):
+        remaining = PARTIAL_BROWSER_GAP_RE.sub(" ", clause)
+        if TOTAL_ABSENCE_RE.search(remaining):
+            return True
+    return False
 
 
 def extract_claims(path: Path) -> list[Claim]:
     """Extrair afirmações de ausência total e pendências de um documento."""
     claims: dict[tuple[str, str], Claim] = {}
     source = str(path)
-    text = read_utf8(path)
-    lines = text.splitlines()
-    pending_by_line = [False] * len(lines)
-    for section in iter_markdown_sections(lines):
-        is_pending = bool(PENDING_TITLE_RE.match(section.title))
-        for index in range(section.start, section.end):
-            pending_by_line[index] = is_pending
-    for number, block in _document_blocks(text):
-        pending_section = pending_by_line[number - 1]
-        if PARTIAL_BROWSER_RE.search(block):
+    for block in qc.document_blocks(path):
+        partial_browser_gap = bool(PARTIAL_BROWSER_GAP_RE.search(block.text))
+        total_absence = _has_total_absence(block.text)
+        if partial_browser_gap and not total_absence:
             continue
+        pending_section = bool(PENDING_TITLE_RE.match(block.section))
         for rule in RULES:
-            if not _matches_rule(rule, block):
+            if not _matches_rule(rule, block.text):
                 continue
             if pending_section:
                 kind = "pending"
-            elif TOTAL_ABSENCE_RE.search(block):
+            elif total_absence:
                 kind = "total-absence"
             else:
                 continue
             claims.setdefault(
                 (rule.key, kind),
-                Claim(source=source, line=number, rule=rule, kind=kind, text=block),
+                Claim(
+                    source=source,
+                    line=block.line,
+                    rule=rule,
+                    kind=kind,
+                    text=block.text,
+                ),
             )
     return list(claims.values())
 
 
-def _present_artifacts(root: CodeTree, artifacts: tuple[Artifact, ...], category: str) -> list[str]:
+def _present_artifacts(
+    root: qc.CodeTree, artifacts: tuple[Artifact, ...], category: str
+) -> list[str]:
     """Listar, com descrição legível, os artefatos efetivamente presentes."""
     descriptions: list[str] = []
     for artifact in artifacts:
@@ -216,7 +218,7 @@ def _present_artifacts(root: CodeTree, artifacts: tuple[Artifact, ...], category
             continue
         if artifact.marker:
             try:
-                content = read_utf8(path, errors="replace")
+                content = qc.read_utf8_lossy(path)
             except OSError:
                 continue
             if artifact.marker not in content:
@@ -226,7 +228,7 @@ def _present_artifacts(root: CodeTree, artifacts: tuple[Artifact, ...], category
     return descriptions
 
 
-def evaluate(claims: list[Claim], root: CodeTree) -> list[Finding]:
+def evaluate(claims: list[Claim], root: qc.CodeTree) -> list[Finding]:
     """Confrontar cada afirmação com os artefatos da árvore de código."""
     findings: list[Finding] = []
     for claim in claims:
@@ -270,7 +272,11 @@ def format_finding(finding: Finding) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     """Executar a validação docs-as-code a partir da linha de comando."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog=EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "--plan",
         "--test-plan",
@@ -294,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
         help="raiz da árvore de código (padrão: diretório atual)",
     )
     args = parser.parse_args(argv)
-    tree = resolve_code_tree(args.root)
+    tree = qc.resolve_code_tree(args.root)
 
     for document in (args.plan, args.handoff):
         if not document.is_file():
