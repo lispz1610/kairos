@@ -54,6 +54,7 @@ class DummyPlacesPort(PlacesPort):
         ]
 
 
+@pytest.mark.requirement("RF05")
 def test_curation_service_with_injected_port() -> None:
     """Verifica que o serviço delega à porta injetada."""
     port = DummyPlacesPort()
@@ -70,6 +71,7 @@ def test_curation_service_with_injected_port() -> None:
     assert port.search_call_count == 1
 
 
+@pytest.mark.requirement("RF05")
 def test_curation_service_requires_places_port() -> None:
     """Verifica que o serviço exige PlacesPort e funciona com OfflineReplayPlacesAdapter."""
     with pytest.raises(TypeError):
@@ -143,6 +145,7 @@ def test_apply_curation_boost_to_matching_pois() -> None:
     assert boosted_named[0].utility_score == 9.0
 
 
+@pytest.mark.requirement("RF05")
 def test_offline_replay_adapter_curated_lists() -> None:
     """Verifica as Listas de Curadoria em modo de reprodução offline."""
     adapter = OfflineReplayPlacesAdapter()
@@ -162,6 +165,7 @@ def test_offline_replay_adapter_curated_lists() -> None:
     assert unknown == []
 
 
+@pytest.mark.requirement("RF05")
 def test_offline_replay_adapter_search_places() -> None:
     """Verifica a busca de Pontos de Interesse em modo de reprodução offline."""
     adapter = OfflineReplayPlacesAdapter()
@@ -186,6 +190,7 @@ def test_offline_replay_adapter_search_places() -> None:
     assert adapter.search_places("NonExistentPlaceXYZ123") == []
 
 
+@pytest.mark.requirement("RF05")
 def test_cached_places_adapter_cache_aside_sqlite() -> None:
     """Verifica o padrão cache-aside em SQLite e a limpeza do cache."""
     port = DummyPlacesPort()
@@ -225,6 +230,7 @@ def test_cached_places_adapter_cache_aside_sqlite() -> None:
     assert port.curated_call_count == 2
 
 
+@pytest.mark.requirement("RF05")
 def test_cached_places_adapter_with_external_api_mock() -> None:
     """Verifica o uso da API externa e o fallback quando ela falha."""
     port = DummyPlacesPort()
@@ -266,6 +272,7 @@ def test_cached_places_adapter_with_external_api_mock() -> None:
         assert port.search_call_count == 1  # Fallback called!
 
 
+@pytest.mark.requirement("RF05")
 def test_create_places_adapter_factory(tmp_path: Path) -> None:
     """Verifica que a fábrica cria o adaptador com cache no caminho informado."""
     cache_file = tmp_path / "custom_cache.db"

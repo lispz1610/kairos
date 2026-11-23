@@ -7,6 +7,8 @@ descritivos (lista de strings).
 
 from datetime import date, datetime, time
 
+import pytest
+
 from src.core.domain.models import (
     POI,
     Accommodation,
@@ -104,6 +106,7 @@ def test_visita_que_comeca_antes_do_inicio_da_janela_de_disponibilidade_reporta_
     )
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_extends_stage_and_shifts_subsequent_stages_and_connections() -> None:
     """Verifica o Deslocamento em Cascata sobre Etapas e Conexões Interurbanas."""
     hotel_sp = Accommodation(

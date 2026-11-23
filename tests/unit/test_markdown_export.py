@@ -17,7 +17,7 @@ from src.core.domain.models import (
 from src.core.services.markdown_export import MarkdownExportService
 
 
-@pytest.mark.requirement("RF02")
+@pytest.mark.requirement("RF02", "RF08")
 def test_markdown_export_service_structure() -> None:
     """Verifica a estrutura completa do Markdown exportado de uma Viagem."""
     hotel_sp = Accommodation(
@@ -127,7 +127,7 @@ def test_markdown_export_service_structure() -> None:
     assert "Bib Gourmand Michelin" in md_content
 
 
-@pytest.mark.requirement("RF02")
+@pytest.mark.requirement("RF02", "RF08")
 def test_markdown_export_relinks_deserialized_trip_accommodations() -> None:
     """Verifica que a exportação reconhece dias de troca após desserialização."""
     import json

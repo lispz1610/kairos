@@ -93,6 +93,7 @@ def test_trip_stage_custom_hotel_override_and_transition_detection() -> None:
     assert stage.days[2].return_accommodation.id == "hotel-boutique"
 
 
+@pytest.mark.requirement("RF08")
 def test_trip_full_json_serialization_round_trip() -> None:
     """Verifica a idempotência da serialização JSON de uma Viagem completa."""
     base_hotel_sp = Accommodation(

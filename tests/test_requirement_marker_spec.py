@@ -1,9 +1,11 @@
-"""Contrato do marcador ``requirement`` e da anotação do RF03 piloto (#79).
+"""Contrato do marcador ``requirement`` e das anotações RF03/RF05–RF08 (#79, #82).
 
 O marcador é registrado na configuração do pytest sem relaxar ``--strict-markers``.
 O RF03 (Slots de Refeição e Pausas Experienciais Contextuais) é anotado em casos
 representativos das camadas unitária, de integração e de propriedade, e a
-convenção aceita um ou mais identificadores ``RFxx`` por caso de teste.
+convenção aceita um ou mais identificadores ``RFxx`` por caso de teste. O lote
+#82 estende a convenção aos RF05–RF08 usando casos existentes das camadas
+aplicáveis a cada requisito, sem atribuir cobertura a lacunas de navegador.
 """
 
 import re
@@ -13,9 +15,19 @@ from typing import Any
 
 import pytest
 
-from tests.integration import test_dining_api
-from tests.property import test_optw_properties
-from tests.unit import test_dining_and_budget
+from tests.integration import (
+    test_dining_api,
+    test_export_markdown_api,
+    test_import_link_api,
+    test_schedule_api,
+)
+from tests.property import test_optw_properties, test_ripple_shift_properties
+from tests.unit import (
+    test_curation_service,
+    test_dining_and_budget,
+    test_markdown_export,
+    test_schedule_service,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTEST_OPTIONS: dict[str, Any] = tomllib.loads(
@@ -30,6 +42,29 @@ PILOT_CASES = {
     "unit": test_dining_and_budget.test_dining_service_proximity_recommendations,
     "integration": test_dining_api.test_dining_recommend_endpoint,
     "property": test_optw_properties.test_optw_itinerary_never_collides_with_reserved_slots,
+}
+
+RF05_TO_RF08_CASES: dict[str, dict[str, Any]] = {
+    "RF05": {
+        "unit": test_curation_service.test_curation_service_with_injected_port,
+        "integration": test_import_link_api.test_import_link_ssrf_protection_returns_400,
+    },
+    "RF06": {
+        "unit": (
+            test_schedule_service.test_ripple_shift_extends_stage_and_shifts_subsequent_stages_and_connections
+        ),
+        "integration": test_schedule_api.test_ripple_shift_apply_endpoint,
+        "property": test_ripple_shift_properties.test_ripple_shift_invariants,
+    },
+    "RF07": {
+        "unit": test_dining_and_budget.test_budget_calculation_consolidates_lodging_and_food,
+        "integration": test_dining_api.test_trip_budget_endpoint,
+    },
+    "RF08": {
+        "unit": test_markdown_export.test_markdown_export_service_structure,
+        "integration": test_export_markdown_api.test_export_markdown_api_endpoint,
+        "property": test_ripple_shift_properties.test_trip_json_round_trip_idempotence,
+    },
 }
 
 
@@ -91,3 +126,13 @@ def test_annotation_preserves_existing_test_contracts() -> None:
         assert case.__name__ == name
         assert case.__doc__
         assert getattr(modules[layer], name) is case
+
+
+def test_rf05_to_rf08_annotated_in_existing_test_layers() -> None:
+    """Cada RF do lote #82 está anotado em casos existentes das camadas aplicáveis."""
+    assert set(RF05_TO_RF08_CASES) == {f"RF{number:02d}" for number in range(5, 9)}
+    for requirement, cases in RF05_TO_RF08_CASES.items():
+        for layer, case in cases.items():
+            identifiers = _requirement_ids(case)
+            assert requirement in identifiers, f"{requirement}/{layer}: {identifiers}"
+            assert all(identifier in CANONICAL_IDS for identifier in identifiers)
