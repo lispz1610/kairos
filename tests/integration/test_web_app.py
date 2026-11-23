@@ -144,3 +144,38 @@ def test_index_page_refreshes_stage_summary_and_selection_after_apply() -> None:
     selector_body = _script_function_body(html, "renderStageSelector")
     assert "selectedStageId" in selector_body
     assert "selector.value" in selector_body
+
+
+def test_index_page_exposes_json_backup_controls() -> None:
+    """A página oferece exportação/restauração de Backup JSON e entrada de arquivo oculta."""
+    html = client.get("/").text
+    assert "Exportar Backup JSON" in html
+    assert "Restaurar Backup JSON" in html
+    for element_id in (
+        "export-backup-json",
+        "restore-backup-json",
+        "backup-file-input",
+    ):
+        assert f'id="{element_id}"' in html
+    file_input = re.search(r"<input[^>]*id=\"backup-file-input\"[^>]*>", html)
+    assert file_input is not None
+    assert 'type="file"' in file_input.group()
+    assert "hidden" in file_input.group()
+    assert "/api/trip/backup/validate" in html
+    assert "kairos_trip_v1" in html
+    assert "viagem-kairos.json" in html
+    backup_start = html.index('id="trip-backup-controls"')
+    backup_section = html[backup_start : html.index("</section>", backup_start)]
+    assert "Rota" not in backup_section
+
+
+def test_index_page_backup_flow_validates_before_replacing_trip() -> None:
+    """O fluxo de Backup JSON usa validação do backend e banner para recusar arquivos."""
+    html = client.get("/").text
+    for helper in ("exportTripBackup", "restoreTripBackup", "renderTripStages"):
+        assert f"function {helper}(" in html
+    assert "JSON.parse(" in html
+    assert "response.ok" in html
+    assert "Não foi possível restaurar o Backup JSON" in html
+    assert "A Viagem salva não foi alterada." in html
+    assert "alert(" not in html

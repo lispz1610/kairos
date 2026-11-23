@@ -367,6 +367,18 @@ def export_trip_markdown(trip: Trip) -> dict[str, str]:
     return {"markdown": md}
 
 
+@app.post("/api/trip/backup/validate", response_model=Trip)
+def validate_trip_backup(trip: Trip) -> Trip:
+    """Validar e normalizar o JSON de uma Viagem recebido como Backup.
+
+    O corpo é o objeto ``Trip`` completo, sem envelope. A validação normaliza
+    valores compatíveis por coerção e ignora campos extras; campos obrigatórios
+    ausentes ou inválidos produzem HTTP 422 com detalhes de schema. O objeto
+    normalizado devolvido pode ser reenviado em um ciclo idempotente.
+    """
+    return trip
+
+
 @app.get("/api/curation/suggested", response_model=List[CurationList])
 def get_suggested_curation(city_name: str) -> List[CurationList]:
     """Retorna listas de curadoria sugeridas para uma cidade informada."""
