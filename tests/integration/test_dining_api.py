@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -5,6 +6,7 @@ from src.adapters.web.app import app
 client = TestClient(app)
 
 
+@pytest.mark.requirement("RF03")
 def test_dining_recommend_endpoint() -> None:
     """Verifica que o endpoint prioriza o restaurante próximo e bem avaliado."""
     payload = {
