@@ -1,10 +1,10 @@
 # Handoff — Projeto Kairos (Traçador Dinâmico de Rotas Turísticas)
 
-**Data**: 2026-11-07  
+**Data**: 2026-11-07 (atualizado em 2026-11-22)  
 **Repositório Remoto**: `git@github.com:lispz1610/kairos.git` (branch `main`)  
 **Workspace Local**: `/home/agent/.gemini/antigravity-cli/scratch/kairos`  
 **Disciplina**: DCC061 - Engenharia de Software (UFJF) — Prof. Fabrício Martins Mendonça  
-**Status**: Fase de Concepção e Design Concluída (Grilling + Domain Modeling finalizados; ADRs e Glossário versionados e sincronizados no GitHub).
+**Status**: Sistema implementado e verificado. Concepção e design concluídos (Grilling + Domain Modeling, ADRs e Glossário versionados), com Eventos de Contingência, Replanejamento, gate de qualidade e rastreabilidade docs-as-code entregues; restam apenas lacunas parciais de interação em navegador real (ver §8 do Plano de Testes).
 
 ---
 
@@ -39,7 +39,7 @@ Toda a concepção do sistema foi refinada através de *Grilling* e registrada e
 
 - **ISO/IEC 25010 (Qualidade de Produto)**:
   - *Adequação Funcional*: Validada por suíte de testes unitários e de integração (`pytest`).
-  - *Confiabilidade & Tolerância a Falhas*: Validada por Property-Based Testing (`hypothesis`) provando matematicamente que o roteiro nunca viola janelas de funcionamento ou disponibilidade, e pelos 4 eventos de contingência (atraso, fechamento, pular parada, alteração de permanência).
+  - *Confiabilidade & Tolerância a Falhas*: Validada por Property-Based Testing (`hypothesis`) provando matematicamente que o roteiro nunca viola janelas de funcionamento ou disponibilidade, e pelos 4 Eventos de Contingência entregues (atraso, fechamento prematuro, cancelamento de parada e ajuste de Tempo de Permanência), com Replanejamento do Roteiro restante coberto por testes unitários e de integração.
   - *Manutenibilidade & Testabilidade*: Arquitetura Hexagonal (Ports & Adapters) garantindo desacoplamento do core algorítmico contra I/O.
 - **ISO/IEC/IEEE 29119 (Testes de Software)**:
   - Estruturação do plano de testes e especificação formal de casos de teste no relatório técnico.
@@ -53,56 +53,54 @@ Toda a concepção do sistema foi refinada através de *Grilling* e registrada e
 
 ## 4. Estado Atual do Repositório
 
-O repositório `lispz1610/kairos` na branch `main` contém:
+O repositório `lispz1610/kairos` contém a aplicação implementada e a suíte de verificação:
 ```
 kairos/
-├── .gitignore
-├── README.md
+├── .github/workflows/          # automação de CI
+├── AGENTS.md
 ├── GLOSSARY.md
-└── docs/
-    ├── HANDOFF.md
-    └── adr/
-        ├── 0001-formulacao-algoritmica-optw.md
-        ├── 0002-stack-backend-python-fastapi.md
-        ├── 0003-integracao-google-maps-com-cache.md
-        ├── 0004-arquitetura-viagens-multicidades.md
-        ├── 0005-modo-offline-replay-credenciais.md
-        └── 0006-navegacao-macro-mapa-e-detalhe-urbano.md
+├── README.md
+├── verify_quality.sh           # gate de qualidade (ruff, mypy, radon, pytest --cov)
+├── docs/
+│   ├── HANDOFF.md
+│   ├── adr/                    # ADR 0001 a 0007
+│   ├── especificacao-requisitos-funcionais.md
+│   └── testing/test-plan-29119.md
+├── scripts/
+│   ├── validate_docs_as_code.py
+│   ├── validate_traceability.py
+│   └── generate_traceability_matrix.py
+├── src/
+│   ├── core/domain/events.py   # Eventos de Contingência tipados
+│   ├── core/services/replanning.py
+│   ├── core/solvers/optw.py
+│   └── adapters/web/           # app.py, contingency.py e template HTML
+└── tests/
+    ├── unit/                   # inclusive test_events.py, test_replanning_service.py,
+    │                           # test_docs_as_code_validator.py e test_traceability_matrix_generator.py
+    ├── integration/            # inclusive test_trip_replan_endpoint.py
+    └── property/
 ```
+
+Os artefatos acima são os mesmos confrontados pelos validadores docs-as-code e de rastreabilidade; a matriz do Plano de Testes (§7) é gerada a partir dos marcadores `requirement` da suíte.
 
 ---
 
-## 5. Próximos Passos Imediatos para o Próximo Agente
+## 5. Estado Entregue e Rastreabilidade
 
-1. **Configuração do Projeto Python**:
-   - Inicializar ambiente com `pyproject.toml` (Poetry) ou `requirements.txt` + `requirements-dev.txt`.
-   - Dependências principais: `fastapi`, `uvicorn`, `jinja2`, `sqlmodel` (ou `sqlalchemy`), `pydantic`, `pydantic-settings`, `httpx`.
-   - Dependências de teste e qualidade: `pytest`, `pytest-cov`, `hypothesis`, `mutmut`, `mypy`, `ruff`, `radon`.
+1. **Configuração do Projeto Python**: `pyproject.toml` com dependências de execução (`fastapi`, `uvicorn`, `jinja2`, `pydantic`, `pydantic-settings`, `httpx`) e de desenvolvimento/teste (`pytest`, `pytest-cov`, `hypothesis`, `mutmut`, `mypy`, `ruff`, `radon`).
 
-2. **Implementação do Domínio Puro (`src/core/domain/`) via TDD**:
-   - `models.py`: `POI`, `TimeWindow`, `Itinerary`, `Trip`, `TripStage`, `InterCityConnection`, `UserPreferences`.
-   - `events.py`: Modelos dos 4 eventos de contingência (`DelayEvent`, `ClosureEvent`, `SkipStopEvent`, `DurationAdjustmentEvent`).
+2. **Domínio puro (`src/core/domain/`)**: modelos de Viagem, Etapa de Viagem, Dia de Viagem, Conexão Interurbana e Roteiro em `models.py`; os 4 Eventos de Contingência tipados em `events.py` (`DelayEvent`, `ClosureEvent`, `SkipStopEvent`, `DurationAdjustmentEvent`), com testes em `tests/unit/test_events.py` e `tests/unit/test_apply_contingency_event.py`.
 
-3. **Implementação do Solver OPTW (`src/core/solvers/`)**:
-   - Heurística construtiva de inserção gulosa ponderada pela `Pontuação de Utilidade` / `Custo Marginal de Tempo`.
-   - Busca local 2-opt e swap de paradas.
-   - Motor de contingência: recálculo a partir do ponto/horário corrente e alerta de risco de voo.
+3. **Solver OPTW e Replanejamento**: heurística construtiva de inserção gulosa ponderada pela Pontuação de Utilidade, busca local 2-opt/swap, `ScheduleService` para Deslocamento em Cascata e `ReplanningService.replan` para recalcular a janela restante do Roteiro a partir do horário/coordenada atuais, preservando histórico e Slots de Refeição futuros e emitindo alerta de risco da Conexão Interurbana (`tests/unit/test_replanning_service.py`, `tests/integration/test_trip_replan_endpoint.py`).
 
-4. **Testes de Propriedades (`tests/property/`)**:
-   - Estratégias `hypothesis` validando invariantes universais (nenhum ponto visitado fora do horário, tempo total dentro da janela).
+4. **Testes de Propriedades (`tests/property/`)**: estratégias `hypothesis` validando invariantes universais (nenhum Ponto de Interesse visitado fora da Janela de Funcionamento, tempo total dentro da Janela de Disponibilidade e propagação exata do Deslocamento em Cascata).
 
-5. **Adapters Google Maps & Cache (`src/adapters/`)**:
-   - Porta `GeoRoutingPort` abstrata.
-   - Adaptador real Google Maps com cache SQLite.
-   - Adaptador `MockReplay` com fixtures pré-gravadas para São Paulo, Lima e Juiz de Fora.
+5. **Adaptadores (`src/adapters/`)**: portas abstratas, adaptador Google Maps com cache SQLite e Modo Offline Replay com fixtures pré-gravadas para São Paulo, Lima e Juiz de Fora.
 
-6. **Web App & UI Simples (`src/adapters/web/`)**:
-   - FastAPI rotas e templates Jinja2.
-   - Tela 1: Mapa macro (Leaflet) com cidades cadastradas conectadas por linhas geodésicas retas.
-   - Tela 2: Detalhe urbano em 2 colunas (Timeline com botões de contingência à esquerda + Rota Leaflet à direita).
+6. **Aplicação web (`src/adapters/web/`)**: rotas FastAPI, incluindo `POST /api/trip/replan`, orquestração dos Eventos de Contingência em `contingency.py`, template Jinja2 com controles na timeline do Dia de Viagem e banner de impacto. A interação em navegador real permanece como lacuna parcial, registrada no §8 do Plano de Testes.
 
-7. **Script de Automação de Qualidade**:
-   - `verify_quality.sh` executando `ruff`, `mypy --strict`, `radon cc`, `pytest --cov` e gerando relatório de conformidade ISO.
+7. **Gate e validadores de qualidade entregues**: `verify_quality.sh` executa `ruff`, `mypy --strict`, `radon cc` e `pytest --cov` (com estágio opcional de mutação) e é executado antes de commits/PRs. `scripts/validate_docs_as_code.py`, `scripts/validate_traceability.py` e `scripts/generate_traceability_matrix.py` completam a auditoria; seus testes de CLI estão em `tests/unit/test_docs_as_code_validator.py`, `tests/unit/test_traceability_validator.py` e `tests/unit/test_traceability_matrix_generator.py`.
 
 ---
 
