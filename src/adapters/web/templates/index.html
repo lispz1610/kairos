@@ -99,6 +99,8 @@
   #trip-planning { grid-column: 1 / -1; }
   #trip-stages { list-style: none; margin: 0; padding: 0; font-size: 13px; }
   #trip-stages li { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .stage-days { list-style: none; margin: 4px 0 0 12px; padding: 0; }
+  .stage-days li { padding: 2px 0; border-bottom: 0; color: var(--muted); }
   #map { height: 380px; border: 1px solid var(--line); border-radius: 8px; }
   .modal-overlay {
     position: fixed;
@@ -225,6 +227,8 @@ const STORAGE_KEY = "kairos_trip_state_v1";
 const API_URL = "/api/trip/replan";
 const TRIP_STORAGE_KEY = "kairos_trip_v1";
 const RIPPLE_PREVIEW_URL = "/api/trip/ripple-shift/preview";
+const RIPPLE_APPLY_URL = "/api/trip/ripple-shift/apply";
+let pendingRippleShift = null;
 
 function makeTripDays(startDate, endDate, accommodation) {
   const days = [];
@@ -320,6 +324,11 @@ function stageDurationDays(stage) {
   );
 }
 
+function connectionDepartureDate(connection) {
+  const departure = connection.departure_datetime || connection.departure_time;
+  return String(departure).slice(0, 10);
+}
+
 function renderTripStages(trip) {
   const list = document.getElementById("trip-stages");
   list.replaceChildren();
@@ -328,11 +337,25 @@ function renderTripStages(trip) {
     item.textContent =
       stage.city_name + " — " + formatDate(stage.start_date) +
       " a " + formatDate(stage.end_date) + " · " + stageDurationDays(stage) + " dias";
+    const days = document.createElement("ul");
+    days.className = "stage-days";
+    stage.days.forEach((day, dayIndex) => {
+      const dayItem = document.createElement("li");
+      dayItem.textContent = "Dia de Viagem " + (dayIndex + 1) + " — " + formatDate(day.date);
+      days.appendChild(dayItem);
+    });
+    item.appendChild(days);
+    list.appendChild(item);
+  });
+  trip.connections.forEach((connection) => {
+    const item = document.createElement("li");
+    item.textContent = "Conexão Interurbana " + connection.id + " — partida " +
+      formatDate(connectionDepartureDate(connection));
     list.appendChild(item);
   });
 }
 
-function renderStageSelector(trip) {
+function renderStageSelector(trip, selectedStageId) {
   const selector = document.getElementById("stage-selector");
   selector.replaceChildren();
   trip.stages.forEach((stage) => {
@@ -341,6 +364,8 @@ function renderStageSelector(trip) {
     option.textContent = stage.city_name;
     selector.appendChild(option);
   });
+  const hasSelection = trip.stages.some((stage) => stage.id === selectedStageId);
+  selector.value = hasSelection ? selectedStageId : (trip.stages[0] ? trip.stages[0].id : "");
 }
 
 function initTripPlanning() {
@@ -356,6 +381,8 @@ function openImpactModal() {
 function closeImpactModal() {
   document.getElementById("modal-overlay").classList.add("hidden");
   document.getElementById("modal-impact-list").replaceChildren();
+  document.getElementById("modal-confirm-btn").disabled = true;
+  pendingRippleShift = null;
 }
 
 function addImpactRow(label, oldValue, newValue) {
@@ -387,7 +414,60 @@ function showImpactModal(trip, preview) {
       formatDate(connection.new_departure)
     );
   });
+  pendingRippleShift = {
+    trip: trip,
+    targetStageId: preview.target_stage_id,
+    deltaDays: preview.delta_days,
+  };
+  document.getElementById("modal-confirm-btn").disabled = false;
   openImpactModal();
+}
+
+async function confirmRippleShift() {
+  if (!pendingRippleShift) {
+    return;
+  }
+  const requested = pendingRippleShift;
+  document.getElementById("modal-confirm-btn").disabled = true;
+  let response;
+  try {
+    response = await fetch(RIPPLE_APPLY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        trip: requested.trip,
+        target_stage_id: requested.targetStageId,
+        delta_days: requested.deltaDays,
+      }),
+    });
+  } catch (error) {
+    showError("Não foi possível aplicar o Deslocamento em Cascata. A Viagem salva não foi alterada.");
+    closeImpactModal();
+    return;
+  }
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload.detail === "string") {
+        detail = " " + payload.detail;
+      }
+    } catch (error) {
+      detail = "";
+    }
+    showError(
+      "A aplicação do Deslocamento em Cascata falhou (status " + response.status +
+      ")." + detail + " A Viagem salva não foi alterada."
+    );
+    closeImpactModal();
+    return;
+  }
+  const updatedTrip = await response.json();
+  const selectedStageId = document.getElementById("stage-selector").value;
+  saveTrip(updatedTrip);
+  closeImpactModal();
+  renderTripStages(updatedTrip);
+  renderStageSelector(updatedTrip, selectedStageId);
 }
 
 async function previewRippleShift() {
@@ -618,6 +698,7 @@ function init() {
 }
 
 document.getElementById("preview-ripple-shift").addEventListener("click", previewRippleShift);
+document.getElementById("modal-confirm-btn").addEventListener("click", confirmRippleShift);
 document.getElementById("modal-cancel-btn").addEventListener("click", closeImpactModal);
 document.getElementById("modal-close-btn").addEventListener("click", closeImpactModal);
 
