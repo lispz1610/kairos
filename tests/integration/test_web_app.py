@@ -1,20 +1,18 @@
+"""Contratos HTTP e de estrutura HTML da interface web (RF06/RF08)."""
+
 import re
 
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
+from tests.html_contract import element_attributes, message_catalog
 
 client = TestClient(app)
 
 
-def _script_function_body(html: str, name: str) -> str:
-    """Extrai o corpo de uma função JavaScript declarada no HTML servido."""
-    match = re.search(
-        r"function\s+" + re.escape(name) + r"\s*\([^)]*\)\s*\{(?P<body>[\s\S]*?)\n\}",
-        html,
-    )
-    assert match is not None, f"Função JavaScript {name} não encontrada no HTML"
-    return match.group("body")
+def _html() -> str:
+    """Obtém o HTML servido pela página inicial."""
+    return client.get("/").text
 
 
 def test_health_check() -> None:
@@ -35,7 +33,7 @@ def test_index_page_renders_html() -> None:
 
 def test_index_page_keeps_day_contingency_controls() -> None:
     """Verifica que a seção do Dia de Viagem preserva seus controles e chave própria."""
-    html = client.get("/").text
+    html = _html()
     for element_id in (
         "impact-banner",
         "stops",
@@ -49,20 +47,29 @@ def test_index_page_keeps_day_contingency_controls() -> None:
 
 
 def test_index_page_exposes_trip_planning_section() -> None:
-    """Verifica o resumo das Etapas de Viagem, o seletor e o delta numérico na página."""
-    html = client.get("/").text
+    """Expõe resumo, seletor e variação de dias com rótulos canônicos e chave dedicada."""
+    html = _html()
     assert 'id="trip-planning"' in html
     assert "Planejamento da Viagem" in html
     assert 'id="trip-stages"' in html
-    assert 'id="stage-selector"' in html
-    assert 'id="delta-days" type="number"' in html
-    assert 'id="preview-ripple-shift"' in html
-    assert "kairos_trip_v1" in html
+    assert element_attributes(html, "trip-stages")["data-role"] == "trip-stage-summary"
+    assert element_attributes(html, "trip-planning")["data-trip-storage-key"] == "kairos_trip_v1"
+    assert element_attributes(html, "trip-planning")["data-trip-fallback"] == "deterministic-seed"
+    assert element_attributes(html, "stage-selector")["aria-label"] == "Etapa de Viagem"
+    assert "Variação de dias" in html
+    assert "Variação de dias (delta_days)" not in html
+    assert element_attributes(html, "delta-days")["type"] == "number"
+    assert element_attributes(html, "preview-ripple-shift") == {
+        "type": "button",
+        "id": "preview-ripple-shift",
+        "data-action": "preview-ripple-shift",
+        "data-endpoint": "/api/trip/ripple-shift/preview",
+    }
 
 
 def test_index_page_exposes_impact_confirmation_modal() -> None:
-    """Verifica o modal com datas anteriores e recalculadas e a prévia via API."""
-    html = client.get("/").text
+    """O modal declara campos observáveis para datas, partidas e linha de impacto."""
+    html = _html()
     for element_id in (
         "modal-overlay",
         "modal-title",
@@ -70,6 +77,8 @@ def test_index_page_exposes_impact_confirmation_modal() -> None:
         "modal-impact-list",
         "modal-cancel-btn",
         "modal-close-btn",
+        "modal-confirm-btn",
+        "impact-row-template",
     ):
         assert f'id="{element_id}"' in html
     assert "Modal de Confirmação de Impacto" in html
@@ -77,78 +86,50 @@ def test_index_page_exposes_impact_confirmation_modal() -> None:
     assert "Datas recalculadas" in html
     assert "Etapas de Viagem" in html
     assert "Conexões Interurbanas" in html
-    assert "/api/trip/ripple-shift/preview" in html
-    assert "A prévia do Deslocamento em Cascata falhou" in html
-    assert "showError(" in html
-    assert "alert(" not in html
+    assert element_attributes(html, "modal-impact-list")["data-role"] == "impact-list"
+    assert element_attributes(html, "impact-row-template")["data-role"] == "impact-row"
+    for field in (
+        "target-stage-start",
+        "target-stage-end",
+        "stage",
+        "connection-date",
+        "connection-departure",
+    ):
+        assert f'data-impact-field="{field}"' in html, f"Campo {field} ausente no modal"
+    row = re.search(r"<p[^>]*data-field=\"\"[^>]*>", html)
+    assert row is not None
+    for attribute in ("data-field", "data-old-value", "data-new-value"):
+        assert attribute in row.group()
 
 
-def test_index_page_wires_ripple_apply() -> None:
-    """Verifica que Confirmar aplica a prévia, persiste a Viagem e atualiza o resumo."""
-    html = client.get("/").text
-    assert 'id="modal-confirm-btn"' in html
-    assert 'addEventListener("click", confirmRippleShift)' in html
-    assert '"/api/trip/ripple-shift/apply"' in html
-
-    body = _script_function_body(html, "confirmRippleShift")
-    assert "if (!response.ok)" in body
-    assert "saveTrip(updatedTrip)" in body
-    assert "renderTripStages(updatedTrip)" in body
-    assert "renderStageSelector(updatedTrip" in body
-    assert "closeImpactModal()" in body
-    assert body.index("if (!response.ok)") < body.index("saveTrip(")
-
-
-def test_index_page_reports_ripple_apply_failure_without_writing() -> None:
-    """Verifica que rejeição na aplicação usa o banner e não grava nem no cancelamento."""
-    html = client.get("/").text
-    body = _script_function_body(html, "confirmRippleShift")
-    assert "showError(" in body
-    assert "A aplicação do Deslocamento em Cascata falhou" in body
-    assert "A Viagem salva não foi alterada" in body
-    assert body.index("showError(") < body.index("saveTrip(")
-
-    close_body = _script_function_body(html, "closeImpactModal")
-    assert "saveTrip" not in close_body
-    assert "localStorage" not in close_body
-    assert html.count('addEventListener("click", closeImpactModal)') == 2
-
-
-def test_index_page_posts_previewed_stage_and_delta_on_confirm() -> None:
-    """Verifica que Confirmar reenvia exatamente a Viagem, a Etapa e o delta pré-visualizados."""
-    html = client.get("/").text
-    preview_body = _script_function_body(html, "showImpactModal")
-    assert "pendingRippleShift = {" in preview_body
-    assert "targetStageId: preview.target_stage_id" in preview_body
-    assert "deltaDays: preview.delta_days" in preview_body
-    assert 'document.getElementById("modal-confirm-btn").disabled = false' in preview_body
-
-    apply_body = _script_function_body(html, "confirmRippleShift")
-    assert "trip: requested.trip" in apply_body
-    assert "target_stage_id: requested.targetStageId" in apply_body
-    assert "delta_days: requested.deltaDays" in apply_body
-
-
-def test_index_page_refreshes_stage_summary_and_selection_after_apply() -> None:
-    """Verifica que o resumo recalcula Etapas, Dias de Viagem e Conexões Interurbanas."""
-    html = client.get("/").text
-    stages_body = _script_function_body(html, "renderTripStages")
-    assert "trip.stages.forEach" in stages_body
-    assert "stage.days.forEach" in stages_body
-    assert "dayIndex + 1" in stages_body
-    assert "formatDate(day.date)" in stages_body
-    assert "trip.connections.forEach" in stages_body
-    assert "Conexão Interurbana" in stages_body
-    assert "connectionDepartureDate(connection)" in stages_body
-
-    selector_body = _script_function_body(html, "renderStageSelector")
-    assert "selectedStageId" in selector_body
-    assert "selector.value" in selector_body
+def test_index_page_declares_ripple_actions_and_persistence_intent() -> None:
+    """Os controles declaram ação, endpoint e intenção de persistência da Viagem."""
+    html = _html()
+    expected = {
+        "preview-ripple-shift": ("/api/trip/ripple-shift/preview", None),
+        "confirm-ripple-shift": ("/api/trip/ripple-shift/apply", "after-confirm"),
+        "close-impact-modal": (None, "never"),
+        "export-backup-json": (None, None),
+        "restore-backup-json": ("/api/trip/backup/validate", None),
+    }
+    for action, (endpoint, persistence) in expected.items():
+        elements = re.findall(r"<[^>]*\bdata-action=\"" + re.escape(action) + r"\"[^>]*>", html)
+        assert elements, f"Nenhum controle declara a ação {action}"
+        for element in elements:
+            if endpoint is not None:
+                assert f'data-endpoint="{endpoint}"' in element
+            if persistence is not None:
+                assert f'data-persist-trip="{persistence}"' in element
+    confirm = element_attributes(html, "modal-confirm-btn")
+    assert confirm["data-action"] == "confirm-ripple-shift"
+    assert confirm["data-endpoint"] == "/api/trip/ripple-shift/apply"
+    for element_id in ("modal-cancel-btn", "modal-close-btn"):
+        assert element_attributes(html, element_id)["data-persist-trip"] == "never"
 
 
 def test_index_page_exposes_json_backup_controls() -> None:
     """A página oferece exportação/restauração de Backup JSON e entrada de arquivo oculta."""
-    html = client.get("/").text
+    html = _html()
     assert "Exportar Backup JSON" in html
     assert "Restaurar Backup JSON" in html
     for element_id in (
@@ -161,7 +142,9 @@ def test_index_page_exposes_json_backup_controls() -> None:
     assert file_input is not None
     assert 'type="file"' in file_input.group()
     assert "hidden" in file_input.group()
-    assert "/api/trip/backup/validate" in html
+    assert element_attributes(html, "restore-backup-json")["data-endpoint"] == (
+        "/api/trip/backup/validate"
+    )
     assert "kairos_trip_v1" in html
     assert "viagem-kairos.json" in html
     backup_start = html.index('id="trip-backup-controls"')
@@ -169,13 +152,13 @@ def test_index_page_exposes_json_backup_controls() -> None:
     assert "Rota" not in backup_section
 
 
-def test_index_page_backup_flow_validates_before_replacing_trip() -> None:
-    """O fluxo de Backup JSON usa validação do backend e banner para recusar arquivos."""
-    html = client.get("/").text
-    for helper in ("exportTripBackup", "restoreTripBackup", "renderTripStages"):
-        assert f"function {helper}(" in html
-    assert "JSON.parse(" in html
-    assert "response.ok" in html
-    assert "Não foi possível restaurar o Backup JSON" in html
-    assert "A Viagem salva não foi alterada." in html
+def test_index_page_declares_user_facing_error_messages() -> None:
+    """As mensagens de erro visíveis são declaradas no HTML e usam o banner de estado."""
+    html = _html()
+    messages = message_catalog(html)
+    assert "A Viagem salva não foi alterada." in messages["previewHttpError"]
+    assert "A Viagem salva não foi alterada." in messages["applyHttpError"]
+    assert "A Viagem salva não foi alterada." in messages["restoreHttpError"]
+    assert "Não foi possível ler o arquivo de Backup JSON" in messages["restoreReadError"]
+    assert element_attributes(html, "impact-banner")["role"] == "status"
     assert "alert(" not in html

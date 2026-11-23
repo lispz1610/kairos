@@ -5,6 +5,12 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
+from tests.trip_payloads import (
+    accommodation_payload,
+    intercity_connection_payload,
+    stage_payload,
+    with_departure_datetime,
+)
 
 client = TestClient(app)
 
@@ -13,53 +19,43 @@ BACKUP_VALIDATE_URL = "/api/trip/backup/validate"
 
 def _trip_payload() -> dict[str, Any]:
     """Viagem válida com duas Etapas de Viagem e uma Conexão Interurbana."""
-    sp_accommodation = {
-        "id": "h-sp",
-        "name": "Hospedagem SP",
-        "location": [-23.55, -46.66],
-    }
-    lima_accommodation = {
-        "id": "h-lima",
-        "name": "Hospedagem Lima",
-        "location": [-12.04, -77.03],
-    }
-    return {
+    sp_accommodation = accommodation_payload(
+        "h-sp", "Hospedagem SP", -23.55, -46.66, as_list=True
+    )
+    lima_accommodation = accommodation_payload(
+        "h-lima", "Hospedagem Lima", -12.04, -77.03, as_list=True
+    )
+    trip = {
         "id": "trip-sp-lima",
         "title": "São Paulo e Lima",
         "travelers": 2,
         "stages": [
-            {
-                "id": "stage-sp",
-                "city_name": "São Paulo",
-                "start_date": "2026-11-01",
-                "end_date": "2026-11-03",
-                "base_accommodation": sp_accommodation,
-                "days": [{"date": "2026-11-01", "base_accommodation": sp_accommodation}],
-            },
-            {
-                "id": "stage-lima",
-                "city_name": "Lima",
-                "start_date": "2026-11-03",
-                "end_date": "2026-11-05",
-                "base_accommodation": lima_accommodation,
-                "days": [{"date": "2026-11-03", "base_accommodation": lima_accommodation}],
-            },
+            stage_payload(
+                stage_id="stage-sp",
+                city_name="São Paulo",
+                start_date="2026-11-01",
+                end_date="2026-11-03",
+                accommodation=sp_accommodation,
+            ),
+            stage_payload(
+                stage_id="stage-lima",
+                city_name="Lima",
+                start_date="2026-11-03",
+                end_date="2026-11-05",
+                accommodation=lima_accommodation,
+            ),
         ],
         "connections": [
-            {
-                "id": "conn-1",
-                "from_stage_id": "stage-sp",
-                "to_stage_id": "stage-lima",
-                "mode": "flying",
-                "modal": "flying",
-                "departure_time": "2026-11-03",
-                "departure_datetime": "2026-11-03T09:00:00",
-                "boarding_cutoff_minutes": 120,
-            }
+            intercity_connection_payload(
+                from_stage_id="stage-sp",
+                to_stage_id="stage-lima",
+                departure_date="2026-11-03",
+            )
         ],
         "preferences": {"intensities": {"culture": 7}},
         "curation_lists": [],
     }
+    return with_departure_datetime(trip)
 
 
 def test_backup_validate_returns_validated_trip_and_is_idempotent() -> None:
@@ -84,8 +80,8 @@ def test_backup_validate_returns_validated_trip_and_is_idempotent() -> None:
     assert again.json() == validated
 
 
-def test_backup_validate_coerces_values_and_ignores_unknown_fields() -> None:
-    """Campos extras são descartados e valores compatíveis são normalizados."""
+def test_backup_validate_rejects_unknown_fields_and_untyped_numbers() -> None:
+    """Campos desconhecidos e números em texto são recusados com 422 detalhado."""
     payload = _trip_payload()
     payload["travelers"] = "2"
     payload["campo_desconhecido"] = {"legado": True}
@@ -93,11 +89,11 @@ def test_backup_validate_coerces_values_and_ignores_unknown_fields() -> None:
 
     response = client.post(BACKUP_VALIDATE_URL, json=payload)
 
-    assert response.status_code == 200, response.text
-    validated = response.json()
-    assert validated["travelers"] == 2
-    assert "campo_desconhecido" not in validated
-    assert "campo_extra" not in validated["stages"][0]
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert any(item["loc"][-1] == "travelers" for item in detail)
+    assert any(item["loc"][-1] == "campo_desconhecido" for item in detail)
+    assert any(item["loc"][-1] == "campo_extra" for item in detail)
 
 
 def test_backup_validate_rejects_payload_without_required_trip_id() -> None:
