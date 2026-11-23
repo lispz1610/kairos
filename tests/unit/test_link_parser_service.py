@@ -18,6 +18,7 @@ from src.core.services.link_parser import LinkParserService
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.requirement("RF05")
 def test_link_parser_service_requires_fetcher_for_network_calls() -> None:
     """Verifica que operações de rede falham sem um buscador configurado."""
     parser = LinkParserService(fetcher=None)
@@ -29,6 +30,7 @@ def test_link_parser_service_requires_fetcher_for_network_calls() -> None:
         parser.fetch_url_content("https://example.com")
 
 
+@pytest.mark.requirement("RF05")
 def test_link_parser_service_delegates_to_fetcher_port() -> None:
     """Verifica que o serviço delega validação e busca à porta de busca."""
     mock_fetcher = MagicMock(spec=UrlFetcherPort)
@@ -73,6 +75,7 @@ def test_link_parser_service_delegates_to_fetcher_port() -> None:
         ("http://non-existent-domain-kairos-test-12345.org", "Falha ao resolver"),
     ],
 )
+@pytest.mark.requirement("RF05")
 def test_ssrf_validator_blocks_forbidden_urls(
     invalid_url: str, expected_error_fragment: str
 ) -> None:
@@ -104,6 +107,7 @@ def test_ssrf_validator_blocks_forbidden_urls(
         ),
     ],
 )
+@pytest.mark.requirement("RF05")
 def test_fetch_url_content_valid_simulation(
     url: str, mock_html: str, expected_snippet: str
 ) -> None:
@@ -124,6 +128,7 @@ def test_fetch_url_content_valid_simulation(
             assert expected_snippet in content
 
 
+@pytest.mark.requirement("RF05")
 def test_fetch_url_content_size_limit_exceeded() -> None:
     """Verifica que conteúdo acima do limite máximo é rejeitado."""
     fetcher = SafeHttpFetcher(max_content_bytes=1_000_000)
@@ -147,6 +152,7 @@ def test_fetch_url_content_size_limit_exceeded() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.requirement("RF05")
 def test_dns_rebinding_simulation_dual_homed_host_is_rejected() -> None:
     """Se o DNS responder com múltiplos IPs e um deles for privado, deve rejeitar."""
     fetcher = SafeHttpFetcher()
@@ -162,6 +168,7 @@ def test_dns_rebinding_simulation_dual_homed_host_is_rejected() -> None:
             parser.validate_url_safety("https://rebound-attack.example.com")
 
 
+@pytest.mark.requirement("RF05")
 def test_dns_rebinding_ip_pinning_transport_connects_only_to_validated_ip() -> None:
     """Garante que o transporte HTTP conecta exclusivamente ao IP validado (sem re-resolução)."""
     pinned_ip = "93.184.216.34"
@@ -189,6 +196,7 @@ def test_dns_rebinding_ip_pinning_transport_connects_only_to_validated_ip() -> N
         )
 
 
+@pytest.mark.requirement("RF05")
 def test_pinned_ip_transport_initializes_with_backend() -> None:
     """Verifica que o transporte usa o backend de IP fixado."""
     transport = PinnedIPTransport(pinned_ip="93.184.216.34")
@@ -197,6 +205,7 @@ def test_pinned_ip_transport_initializes_with_backend() -> None:
     assert transport._pool._network_backend.pinned_ip == "93.184.216.34"
 
 
+@pytest.mark.requirement("RF05")
 def test_fetch_url_rejects_http_redirects() -> None:
     """Redirecionamentos 3xx devem ser rejeitados para evitar desvio para destinos internos."""
     fetcher = SafeHttpFetcher()
@@ -217,6 +226,7 @@ def test_fetch_url_rejects_http_redirects() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.requirement("RF05")
 def test_link_parser_service_requires_curation_service_for_extraction() -> None:
     """Verifica que a extração falha sem CurationService ou PlacesPort configurados."""
     parser = LinkParserService()
@@ -225,6 +235,7 @@ def test_link_parser_service_requires_curation_service_for_extraction() -> None:
         parser.extract_places_from_text("Coffee Lab em São Paulo")
 
 
+@pytest.mark.requirement("RF05")
 def test_text_extraction_identifies_matching_places() -> None:
     """Verifica a extração de Pontos de Interesse mencionados em texto livre."""
     parser = LinkParserService(places_port=OfflineReplayPlacesAdapter())

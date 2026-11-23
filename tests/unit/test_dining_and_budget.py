@@ -16,6 +16,7 @@ from src.core.domain.models import (
 from src.core.services.dining_and_budget import DiningService
 
 
+@pytest.mark.requirement("RF03")
 def test_dining_service_proximity_recommendations() -> None:
     # Reference POI (e.g. visited at morning)
     """Verifica que as recomendações priorizam restaurantes proximos e bem avaliados."""
@@ -64,6 +65,7 @@ def test_dining_service_proximity_recommendations() -> None:
     assert top_picks[1].id == "rest-2"
 
 
+@pytest.mark.requirement("RF07")
 def test_budget_calculation_consolidates_lodging_and_food() -> None:
     """Verifica a Estimativa de Gastos consolidada de hospedagem e alimentação."""
     hotel_sp = Accommodation(
@@ -104,6 +106,7 @@ def test_budget_calculation_consolidates_lodging_and_food() -> None:
         ("fine_dining", 400.0),
     ],
 )
+@pytest.mark.requirement("RF07")
 def test_budget_calculation_varies_by_food_profile(
     profile: FoodProfile | str, expected_daily_food: float
 ) -> None:
@@ -132,6 +135,7 @@ def test_budget_calculation_varies_by_food_profile(
 
 
 @pytest.mark.parametrize("travelers", [1, 2, 4])
+@pytest.mark.requirement("RF07")
 def test_budget_calculation_varies_by_travelers_count(travelers: int) -> None:
     """Verifica a Estimativa de Gastos para diferentes números de viajantes."""
     hotel = Accommodation(
@@ -161,6 +165,7 @@ def test_budget_calculation_varies_by_travelers_count(travelers: int) -> None:
 
 
 @pytest.mark.parametrize("travelers", [1, 2, 4])
+@pytest.mark.requirement("RF07")
 def test_budget_calculation_scales_meal_slots_by_travelers(travelers: int) -> None:
     """Verifica que os custos dos Slots de Refeição escalam com os viajantes."""
     hotel = Accommodation(

@@ -27,5 +27,9 @@ jobs:
       - name: Install dev dependencies
         run: pip install -e '.[dev]'
 
-      - name: Run fast quality gate
+      # verify_quality.sh is the single source of truth for local and CI checks.
+      # It runs ruff, mypy, radon, pytest, validate_traceability.py,
+      # generate_traceability_matrix.py --check and validate_docs_as_code.py in
+      # this one invocation; do not add duplicate validator steps here.
+      - name: Run fast quality gate (ruff, mypy, radon, pytest, traceability, docs-as-code)
         run: bash ./verify_quality.sh

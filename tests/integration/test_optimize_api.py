@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -40,6 +41,7 @@ def test_optimize_endpoint_returns_valid_itinerary() -> None:
     assert data["total_utility"] >= 10.0
 
 
+@pytest.mark.requirement("RF03")
 def test_optimize_endpoint_respects_reserved_slots() -> None:
     """Verifica que o Roteiro gerado não colide com Slots de Refeição reservados."""
     payload = {

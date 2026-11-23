@@ -28,6 +28,9 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-v --strict-markers"
+markers = [
+    "requirement: rastreia um ou mais requisitos funcionais (RFxx) da especificação",
+]
 
 [tool.ruff]
 line-length = 100

@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from src.core.domain.models import (
     Accommodation,
     Coordinates,
@@ -10,6 +12,7 @@ from src.core.domain.models import (
 )
 
 
+@pytest.mark.requirement("RF01")
 def test_accommodation_creation_and_coordinates() -> None:
     """Verifica a criação de uma Hospedagem e a preservação de suas coordenadas."""
     hotel = Accommodation(
@@ -24,6 +27,7 @@ def test_accommodation_creation_and_coordinates() -> None:
     assert hotel.real_daily_rate == 1200.0
 
 
+@pytest.mark.requirement("RF01")
 def test_trip_stage_days_generation_with_base_hotel() -> None:
     """Verifica que a Etapa de Viagem gera Dias de Viagem com a Hospedagem base."""
     base_hotel = Accommodation(
@@ -52,6 +56,7 @@ def test_trip_stage_days_generation_with_base_hotel() -> None:
         assert not day.is_transition_day
 
 
+@pytest.mark.requirement("RF01", "RF02")
 def test_trip_stage_custom_hotel_override_and_transition_detection() -> None:
     """Verifica a troca de Hospedagem e a detecção do Dia de Troca de Hospedagem."""
     base_hotel = Accommodation(
@@ -88,6 +93,7 @@ def test_trip_stage_custom_hotel_override_and_transition_detection() -> None:
     assert stage.days[2].return_accommodation.id == "hotel-boutique"
 
 
+@pytest.mark.requirement("RF08")
 def test_trip_full_json_serialization_round_trip() -> None:
     """Verifica a idempotência da serialização JSON de uma Viagem completa."""
     base_hotel_sp = Accommodation(
@@ -146,6 +152,7 @@ def test_trip_full_json_serialization_round_trip() -> None:
     assert Trip.model_validate(json.loads(trip.model_dump_json())) == trip
 
 
+@pytest.mark.requirement("RF01", "RF02")
 def test_deserialized_trip_relinks_previous_day_accommodations_for_transition_detection() -> None:
     """Verifica que a desserialização religa as Hospedagens e detecta dias de troca."""
     import json

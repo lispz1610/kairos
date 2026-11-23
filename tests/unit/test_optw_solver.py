@@ -19,6 +19,7 @@ constraint de Janela de Funcionamento aplica ao horário da visita.
 from datetime import datetime, time, timedelta
 
 import hypothesis.strategies as st
+import pytest
 from hypothesis import given
 
 from src.core.domain.models import POI, Accommodation, Coordinates, Itinerary, TimeWindow
@@ -197,6 +198,7 @@ def test_propriedade_invariantes_ac2_início_padrão(pois, travel_minutes):
     _assert_invariants(itinerary, availability)
 
 
+@pytest.mark.requirement("RF01", "RF03")
 def test_optw_solver_respects_time_budget_and_depots() -> None:
     """Verifica que o solver respeita orçamento temporal e pontos de partida e retorno."""
     hotel_a = Accommodation(
@@ -316,6 +318,7 @@ def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
     assert longitudes == sorted(longitudes)
 
 
+@pytest.mark.requirement("RF03")
 def test_optw_solver_blocks_attractions_during_reserved_slots() -> None:
     """Verifica que nenhum Ponto de Interesse sobrepõe Slots de Refeição reservados."""
     start_loc = Coordinates(latitude=-23.5505, longitude=-46.6333)
