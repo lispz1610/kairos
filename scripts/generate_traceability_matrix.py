@@ -21,27 +21,9 @@ import sys
 from pathlib import Path
 
 try:
-    from scripts.quality_cli_common import (
-        REQUIRED_IDS,
-        Marker,
-        extract_canonical_ids,
-        extract_markers,
-        extract_requirement_titles,
-        iter_markdown_sections,
-        read_utf8,
-        resolve_code_tree,
-    )
+    from scripts import quality_cli_common as qc
 except ImportError:  # pragma: no cover - execução direta do script
-    from quality_cli_common import (
-        REQUIRED_IDS,
-        Marker,
-        extract_canonical_ids,
-        extract_markers,
-        extract_requirement_titles,
-        iter_markdown_sections,
-        read_utf8,
-        resolve_code_tree,
-    )
+    import quality_cli_common as qc
 
 MATRIX_TITLE_RE = re.compile(r"^\d+\.\s+Matriz de Rastreabilidade\b")
 RF_ROW_RE = re.compile(r"^\|\s*\*\*(RF\d{2})\*\*\s*\|")
@@ -56,7 +38,7 @@ TABLE_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 
 def _write_plan(plan: Path, text: str) -> bool:
     """Gravar o plano apenas quando o conteúdo mudar; informar se houve escrita."""
-    if read_utf8(plan, preserve_newlines=True) == text:
+    if qc.read_utf8_preserving_newlines(plan) == text:
         return False
     with plan.open("w", encoding="utf-8", newline="") as handle:
         handle.write(text)
@@ -73,7 +55,7 @@ def _section_bounds(lines: list[str]) -> tuple[int, int] | None:
     section = next(
         (
             candidate
-            for candidate in iter_markdown_sections(lines)
+            for candidate in qc.iter_markdown_sections(lines)
             if MATRIX_TITLE_RE.match(candidate.title)
         ),
         None,
@@ -105,7 +87,7 @@ def _row_for(lines: list[str], identifier: str) -> str:
     return ""
 
 
-def _relative_path(marker: Marker, tests_dir: Path) -> Path:
+def _relative_path(marker: qc.Marker, tests_dir: Path) -> Path:
     """Representar o arquivo do marcador relativo à raiz da suíte."""
     try:
         return marker.path.relative_to(tests_dir)
@@ -113,7 +95,7 @@ def _relative_path(marker: Marker, tests_dir: Path) -> Path:
         return Path(marker.path.name)
 
 
-def _display_path(marker: Marker, root: Path, tests_dir: Path) -> Path:
+def _display_path(marker: qc.Marker, root: Path, tests_dir: Path) -> Path:
     """Representar o arquivo do marcador no formato ``tests/...`` da matriz."""
     try:
         return marker.path.relative_to(root)
@@ -129,11 +111,11 @@ def _layer_for(relative: Path) -> str:
 
 
 def _group_markers(
-    markers: list[Marker], root: Path, tests_dir: Path
+    markers: list[qc.Marker], root: Path, tests_dir: Path
 ) -> dict[str, dict[str, list[str]]]:
     """Agrupar identificadores de casos de teste por RF e por camada."""
     grouped: dict[str, dict[str, list[str]]] = {
-        identifier: {layer: [] for layer in LAYERS} for identifier in sorted(REQUIRED_IDS)
+        identifier: {layer: [] for layer in LAYERS} for identifier in sorted(qc.REQUIRED_IDS)
     }
     for marker in markers:
         if marker.identifier not in grouped:
@@ -171,7 +153,7 @@ def _format_cell(test_ids: list[str]) -> str:
 
 
 def _build_rows(
-    markers: list[Marker],
+    markers: list[qc.Marker],
     titles: dict[str, str],
     root: Path,
     tests_dir: Path,
@@ -181,7 +163,7 @@ def _build_rows(
     grouped = _group_markers(markers, root, tests_dir)
     existing = _existing_rows(section_lines)
     rows: dict[str, str] = {}
-    for identifier in sorted(REQUIRED_IDS):
+    for identifier in sorted(qc.REQUIRED_IDS):
         cells = existing.get(identifier, [])
         title = titles.get(identifier) or (cells[1] if len(cells) > 1 else "—")
         production = cells[5] if len(cells) > 5 else "—"
@@ -224,7 +206,7 @@ def _render_section(section_lines: list[str], rows: dict[str, str], newline: str
 
 def build_expected(
     plan_text: str,
-    markers: list[Marker],
+    markers: list[qc.Marker],
     titles: dict[str, str],
     root: Path,
     tests_dir: Path,
@@ -250,7 +232,7 @@ def _diagnose(plan_text: str, expected: str) -> list[str]:
         return ["a seção 'Matriz de Rastreabilidade' não foi encontrada no Plano de Testes."]
     start, end = bounds
     diagnostics: list[str] = []
-    for identifier in sorted(REQUIRED_IDS):
+    for identifier in sorted(qc.REQUIRED_IDS):
         actual = _row_for(lines[start:end], identifier)
         wanted = _row_for(expected_lines[start:end], identifier)
         if actual != wanted:
@@ -307,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
         help="apenas verificar: 0 se fiel à suíte, 1 se divergente (sem gravar)",
     )
     args = parser.parse_args(argv)
-    tree = resolve_code_tree(args.root, args.tests)
+    tree = qc.resolve_code_tree(args.root, args.tests)
 
     for document in (args.plan, args.spec):
         if not document.is_file():
@@ -321,10 +303,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        canonical_ids = extract_canonical_ids(args.spec)
-        titles = extract_requirement_titles(args.spec)
-        markers = extract_markers(tree.tests)
-        plan_text = read_utf8(args.plan, preserve_newlines=True)
+        canonical_ids = qc.extract_canonical_ids(args.spec)
+        titles = qc.extract_requirement_titles(args.spec)
+        markers = qc.extract_markers(tree.tests)
+        plan_text = qc.read_utf8_preserving_newlines(args.plan)
     except (OSError, UnicodeError, SyntaxError) as error:
         print(f"Erro ao ler entradas: {error}", file=sys.stderr)
         return 2

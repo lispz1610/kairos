@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Utilitários compartilhados pelos CLIs de qualidade do Kairos.
 
-Centraliza a leitura UTF-8 de documentos, a descoberta de seções ``##``, a
-resolução da árvore de código e a única implementação da coleta de marcadores
-``requirement`` e de títulos canônicos RFxx. Os CLIs importam este módulo como
-qualquer outro, sem alterar a lista de busca de imports em tempo de execução.
+Centraliza a leitura UTF-8 de documentos, o agrupamento de blocos Markdown com
+sua seção ``##``, a resolução da árvore de código e a única implementação da
+coleta de marcadores ``requirement`` e de títulos canônicos RFxx. Os CLIs
+importam este módulo como objeto, sem alterar a lista de busca de imports em
+tempo de execução.
 """
 
 from __future__ import annotations
@@ -18,6 +19,16 @@ from pathlib import Path
 SPECIFICATION_ID_RE = re.compile(r"^###\s+(RF\d{2})\b", re.MULTILINE)
 SPECIFICATION_TITLE_RE = re.compile(r"^###\s+(RF\d{2})\s+[—–-]\s*(.+?)\s*$", re.MULTILINE)
 LEVEL2_HEADING_RE = re.compile(r"^##\s(.*?)\s*$")
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+BLOCK_BOUNDARY_RE = re.compile(
+    r"^(?:"
+    r"\s*(?:[-*+]|\d+[.)])\s+"  # novo item de lista
+    r"|\s{0,3}#{1,6}\s"  # cabeçalho
+    r"|\s*(?:```|~~~)"  # cerca de código
+    r"|\s*(?:---|\+\+\+|===|\*\*\*|___)\s*$"  # front matter / linha temática
+    r"|\s*\|"  # linha de tabela
+    r")"
+)
 REQUIRED_IDS = frozenset(f"RF{number:02d}" for number in range(1, 9))
 
 
@@ -41,6 +52,15 @@ class MarkdownSection:
 
 
 @dataclass(frozen=True)
+class MarkdownBlock:
+    """Item de lista ou parágrafo, com a seção ``##`` que o contém."""
+
+    line: int
+    text: str
+    section: str
+
+
+@dataclass(frozen=True)
 class CodeTree:
     """Raiz da árvore de código e diretório da suíte de testes."""
 
@@ -52,15 +72,20 @@ class CodeTree:
         return self.root / Path(relative)
 
 
-def read_utf8(
-    path: Path, *, preserve_newlines: bool = False, errors: str = "strict"
-) -> str:
-    """Ler texto UTF-8, opcionalmente preservando as quebras de linha originais."""
-    if not preserve_newlines and errors == "strict":
-        return path.read_text(encoding="utf-8")
-    newline = "" if preserve_newlines else None
-    with path.open("r", encoding="utf-8", errors=errors, newline=newline) as handle:
+def read_utf8(path: Path) -> str:
+    """Ler texto UTF-8 estrito, com as quebras de linha convertidas pelo Python."""
+    return path.read_text(encoding="utf-8")
+
+
+def read_utf8_preserving_newlines(path: Path) -> str:
+    r"""Ler texto UTF-8 preservando as quebras ``\r\n`` originais."""
+    with path.open("r", encoding="utf-8", newline="") as handle:
         return handle.read()
+
+
+def read_utf8_lossy(path: Path) -> str:
+    """Ler texto UTF-8 substituindo bytes inválidos, para inspeção de artefatos."""
+    return path.read_text(encoding="utf-8", errors="replace")
 
 
 def iter_markdown_sections(lines: Sequence[str]) -> Iterator[MarkdownSection]:
@@ -73,6 +98,42 @@ def iter_markdown_sections(lines: Sequence[str]) -> Iterator[MarkdownSection]:
     for position, (start, title) in enumerate(headings):
         end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
         yield MarkdownSection(title=title, start=start, end=end)
+
+
+def document_blocks(path: Path) -> tuple[MarkdownBlock, ...]:
+    """Agrupar itens de lista e suas continuações preguiçosas com a seção ``##``.
+
+    A continuação pode vir na linha não indentada seguinte; ela termina em novo
+    item, cabeçalho, cerca, front matter, linha temática ou linha de tabela,
+    evitando misturar escopos diferentes de um mesmo documento.
+    """
+    lines = read_utf8(path).splitlines()
+    sections = tuple(iter_markdown_sections(lines))
+    blocks: list[MarkdownBlock] = []
+    section_index = 0
+    section = ""
+    index = 0
+    while index < len(lines):
+        while section_index < len(sections) and sections[section_index].start <= index:
+            section = sections[section_index].title
+            section_index += 1
+        line = lines[index]
+        if not line.strip():
+            index += 1
+            continue
+        end = index + 1
+        if LIST_ITEM_RE.match(line):
+            while end < len(lines) and not BLOCK_BOUNDARY_RE.match(lines[end]):
+                end += 1
+        blocks.append(
+            MarkdownBlock(
+                line=index + 1,
+                text="\n".join(lines[index:end]).rstrip(),
+                section=section,
+            )
+        )
+        index = end
+    return tuple(blocks)
 
 
 def resolve_code_tree(root: Path, tests: Path | None = None) -> CodeTree:

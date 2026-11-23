@@ -18,23 +18,9 @@ import sys
 from pathlib import Path
 
 try:
-    from scripts.quality_cli_common import (
-        REQUIRED_IDS,
-        Marker,
-        extract_canonical_ids,
-        extract_markers,
-        extract_requirement_titles,
-        resolve_code_tree,
-    )
+    from scripts import quality_cli_common as qc
 except ImportError:  # pragma: no cover - execução direta do script
-    from quality_cli_common import (
-        REQUIRED_IDS,
-        Marker,
-        extract_canonical_ids,
-        extract_markers,
-        extract_requirement_titles,
-        resolve_code_tree,
-    )
+    import quality_cli_common as qc
 
 EPILOG = """Critério para lacunas parciais de navegador:
   Declarações documentais sobre interação em navegador real (por exemplo,
@@ -46,16 +32,7 @@ EPILOG = """Critério para lacunas parciais de navegador:
   RF13 são válidos quando declarados na especificação, mas não obrigatórios.
 """
 
-__all__ = (
-    "EPILOG",
-    "REQUIRED_IDS",
-    "Marker",
-    "extract_canonical_ids",
-    "extract_markers",
-    "extract_requirement_titles",
-    "main",
-    "resolve_code_tree",
-)
+__all__ = ("EPILOG", "main", "qc")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -91,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    tree = resolve_code_tree(args.root, args.tests)
+    tree = qc.resolve_code_tree(args.root, args.tests)
 
     if not args.spec.is_file():
         print(f"Erro: especificação não encontrada: {args.spec}", file=sys.stderr)
@@ -104,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        canonical_ids = extract_canonical_ids(args.spec)
+        canonical_ids = qc.extract_canonical_ids(args.spec)
     except (OSError, UnicodeError) as error:
         print(f"Erro ao ler especificação: {error}", file=sys.stderr)
         return 2
@@ -112,13 +89,13 @@ def main(argv: list[str] | None = None) -> int:
         print("Erro: a especificação não declara cabeçalhos ### RFxx.", file=sys.stderr)
         return 2
     try:
-        markers: list[Marker] = extract_markers(tree.tests)
+        markers: list[qc.Marker] = qc.extract_markers(tree.tests)
     except (OSError, UnicodeError, SyntaxError) as error:
         print(f"Erro ao analisar suíte de testes: {error}", file=sys.stderr)
         return 2
 
     covered_ids = {marker.identifier for marker in markers}
-    missing = sorted((REQUIRED_IDS & canonical_ids) - covered_ids)
+    missing = sorted((qc.REQUIRED_IDS & canonical_ids) - covered_ids)
     invalid = [marker for marker in markers if marker.identifier not in canonical_ids]
 
     for marker in invalid:
