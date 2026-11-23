@@ -126,3 +126,66 @@ def test_ripple_shift_apply_endpoint() -> None:
     assert updated["stages"][1]["start_date"] == "2026-11-11"
     assert updated["stages"][1]["end_date"] == "2026-11-16"
     assert updated["connections"][0]["departure_time"] == "2026-11-11"
+
+
+def test_ripple_shift_apply_matches_preview_dates_for_positive_delta() -> None:
+    """Verifica que a Viagem aplicada reproduz as datas da prévia, inclusive conexões."""
+    trip_payload = _sample_trip_payload()
+    trip_payload["connections"][0].update(
+        {
+            "departure_datetime": "2026-11-10T09:00:00",
+            "modal": "flying",
+            "boarding_cutoff_minutes": 120,
+        }
+    )
+    payload = {"trip": trip_payload, "target_stage_id": "st-sp", "delta_days": 2}
+    preview_response = client.post("/api/trip/ripple-shift/preview", json=payload)
+    assert preview_response.status_code == 200
+    apply_response = client.post("/api/trip/ripple-shift/apply", json=payload)
+    assert apply_response.status_code == 200
+
+    preview = preview_response.json()
+    applied_trip = apply_response.json()
+    assert applied_trip["stages"][0]["end_date"] == preview["new_target_end"] == "2026-11-12"
+    assert len(preview["shifted_stages"]) == len(applied_trip["stages"]) - 1
+    assert len(preview["shifted_connections"]) == len(applied_trip["connections"])
+
+    for shifted, stage in zip(preview["shifted_stages"], applied_trip["stages"][1:]):
+        assert (stage["start_date"], stage["end_date"]) == (
+            shifted["new_start"],
+            shifted["new_end"],
+        )
+        assert len(stage["days"]) == shifted["preserved_days_count"]
+        assert stage["days"][0]["date"] == shifted["new_start"]
+
+    for shifted, connection in zip(preview["shifted_connections"], applied_trip["connections"]):
+        assert connection["departure_time"] == shifted["new_departure"]
+        assert connection["departure_datetime"] == shifted["new_departure"] + "T09:00:00"
+
+
+def test_ripple_shift_apply_rejects_unknown_stage_without_server_state() -> None:
+    """Verifica que a rejeição detalha o erro e não deixa Viagem alterada no servidor."""
+    trip_payload = _sample_trip_payload()
+    rejected = client.post(
+        "/api/trip/ripple-shift/apply",
+        json={"trip": trip_payload, "target_stage_id": "st-inexistente", "delta_days": 1},
+    )
+    assert rejected.status_code == 400
+    assert "st-inexistente" in rejected.json()["detail"]
+
+    accepted = client.post(
+        "/api/trip/ripple-shift/apply",
+        json={"trip": trip_payload, "target_stage_id": "st-sp", "delta_days": 1},
+    )
+    assert accepted.status_code == 200
+    assert accepted.json()["stages"][1]["start_date"] == "2026-11-11"
+
+
+def test_ripple_shift_apply_rejects_shrink_that_eliminates_stage() -> None:
+    """Verifica que a aplicação rejeita remover todos os dias de uma Etapa de Viagem."""
+    response = client.post(
+        "/api/trip/ripple-shift/apply",
+        json={"trip": _sample_trip_payload(), "target_stage_id": "st-sp", "delta_days": -10},
+    )
+    assert response.status_code == 400
+    assert "mínimo 1 dia" in response.json()["detail"]

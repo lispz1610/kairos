@@ -350,11 +350,14 @@ def preview_ripple_shift(req: RippleShiftRequest) -> RippleShiftPreview:
 @app.post("/api/trip/ripple-shift/apply", response_model=Trip)
 def apply_ripple_shift(req: RippleShiftRequest) -> Trip:
     """Aplica o deslocamento em cascata nas etapas e conexões da viagem."""
-    return schedule_service.apply_ripple_shift(
-        trip=req.trip,
-        target_stage_id=req.target_stage_id,
-        delta_days=req.delta_days,
-    )
+    try:
+        return schedule_service.apply_ripple_shift(
+            trip=req.trip,
+            target_stage_id=req.target_stage_id,
+            delta_days=req.delta_days,
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
 
 
 @app.post("/api/trip/export-markdown")
