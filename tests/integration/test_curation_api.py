@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app, places_adapter
@@ -68,6 +69,7 @@ def test_cache_persistence_and_offline_replay() -> None:
         assert "Fabrique" in cached
 
 
+@pytest.mark.requirement("RF04")
 def test_optimize_endpoint_applies_curation_boost() -> None:
     """Verifica que curadoria ativa aumenta a Pontuação de Utilidade e altera o Roteiro."""
     hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
@@ -123,6 +125,7 @@ def test_optimize_endpoint_applies_curation_boost() -> None:
     assert it_boosted["stops"][0]["poi"]["utility_score"] == 15.0
 
 
+@pytest.mark.requirement("RF04")
 def test_optimize_endpoint_respects_inactive_curation_list() -> None:
     """Verifica que Lista de Curadoria inativa não altera a Pontuação de Utilidade."""
     hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}

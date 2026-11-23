@@ -84,6 +84,7 @@ def test_curation_service_requires_places_port() -> None:
     assert len(sp_lists) >= 3
 
 
+@pytest.mark.requirement("RF04")
 def test_apply_curation_boost_to_matching_pois() -> None:
     """Verifica o aumento da Pontuação de Utilidade apenas para Pontos de Interesse curados."""
     service = CurationService(places_port=DummyPlacesPort())

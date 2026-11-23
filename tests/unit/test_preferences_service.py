@@ -4,6 +4,7 @@ from src.core.domain.models import POI, Coordinates, PreferencesProfile
 from src.core.services.preferences import PreferencesService
 
 
+@pytest.mark.requirement("RF04")
 def test_preference_intensity_modulates_utility() -> None:
     """Verifica que a intensidade do Perfil de Preferência modula a Pontuação de Utilidade."""
     service = PreferencesService()
@@ -36,6 +37,7 @@ def test_preference_intensity_modulates_utility() -> None:
     assert w_park.utility_score == 10.0
 
 
+@pytest.mark.requirement("RF03", "RF04")
 def test_thematic_slots_generation_for_coffee_and_wine_lovers() -> None:
     """Verifica a geração de slots temáticos para café e vinho."""
     service = PreferencesService()
@@ -70,6 +72,7 @@ def test_thematic_slots_generation_for_coffee_and_wine_lovers() -> None:
     assert len(slots) == 2
 
 
+@pytest.mark.requirement("RF04")
 def test_all_six_preference_categories_modulate_utility() -> None:
     """Verifica que as seis categorias de preferência modulam a Pontuação de Utilidade."""
     service = PreferencesService()
