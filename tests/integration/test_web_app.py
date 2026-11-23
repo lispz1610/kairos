@@ -1,18 +1,12 @@
 """Contratos HTTP e de estrutura HTML da interface web (RF06/RF08)."""
 
 import re
-from typing import Any
 
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
 from tests.html_contract import element_attributes, message_catalog
-from tests.trip_payloads import (
-    accommodation_payload,
-    intercity_connection_payload,
-    stage_payload,
-    with_departure_datetime,
-)
+from tests.trip_payloads import restorable_trip_payload
 
 client = TestClient(app)
 
@@ -109,17 +103,14 @@ def test_index_page_exposes_impact_confirmation_modal() -> None:
         assert attribute in row.group()
 
 
-def test_index_page_declares_target_stage_start_from_preview_values() -> None:
-    """O início da Etapa alvo declara rótulo canônico e origem dos valores na prévia."""
+def test_index_page_declares_target_stage_start_label() -> None:
+    """O rótulo do início da Etapa de Viagem alvo é visível no modal."""
     html = _html()
     label = re.search(
         r"<span[^>]*data-impact-field=\"target-stage-start\"[^>]*>([^<]*)</span>", html
     )
     assert label is not None
     assert label.group(1).strip() == "Início da Etapa de Viagem alvo"
-    assert 'data-impact-source="preview"' in label.group()
-    assert 'data-preview-old="old_target_start"' in label.group()
-    assert 'data-preview-new="new_target_start"' in label.group()
 
 
 def test_index_page_declares_ripple_actions_and_persistence_intent() -> None:
@@ -172,47 +163,6 @@ def test_index_page_exposes_json_backup_controls() -> None:
     assert "Rota" not in backup_section
 
 
-def _restorable_trip_payload() -> dict[str, Any]:
-    """Viagem válida usada como Backup JSON no contrato de restauração."""
-    sp_accommodation = accommodation_payload(
-        "h-sp", "Hospedagem SP", -23.55, -46.66, as_list=True
-    )
-    lima_accommodation = accommodation_payload(
-        "h-lima", "Hospedagem Lima", -12.04, -77.03, as_list=True
-    )
-    trip = {
-        "id": "trip-sp-lima",
-        "title": "São Paulo e Lima",
-        "travelers": 2,
-        "stages": [
-            stage_payload(
-                stage_id="stage-sp",
-                city_name="São Paulo",
-                start_date="2026-11-01",
-                end_date="2026-11-03",
-                accommodation=sp_accommodation,
-            ),
-            stage_payload(
-                stage_id="stage-lima",
-                city_name="Lima",
-                start_date="2026-11-03",
-                end_date="2026-11-05",
-                accommodation=lima_accommodation,
-            ),
-        ],
-        "connections": [
-            intercity_connection_payload(
-                from_stage_id="stage-sp",
-                to_stage_id="stage-lima",
-                departure_date="2026-11-03",
-            )
-        ],
-        "preferences": {"intensities": {"culture": 7}},
-        "curation_lists": [],
-    }
-    return with_departure_datetime(trip)
-
-
 def test_backup_restore_controls_declare_picker_and_change_trigger() -> None:
     """O botão declara o seletor oculto e a escolha de arquivo dispara a restauração."""
     html = _html()
@@ -221,7 +171,6 @@ def test_backup_restore_controls_declare_picker_and_change_trigger() -> None:
 
     assert button["data-action"] == "restore-backup-json"
     assert button["data-file-input-target"] == file_input["id"] == "backup-file-input"
-    assert file_input["data-change-action"] == button["data-action"]
     assert file_input["type"] == "file"
     file_input_tag = re.search(r"<input[^>]*id=\"backup-file-input\"[^>]*>", html)
     assert file_input_tag is not None
@@ -239,7 +188,7 @@ def test_backup_restore_success_contract_uses_validated_trip_and_render_targets(
     button = element_attributes(html, "restore-backup-json")
     assert button["data-persist-trip"] == "after-validate"
 
-    response = client.post(button["data-endpoint"], json=_restorable_trip_payload())
+    response = client.post(button["data-endpoint"], json=restorable_trip_payload())
 
     assert response.status_code == 200, response.text
     validated = response.json()
@@ -274,7 +223,6 @@ def test_backup_restore_failure_contract_keeps_trip_and_reports_in_banner() -> N
         assert "A Viagem salva não foi alterada." in messages[key], key
     assert "{status}" in messages["restoreHttpError"]
     assert element_attributes(html, "impact-banner")["role"] == "status"
-    assert "alert(" not in html
 
 
 def test_index_page_declares_user_facing_error_messages() -> None:

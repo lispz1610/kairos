@@ -61,3 +61,44 @@ def with_departure_datetime(payload: dict[str, Any]) -> dict[str, Any]:
         }
     )
     return updated
+
+
+def restorable_trip_payload() -> dict[str, Any]:
+    """Viagem válida usada como Backup JSON no contrato de restauração."""
+    sp_accommodation = accommodation_payload(
+        "h-sp", "Hospedagem SP", -23.55, -46.66, as_list=True
+    )
+    lima_accommodation = accommodation_payload(
+        "h-lima", "Hospedagem Lima", -12.04, -77.03, as_list=True
+    )
+    trip = {
+        "id": "trip-sp-lima",
+        "title": "São Paulo e Lima",
+        "travelers": 2,
+        "stages": [
+            stage_payload(
+                stage_id="stage-sp",
+                city_name="São Paulo",
+                start_date="2026-11-01",
+                end_date="2026-11-03",
+                accommodation=sp_accommodation,
+            ),
+            stage_payload(
+                stage_id="stage-lima",
+                city_name="Lima",
+                start_date="2026-11-03",
+                end_date="2026-11-05",
+                accommodation=lima_accommodation,
+            ),
+        ],
+        "connections": [
+            intercity_connection_payload(
+                from_stage_id="stage-sp",
+                to_stage_id="stage-lima",
+                departure_date="2026-11-03",
+            )
+        ],
+        "preferences": {"intensities": {"culture": 7}},
+        "curation_lists": [],
+    }
+    return with_departure_datetime(trip)
