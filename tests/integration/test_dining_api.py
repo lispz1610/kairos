@@ -40,6 +40,7 @@ def test_dining_recommend_endpoint() -> None:
     assert data[0]["id"] == "rest-1"
 
 
+@pytest.mark.requirement("RF07")
 def test_trip_budget_endpoint() -> None:
     """Verifica a Estimativa de Gastos consolidada de hospedagem e alimentação da Viagem."""
     payload = {
@@ -91,6 +92,7 @@ def test_trip_budget_endpoint() -> None:
     assert data["total_trip_cost"] == 1360.0
 
 
+@pytest.mark.requirement("RF07")
 def test_trip_budget_endpoint_with_custom_food_profile_and_multiple_travelers() -> None:
     """Verifica a Estimativa de Gastos por perfil alimentar e número de viajantes."""
     payload = {

@@ -18,6 +18,7 @@ client = TestClient(app)
         "file:///etc/shadow",
     ],
 )
+@pytest.mark.requirement("RF05")
 def test_import_link_ssrf_protection_returns_400(forbidden_url: str) -> None:
     """Verifica que URLs proibidas por SSRF são rejeitadas com 400."""
     response = client.post(
@@ -32,6 +33,7 @@ def test_import_link_ssrf_protection_returns_400(forbidden_url: str) -> None:
     )
 
 
+@pytest.mark.requirement("RF05")
 def test_import_link_with_raw_text_succeeds() -> None:
     """Verifica a extração de candidatos a partir de texto livre."""
     text_payload = {
@@ -46,6 +48,7 @@ def test_import_link_with_raw_text_succeeds() -> None:
     assert any("Central" in n for n in names)
 
 
+@pytest.mark.requirement("RF05")
 def test_import_link_with_valid_url_succeeds() -> None:
     """Verifica a extração de candidatos a partir de uma URL segura."""
     safe_addr = [(None, None, None, None, ("93.184.216.34", 80))]

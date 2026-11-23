@@ -1,5 +1,6 @@
 from typing import Any, Dict
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -67,6 +68,7 @@ def _sample_trip_payload() -> Dict[str, Any]:
     }
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_preview_endpoint() -> None:
     """Verifica a prévia do Deslocamento em Cascata sem alterar a Viagem."""
     trip_payload = _sample_trip_payload()
@@ -82,6 +84,7 @@ def test_ripple_shift_preview_endpoint() -> None:
     assert preview["shifted_stages"][0]["new_start"] == "2026-11-11"
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_apply_endpoint() -> None:
     """Verifica o Deslocamento em Cascata nas Etapas e Conexões Interurbanas."""
     trip_payload = _sample_trip_payload()

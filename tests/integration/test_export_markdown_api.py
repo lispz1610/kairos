@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -5,6 +6,7 @@ from src.adapters.web.app import app
 client = TestClient(app)
 
 
+@pytest.mark.requirement("RF08")
 def test_export_markdown_api_endpoint() -> None:
     """Verifica que a exportação Markdown inclui cabeçalho e Quadro Orçamentário."""
     payload = {
