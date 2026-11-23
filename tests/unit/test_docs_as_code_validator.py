@@ -127,8 +127,8 @@ def test_ausencia_total_com_artefatos_presentes_falha_com_diagnostico(tmp_path: 
     assert "contradição docs-as-code" in output
 
 
-def test_validador_aponta_contradições_conhecidas_no_repositorio() -> None:
-    """No estado atual do repositório, as três divergências conhecidas aparecem."""
+def test_validador_confere_documentacao_corrigida_no_repositorio() -> None:
+    """Os documentos do repositório descrevem os artefatos entregues (#85)."""
     result = _run(
         REPO_ROOT / "docs/testing/test-plan-29119.md",
         REPO_ROOT / "docs/HANDOFF.md",
@@ -136,11 +136,9 @@ def test_validador_aponta_contradições_conhecidas_no_repositorio() -> None:
     )
     output = result.stdout + result.stderr
 
-    assert result.returncode == 1, output
-    assert "Evento de Contingência" in output
-    assert "Replanejamento" in output
-    assert "script de gate de qualidade" in output
-    assert "verify_quality.sh" in output
+    assert result.returncode == 0, output
+    assert "nenhuma contradição encontrada" in output
+    assert "contradição docs-as-code" not in output
 
 
 def test_documento_ausente_retorna_codigo_de_uso(tmp_path: Path) -> None:
