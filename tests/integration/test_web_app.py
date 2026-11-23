@@ -1,11 +1,18 @@
 """Contratos HTTP e de estrutura HTML da interface web (RF06/RF08)."""
 
 import re
+from typing import Any
 
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
 from tests.html_contract import element_attributes, message_catalog
+from tests.trip_payloads import (
+    accommodation_payload,
+    intercity_connection_payload,
+    stage_payload,
+    with_departure_datetime,
+)
 
 client = TestClient(app)
 
@@ -163,6 +170,111 @@ def test_index_page_exposes_json_backup_controls() -> None:
     backup_start = html.index('id="trip-backup-controls"')
     backup_section = html[backup_start : html.index("</section>", backup_start)]
     assert "Rota" not in backup_section
+
+
+def _restorable_trip_payload() -> dict[str, Any]:
+    """Viagem válida usada como Backup JSON no contrato de restauração."""
+    sp_accommodation = accommodation_payload(
+        "h-sp", "Hospedagem SP", -23.55, -46.66, as_list=True
+    )
+    lima_accommodation = accommodation_payload(
+        "h-lima", "Hospedagem Lima", -12.04, -77.03, as_list=True
+    )
+    trip = {
+        "id": "trip-sp-lima",
+        "title": "São Paulo e Lima",
+        "travelers": 2,
+        "stages": [
+            stage_payload(
+                stage_id="stage-sp",
+                city_name="São Paulo",
+                start_date="2026-11-01",
+                end_date="2026-11-03",
+                accommodation=sp_accommodation,
+            ),
+            stage_payload(
+                stage_id="stage-lima",
+                city_name="Lima",
+                start_date="2026-11-03",
+                end_date="2026-11-05",
+                accommodation=lima_accommodation,
+            ),
+        ],
+        "connections": [
+            intercity_connection_payload(
+                from_stage_id="stage-sp",
+                to_stage_id="stage-lima",
+                departure_date="2026-11-03",
+            )
+        ],
+        "preferences": {"intensities": {"culture": 7}},
+        "curation_lists": [],
+    }
+    return with_departure_datetime(trip)
+
+
+def test_backup_restore_controls_declare_picker_and_change_trigger() -> None:
+    """O botão declara o seletor oculto e a escolha de arquivo dispara a restauração."""
+    html = _html()
+    button = element_attributes(html, "restore-backup-json")
+    file_input = element_attributes(html, "backup-file-input")
+
+    assert button["data-action"] == "restore-backup-json"
+    assert button["data-file-input-target"] == file_input["id"] == "backup-file-input"
+    assert file_input["data-change-action"] == button["data-action"]
+    assert file_input["type"] == "file"
+    file_input_tag = re.search(r"<input[^>]*id=\"backup-file-input\"[^>]*>", html)
+    assert file_input_tag is not None
+    assert "hidden" in file_input_tag.group()
+    assert file_input["accept"] == "application/json,.json"
+    assert re.search(
+        r'<button[^>]*id="restore-backup-json"[^>]*>\s*Restaurar Backup JSON\s*</button>',
+        html,
+    ) is not None
+
+
+def test_backup_restore_success_contract_uses_validated_trip_and_render_targets() -> None:
+    """Só a Viagem validada com 200 alimenta o armazenamento e o resumo/selector."""
+    html = _html()
+    button = element_attributes(html, "restore-backup-json")
+    assert button["data-persist-trip"] == "after-validate"
+
+    response = client.post(button["data-endpoint"], json=_restorable_trip_payload())
+
+    assert response.status_code == 200, response.text
+    validated = response.json()
+    assert [stage["city_name"] for stage in validated["stages"]] == ["São Paulo", "Lima"]
+    assert [stage["id"] for stage in validated["stages"]] == ["stage-sp", "stage-lima"]
+    assert all(stage["days"] for stage in validated["stages"])
+    assert element_attributes(html, "trip-planning")["data-trip-storage-key"] == (
+        "kairos_trip_v1"
+    )
+    assert element_attributes(html, "trip-stages")["data-role"] == "trip-stage-summary"
+    assert element_attributes(html, "stage-selector")["aria-label"] == "Etapa de Viagem"
+
+
+def test_backup_restore_failure_contract_keeps_trip_and_reports_in_banner() -> None:
+    """Falhas de leitura, JSON, rede e validação são comunicadas sem tocar a Viagem."""
+    html = _html()
+    button = element_attributes(html, "restore-backup-json")
+
+    rejected = client.post(button["data-endpoint"], json={"title": "Viagem sem id"})
+
+    assert rejected.status_code == 422
+    assert rejected.json()["detail"]
+    messages = message_catalog(html)
+    for key in (
+        "restoreNoFile",
+        "restoreReadError",
+        "restoreParseError",
+        "restoreNetworkError",
+        "restoreHttpError",
+    ):
+        assert "Backup JSON" in messages[key], key
+        assert "A Viagem salva não foi alterada." in messages[key], key
+    assert "{status}" in messages["restoreHttpError"]
+    assert element_attributes(html, "impact-banner")["role"] == "status"
+    assert "alert(" not in html
 
 
 def test_index_page_declares_user_facing_error_messages() -> None:
