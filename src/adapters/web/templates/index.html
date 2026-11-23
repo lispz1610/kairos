@@ -178,10 +178,13 @@
         Exportar Backup JSON
       </button>
       <button type="button" id="restore-backup-json" data-action="restore-backup-json"
-              data-endpoint="/api/trip/backup/validate">
+              data-endpoint="/api/trip/backup/validate"
+              data-file-input-target="backup-file-input"
+              data-persist-trip="after-validate">
         Restaurar Backup JSON
       </button>
-      <input id="backup-file-input" type="file" accept="application/json,.json" hidden />
+      <input id="backup-file-input" type="file" accept="application/json,.json"
+             data-change-action="restore-backup-json" hidden />
     </div>
   </section>
   <section class="panel">
@@ -257,7 +260,7 @@
   "previewHttpError": "A prévia do Deslocamento em Cascata falhou (status {status}). A Viagem salva não foi alterada.",
   "applyNetworkError": "Não foi possível aplicar o Deslocamento em Cascata. A Viagem salva não foi alterada.",
   "applyHttpError": "A aplicação do Deslocamento em Cascata falhou (status {status}).{detail} A Viagem salva não foi alterada.",
-  "restoreNoFile": "Selecione um arquivo de Backup JSON para restaurar a Viagem.",
+  "restoreNoFile": "Selecione um arquivo de Backup JSON para restaurar a Viagem. A Viagem salva não foi alterada.",
   "restoreReadError": "Não foi possível ler o arquivo de Backup JSON. A Viagem salva não foi alterada.",
   "restoreParseError": "O arquivo selecionado não contém um Backup JSON válido. A Viagem salva não foi alterada.",
   "restoreNetworkError": "Não foi possível restaurar o Backup JSON. A Viagem salva não foi alterada.",
@@ -629,6 +632,17 @@ function exportTripBackup() {
   URL.revokeObjectURL(url);
 }
 
+function openBackupFilePicker() {
+  const button = document.getElementById("restore-backup-json");
+  const input = document.getElementById(button.dataset.fileInputTarget);
+  if (!input) {
+    showMessage("restoreReadError");
+    return;
+  }
+  input.value = "";
+  input.click();
+}
+
 async function restoreTripBackup() {
   const input = document.getElementById("backup-file-input");
   const file = input.files && input.files[0];
@@ -856,11 +870,22 @@ const ACTION_HANDLERS = {
   "confirm-ripple-shift": confirmRippleShift,
   "close-impact-modal": closeImpactModal,
   "export-backup-json": exportTripBackup,
-  "restore-backup-json": restoreTripBackup,
+  "restore-backup-json": openBackupFilePicker,
 };
 document.querySelectorAll("[data-action]").forEach((element) => {
   element.addEventListener("click", ACTION_HANDLERS[element.dataset.action]);
 });
+
+function wireBackupRestorePicker() {
+  const button = document.getElementById("restore-backup-json");
+  const input = document.getElementById(button.dataset.fileInputTarget);
+  if (!input) {
+    return;
+  }
+  const changeHandlers = { "restore-backup-json": restoreTripBackup };
+  input.addEventListener("change", changeHandlers[input.dataset.changeAction]);
+}
+wireBackupRestorePicker();
 
 document.getElementById("apply-delay").addEventListener("click", () => {
   const minutes = Number(document.getElementById("delay-minutes").value);
