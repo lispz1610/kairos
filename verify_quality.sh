@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Quality gate for Kairos (issues #25 and #26).
-# Default: ruff -> mypy --strict -> numeric radon CC (< 10) -> pytest with coverage >= 85%.
+# Quality gate for Kairos (issues #25, #26 and #86).
+# Default: ruff -> mypy --strict -> numeric radon CC (< 10) -> pytest with coverage >= 85%
+#          -> RF x test traceability -> matrix --check -> docs-as-code.
 # --full: same fast gate + mutmut mutation testing restricted to src/core + consolidated summary.
 set -euo pipefail
 
@@ -8,7 +9,8 @@ usage() {
   cat <<'EOF'
 Usage: bash ./verify_quality.sh [--full]
 
-  (no args)  Fast gate: ruff, mypy --strict, radon CC < 10, pytest --cov >= 85.
+  (no args)  Fast gate: ruff, mypy --strict, radon CC < 10, pytest --cov >= 85,
+             RF x test traceability, matrix --check and docs-as-code validators.
   --full     Fast gate, then mutmut mutation testing restricted to src/core,
              followed by a consolidated metrics summary.
 EOF
@@ -36,18 +38,32 @@ trap 'rm -rf "$work_dir"' EXIT
 coverage="n/a"
 max_complexity="n/a"
 typing_errors=0
+traceability_status="not run"
+matrix_status="not run"
+docs_as_code_status="not run"
 mutation_stats=""
 
+resolve_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    printf 'python3\n'
+  else
+    printf 'python\n'
+  fi
+}
+
 run_fast_gate() {
-  echo "==> [1/4] ruff check src tests"
+  local python_bin
+  python_bin="$(resolve_python)"
+
+  echo "==> [1/7] ruff check src tests"
   ruff check src tests
 
-  echo "==> [2/4] mypy --strict src"
+  echo "==> [2/7] mypy --strict src"
   mypy --strict src
   # mypy aborts the gate on any typing error, so reaching this point means zero errors.
   typing_errors=0
 
-  echo "==> [3/4] radon cc -s src (numeric cyclomatic complexity must be < 10)"
+  echo "==> [3/7] radon cc -s src (numeric cyclomatic complexity must be < 10)"
   radon_output="$(radon cc -s src)"
   printf '%s\n' "$radon_output"
   # Letter grades are not enough: radon's grade B covers 6-10, so a threshold on
@@ -76,24 +92,37 @@ run_fast_gate() {
     END { print max + 0 }
   ')"
 
-  echo "==> [4/4] pytest --cov=src --cov-report=term-missing --cov-fail-under=85"
+  echo "==> [4/7] pytest --cov=src --cov-report=term-missing --cov-fail-under=85"
   pytest --cov=src --cov-report=term-missing --cov-fail-under=85 2>&1 | tee "$work_dir/pytest.log"
   coverage="$(awk '
     /^TOTAL[[:space:]]/ { pct = $NF; gsub(/%/, "", pct); value = pct "%" }
     END { print (value == "" ? "n/a" : value) }
   ' "$work_dir/pytest.log")"
-}
 
-resolve_python() {
-  if command -v python3 >/dev/null 2>&1; then
-    printf 'python3\n'
-  else
-    printf 'python\n'
-  fi
+  echo "==> [5/7] validate_traceability.py (RF01-RF08 x testes)"
+  "$python_bin" scripts/validate_traceability.py \
+    --spec docs/especificacao-requisitos-funcionais.md \
+    --root .
+  traceability_status="OK"
+
+  echo "==> [6/7] generate_traceability_matrix.py --check (matriz RF01-RF08)"
+  "$python_bin" scripts/generate_traceability_matrix.py \
+    --plan docs/testing/test-plan-29119.md \
+    --spec docs/especificacao-requisitos-funcionais.md \
+    --root . \
+    --check
+  matrix_status="OK"
+
+  echo "==> [7/7] validate_docs_as_code.py (docs x artefatos)"
+  "$python_bin" scripts/validate_docs_as_code.py \
+    --plan docs/testing/test-plan-29119.md \
+    --handoff docs/HANDOFF.md \
+    --root .
+  docs_as_code_status="OK"
 }
 
 run_mutation() {
-  echo "==> [5/5] mutmut run (mutation testing restricted to src/core)"
+  echo "==> [8/8] mutmut run (mutation testing restricted to src/core)"
   local mutmut_dir="$work_dir/mutmut"
   local python_bin
   python_bin="$(resolve_python)"
@@ -156,15 +185,29 @@ print_summary() {
   local python_bin
   python_bin="$(resolve_python)"
 
-  "$python_bin" - "$coverage" "$max_complexity" "$typing_errors" "$mutation_stats" <<'PY'
+  "$python_bin" - \
+    "$coverage" "$max_complexity" "$typing_errors" \
+    "$traceability_status" "$matrix_status" "$docs_as_code_status" \
+    "$mutation_stats" <<'PY'
 import json
 import sys
 
-coverage, complexity, typing_errors, stats_path = sys.argv[1:]
+(
+    coverage,
+    complexity,
+    typing_errors,
+    traceability,
+    matrix,
+    docs_as_code,
+    stats_path,
+) = sys.argv[1:]
 print("==> Consolidated quality summary")
 print(f"  Coverage:                  {coverage} (minimum 85%)")
 print(f"  Max cyclomatic complexity: {complexity} (limit < 10)")
 print(f"  Typing errors:             {typing_errors}")
+print(f"  RF x test traceability:    {traceability}")
+print(f"  Traceability matrix:       {matrix}")
+print(f"  Docs-as-code:              {docs_as_code}")
 if not stats_path:
     print("  Mutation (src/core):       not run")
 else:

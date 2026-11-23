@@ -100,7 +100,7 @@ Os artefatos acima são os mesmos confrontados pelos validadores docs-as-code e 
 
 6. **Aplicação web (`src/adapters/web/`)**: rotas FastAPI, incluindo `POST /api/trip/replan`, orquestração dos Eventos de Contingência em `contingency.py`, template Jinja2 com controles na timeline do Dia de Viagem e banner de impacto. A interação em navegador real permanece como lacuna parcial, registrada no §8 do Plano de Testes.
 
-7. **Gate e validadores de qualidade entregues**: `verify_quality.sh` executa `ruff`, `mypy --strict`, `radon cc` e `pytest --cov` (com estágio opcional de mutação) e é executado antes de commits/PRs. `scripts/validate_docs_as_code.py`, `scripts/validate_traceability.py` e `scripts/generate_traceability_matrix.py` completam a auditoria; seus testes de CLI estão em `tests/unit/test_docs_as_code_validator.py`, `tests/unit/test_traceability_validator.py` e `tests/unit/test_traceability_matrix_generator.py`.
+7. **Gate e validadores de qualidade entregues**: `verify_quality.sh` executa `ruff`, `mypy --strict`, `radon cc`, `pytest --cov` (com estágio opcional de mutação), `scripts/validate_traceability.py`, `scripts/generate_traceability_matrix.py --check` e `scripts/validate_docs_as_code.py`, sendo executado antes de commits/PRs e no CI. Qualquer divergência detectada bloqueia o gate. Os testes de CLI estão em `tests/unit/test_docs_as_code_validator.py`, `tests/unit/test_traceability_validator.py` e `tests/unit/test_traceability_matrix_generator.py`, e a integração dos validadores ao gate é verificada em `tests/unit/test_quality_gate_validators.py`.
 
 ---
 

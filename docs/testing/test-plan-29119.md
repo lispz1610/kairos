@@ -64,10 +64,10 @@ O gate unificado `verify_quality.sh` define a condição de conclusão:
 3. `radon cc src` sem função/método com complexidade ciclomática `>= 10`.
 4. `pytest --cov=src --cov-report=term-missing --cov-fail-under=85` com cobertura `>= 85%`.
 5. No modo `--full`, `mutmut` executado sobre `src/core/`, com mutation score consolidado e contagem de mutantes sobreviventes. Critério de monitoramento/evidência, não uma checagem automática: o `verify_quality.sh --full` reporta o score e os sobreviventes sem impor threshold; a equipe registra na revisão a justificativa de cada sobrevivente e decide pela conversão em novos casos de teste (§5.4).
-6. Matriz de rastreabilidade (§7) com RF01–RF08 integralmente cobertos por ao menos um caso de teste existente, ou lacuna explicitamente declarada (§8), verificável por `python scripts/generate_traceability_matrix.py --plan docs/testing/test-plan-29119.md --spec docs/especificacao-requisitos-funcionais.md --root . --check`.
-7. Coerência docs-as-code verificável por `python scripts/validate_docs_as_code.py --plan docs/testing/test-plan-29119.md --handoff docs/HANDOFF.md --root .`, com Eventos de Contingência, Replanejamento e `verify_quality.sh` descritos como entregues.
+6. Rastreabilidade RF × teste (§7) com RF01–RF08 integralmente cobertos por ao menos um caso de teste existente, verificada pelo gate com `python scripts/validate_traceability.py --spec docs/especificacao-requisitos-funcionais.md --root .` e pela matriz com `python scripts/generate_traceability_matrix.py --plan docs/testing/test-plan-29119.md --spec docs/especificacao-requisitos-funcionais.md --root . --check`.
+7. Coerência docs-as-code, verificada pelo gate com `python scripts/validate_docs_as_code.py --plan docs/testing/test-plan-29119.md --handoff docs/HANDOFF.md --root .`, com Eventos de Contingência, Replanejamento e `verify_quality.sh` descritos como entregues.
 
-O gate `verify_quality.sh` está entregue e é executado antes de cada commit/PR; os validadores dos itens 6 e 7 são executados explicitamente e não são alterados por esta issue. Qualquer falha nas verificações automatizadas acima bloqueia o merge, conforme o gate de qualidade do issue-pai #19; o item 5 é monitoramento/evidência, sem threshold automático.
+O gate `verify_quality.sh` está entregue e é executado antes de cada commit/PR; os validadores dos itens 6 e 7 passaram a integrar o gate rápido na issue #86 e são executados uma única vez, também pelo workflow de quality gate em cada pull request. Qualquer falha nas verificações automatizadas acima bloqueia o merge, conforme o gate de qualidade do issue-pai #19; o item 5 é monitoramento/evidência, sem threshold automático.
 
 ---
 
@@ -134,7 +134,7 @@ Técnica: classes de equivalência sobre os quatro tipos de Evento (`delay`, `cl
 
 ### 5.6 Validação docs-as-code e gate de qualidade
 
-Técnica: testes de CLI com documentos e árvore de código isolados por `tmp_path`. `tests/unit/test_docs_as_code_validator.py` verifica que o validador aceita lacunas parciais de navegador e rejeita afirmações de ausência total quando os artefatos estão presentes; `tests/unit/test_traceability_matrix_generator.py` verifica geração/verificação da matriz a partir dos marcadores `requirement`. O script `verify_quality.sh` automatiza `ruff`, `mypy --strict`, `radon` e `pytest --cov` (com estágio opcional de mutação) e é executado como gate antes de commits e PRs.
+Técnica: testes de CLI com documentos e árvore de código isolados por `tmp_path`, além de teste de integração do gate com ferramentas externas simuladas. `tests/unit/test_docs_as_code_validator.py` verifica que o validador aceita lacunas parciais de navegador e rejeita afirmações de ausência total quando os artefatos estão presentes; `tests/unit/test_traceability_matrix_generator.py` verifica geração/verificação da matriz a partir dos marcadores `requirement`; `tests/unit/test_quality_gate_validators.py` comprova que divergências propositais em marcadores, matriz e documentação derrubam o gate sem alterar o repositório. O script `verify_quality.sh` automatiza `ruff`, `mypy --strict`, `radon`, `pytest --cov`, os validadores de rastreabilidade (incluindo `--check` da matriz) e o validador docs-as-code (com estágio opcional de mutação), sendo executado como gate antes de commits e PRs e no CI.
 
 ---
 
@@ -154,14 +154,14 @@ Técnica: testes de CLI com documentos e árvore de código isolados por `tmp_pa
 | CT-EXP-01 | Round-trip / serialização | RF08 | `tests/property/test_ripple_shift_properties.py::test_trip_json_round_trip_idempotence` |
 | CT-CONT-01 | Classes de equivalência / contrato HTTP | Extensão dinâmica (RF10/RF13) | `tests/unit/test_events.py`, `tests/unit/test_apply_contingency_event.py`, `tests/unit/test_adapters_web_app.py` |
 | CT-REPL-01 | Invariante / contrato HTTP | Extensão dinâmica (RF12/RF13) | `tests/unit/test_replanning_service.py`, `tests/integration/test_trip_replan_endpoint.py` |
-| CT-QUAL-01 | Docs-as-code / matriz / gate | Qualidade | `tests/unit/test_docs_as_code_validator.py`, `tests/unit/test_traceability_matrix_generator.py`, `verify_quality.sh` |
+| CT-QUAL-01 | Docs-as-code / matriz / gate | Qualidade | `tests/unit/test_docs_as_code_validator.py`, `tests/unit/test_traceability_matrix_generator.py`, `tests/unit/test_quality_gate_validators.py`, `verify_quality.sh` |
 
 ---
 
 ## 7. Matriz de Rastreabilidade RF01–RF08 × testes
 
 Cada requisito é ligado a arquivos e casos de teste **existentes** no worktree. Caminhos em `tests/` e `src/` foram verificados quanto à existência.
-A matriz é gerada por `python scripts/generate_traceability_matrix.py --plan docs/testing/test-plan-29119.md --spec docs/especificacao-requisitos-funcionais.md --root .`; acrescente `--check` para verificar sem gravar (issue #83).
+A matriz é gerada por `python scripts/generate_traceability_matrix.py --plan docs/testing/test-plan-29119.md --spec docs/especificacao-requisitos-funcionais.md --root .`; o gate rápido executa essa geração com `--check`, sem gravar (issues #83 e #86).
 
 | RF | Requisito | Testes unitários | Testes de integração | Testes de propriedade | Código de produção relacionado |
 | --- | --- | --- | --- | --- | --- |
