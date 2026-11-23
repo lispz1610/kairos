@@ -60,6 +60,24 @@ def test_ripple_shift_preview_endpoint() -> None:
     assert preview["shifted_stages"][0]["new_start"] == "2026-11-11"
 
 
+def test_ripple_shift_preview_exposes_unchanged_target_start_for_positive_delta() -> None:
+    """A prévia informa o início inalterado da Etapa alvo com delta positivo."""
+    response = client.post(
+        "/api/trip/ripple-shift/preview",
+        json={
+            "trip": with_departure_datetime(_sample_trip_payload()),
+            "target_stage_id": "st-sp",
+            "delta_days": 2,
+        },
+    )
+    assert response.status_code == 200
+    preview = response.json()
+    assert preview["old_target_start"] == "2026-11-01"
+    assert preview["new_target_start"] == "2026-11-01"
+    assert preview["old_target_end"] == "2026-11-10"
+    assert preview["new_target_end"] == "2026-11-12"
+
+
 def test_ripple_shift_preview_exposes_old_and_new_dates_for_negative_delta() -> None:
     """Verifica que a prévia negativa informa datas anteriores e recalculadas ao modal."""
     trip_payload = with_departure_datetime(_sample_trip_payload())
@@ -82,6 +100,44 @@ def test_ripple_shift_preview_exposes_old_and_new_dates_for_negative_delta() -> 
         "2026-11-10",
         "2026-11-09",
     )
+
+
+def test_ripple_shift_preview_preserves_target_start_for_negative_delta() -> None:
+    """A prévia negativa mantém o início da Etapa alvo e recalcula apenas o término."""
+    response = client.post(
+        "/api/trip/ripple-shift/preview",
+        json={
+            "trip": with_departure_datetime(_sample_trip_payload()),
+            "target_stage_id": "st-sp",
+            "delta_days": -1,
+        },
+    )
+    assert response.status_code == 200
+    preview = response.json()
+    assert preview["old_target_start"] == "2026-11-01"
+    assert preview["new_target_start"] == "2026-11-01"
+    assert preview["old_target_end"] == "2026-11-10"
+    assert preview["new_target_end"] == "2026-11-09"
+
+
+def test_ripple_shift_apply_preserves_target_start_and_updates_end() -> None:
+    """A aplicação mantém o início da Etapa alvo da prévia e atualiza o término."""
+    for delta_days, expected_end in ((2, "2026-11-12"), (-1, "2026-11-09")):
+        request = {
+            "trip": with_departure_datetime(_sample_trip_payload()),
+            "target_stage_id": "st-sp",
+            "delta_days": delta_days,
+        }
+        preview_response = client.post("/api/trip/ripple-shift/preview", json=request)
+        apply_response = client.post("/api/trip/ripple-shift/apply", json=request)
+        assert preview_response.status_code == 200
+        assert apply_response.status_code == 200
+
+        preview = preview_response.json()
+        applied_stage = apply_response.json()["stages"][0]
+        assert applied_stage["start_date"] == preview["old_target_start"]
+        assert applied_stage["start_date"] == preview["new_target_start"] == "2026-11-01"
+        assert applied_stage["end_date"] == preview["new_target_end"] == expected_end
 
 
 def test_ripple_shift_preview_and_apply_share_one_request_shape() -> None:

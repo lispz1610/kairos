@@ -43,6 +43,8 @@ class RippleShiftPreview(BaseModel):
 
     target_stage_id: str
     delta_days: int
+    old_target_start: date
+    new_target_start: date
     old_target_end: date
     new_target_end: date
     shifted_stages: List[ShiftedStageInfo]
@@ -99,6 +101,8 @@ class ScheduleService:
         return RippleShiftPreview(
             target_stage_id=target_stage_id,
             delta_days=delta_days,
+            old_target_start=target_stage.start_date,
+            new_target_start=target_stage.start_date,
             old_target_end=target_stage.end_date,
             new_target_end=new_target_end,
             shifted_stages=shifted_stages,
