@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SPECIFICATION_ID_RE = re.compile(r"^###\s+(RF\d{2})\b", re.MULTILINE)
+SPECIFICATION_TITLE_RE = re.compile(r"^###\s+(RF\d{2})\s+[—–-]\s*(.+?)\s*$", re.MULTILINE)
 REQUIRED_IDS = frozenset(f"RF{number:02d}" for number in range(1, 9))
 
 EPILOG = """Critério para lacunas parciais de navegador:
@@ -41,11 +42,18 @@ class Marker:
     path: Path
     line: int
     identifier: str
+    test: str = ""
 
 
 def extract_canonical_ids(specification: Path) -> frozenset[str]:
     """Extrair os RFxx canônicos dos cabeçalhos de nível 3 da especificação."""
     return frozenset(SPECIFICATION_ID_RE.findall(specification.read_text(encoding="utf-8")))
+
+
+def extract_requirement_titles(specification: Path) -> dict[str, str]:
+    """Extrair o título canônico de cada RFxx dos cabeçalhos da especificação."""
+    text = specification.read_text(encoding="utf-8")
+    return {identifier: title.strip() for identifier, title in SPECIFICATION_TITLE_RE.findall(text)}
 
 
 def _dotted_name(node: ast.AST) -> str:
@@ -75,6 +83,17 @@ def _identifier_arguments(call: ast.Call) -> list[str]:
     ]
 
 
+def _decorating_functions(tree: ast.AST) -> dict[int, str]:
+    """Associar o nó de um decorador ao nome do caso de teste que ele anota."""
+    names: dict[int, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            names[id(decorator)] = node.name
+    return names
+
+
 def extract_markers(tests_dir: Path) -> list[Marker]:
     """Coletar marcadores por análise sintática dos arquivos de teste."""
     markers: list[Marker] = []
@@ -84,11 +103,15 @@ def extract_markers(tests_dir: Path) -> list[Marker]:
         if not (path.name.startswith("test_") or path.name.endswith("_test.py")):
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        decorated = _decorating_functions(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not _is_requirement_call(_dotted_name(node.func)):
                 continue
+            test_name = decorated.get(id(node), "")
             for identifier in _identifier_arguments(node):
-                markers.append(Marker(path=path, line=node.lineno, identifier=identifier))
+                markers.append(
+                    Marker(path=path, line=node.lineno, identifier=identifier, test=test_name)
+                )
     return markers
 
 
