@@ -1,3 +1,5 @@
+import re
+
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -68,4 +70,39 @@ def test_index_page_exposes_impact_confirmation_modal() -> None:
     assert "/api/trip/ripple-shift/preview" in html
     assert "A prévia do Deslocamento em Cascata falhou" in html
     assert "showError(" in html
+    assert "alert(" not in html
+
+
+def test_index_page_exposes_json_backup_controls() -> None:
+    """A página oferece exportação/restauração de Backup JSON e entrada de arquivo oculta."""
+    html = client.get("/").text
+    assert "Exportar Backup JSON" in html
+    assert "Restaurar Backup JSON" in html
+    for element_id in (
+        "export-backup-json",
+        "restore-backup-json",
+        "backup-file-input",
+    ):
+        assert f'id="{element_id}"' in html
+    file_input = re.search(r"<input[^>]*id=\"backup-file-input\"[^>]*>", html)
+    assert file_input is not None
+    assert 'type="file"' in file_input.group()
+    assert "hidden" in file_input.group()
+    assert "/api/trip/backup/validate" in html
+    assert "kairos_trip_v1" in html
+    assert "viagem-kairos.json" in html
+    backup_start = html.index('id="trip-backup-controls"')
+    backup_section = html[backup_start : html.index("</section>", backup_start)]
+    assert "Rota" not in backup_section
+
+
+def test_index_page_backup_flow_validates_before_replacing_trip() -> None:
+    """O fluxo de Backup JSON usa validação do backend e banner para recusar arquivos."""
+    html = client.get("/").text
+    for helper in ("exportTripBackup", "restoreTripBackup", "renderTripStages"):
+        assert f"function {helper}(" in html
+    assert "JSON.parse(" in html
+    assert "response.ok" in html
+    assert "Não foi possível restaurar o Backup JSON" in html
+    assert "A Viagem salva não foi alterada." in html
     assert "alert(" not in html
