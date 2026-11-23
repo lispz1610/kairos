@@ -7,8 +7,9 @@ efetivamente presentes na árvore de código informada.
 
 Uma lacuna parcial de interação em navegador (por exemplo, backup/restauração
 JSON ou modal de confirmação) não é contradição: apenas ausências totais de
-código/testes e tarefas marcadas como pendentes são verificadas. A ferramenta
-é estritamente offline e não acessa rede.
+código/testes e tarefas marcadas como pendentes são verificadas. Leitura UTF-8,
+descoberta de seções ``##`` e resolução de caminhos vêm de
+``quality_cli_common``. A ferramenta é estritamente offline e não acessa rede.
 """
 
 from __future__ import annotations
@@ -18,6 +19,21 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+try:
+    from scripts.quality_cli_common import (
+        CodeTree,
+        iter_markdown_sections,
+        read_utf8,
+        resolve_code_tree,
+    )
+except ImportError:  # pragma: no cover - execução direta do script
+    from quality_cli_common import (
+        CodeTree,
+        iter_markdown_sections,
+        read_utf8,
+        resolve_code_tree,
+    )
 
 
 @dataclass(frozen=True)
@@ -84,7 +100,7 @@ PARTIAL_BROWSER_RE = re.compile(
     r"|intera[cç][aã]o\s+gr[aá]fica|testes?\s+de\s+interface",
     re.IGNORECASE,
 )
-PENDING_HEADING_RE = re.compile(r"^##\s+\d+\.\s*Pr[oó]ximos\s+Passos", re.IGNORECASE)
+PENDING_TITLE_RE = re.compile(r"^\d+\.\s*Pr[oó]ximos\s+Passos", re.IGNORECASE)
 
 RULES: tuple[ComponentRule, ...] = (
     ComponentRule(
@@ -146,11 +162,15 @@ def _matches_rule(rule: ComponentRule, text: str) -> bool:
 def extract_claims(path: Path) -> list[Claim]:
     """Extrair afirmações de ausência total e pendências de um documento."""
     claims: dict[tuple[str, str], Claim] = {}
-    pending_section = False
     source = str(path)
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if line.startswith("## "):
-            pending_section = bool(PENDING_HEADING_RE.match(line))
+    lines = read_utf8(path).splitlines()
+    pending_by_line = [False] * len(lines)
+    for section in iter_markdown_sections(lines):
+        is_pending = bool(PENDING_TITLE_RE.match(section.title))
+        for index in range(section.start, section.end):
+            pending_by_line[index] = is_pending
+    for number, line in enumerate(lines, start=1):
+        pending_section = pending_by_line[number - 1]
         if PARTIAL_BROWSER_RE.search(line):
             continue
         for rule in RULES:
@@ -169,16 +189,16 @@ def extract_claims(path: Path) -> list[Claim]:
     return list(claims.values())
 
 
-def _present_artifacts(root: Path, artifacts: tuple[Artifact, ...], category: str) -> list[str]:
+def _present_artifacts(root: CodeTree, artifacts: tuple[Artifact, ...], category: str) -> list[str]:
     """Listar, com descrição legível, os artefatos efetivamente presentes."""
     descriptions: list[str] = []
     for artifact in artifacts:
-        path = root / artifact.path
+        path = root.artifact(artifact.path)
         if not path.is_file():
             continue
         if artifact.marker:
             try:
-                content = path.read_text(encoding="utf-8", errors="replace")
+                content = read_utf8(path, errors="replace")
             except OSError:
                 continue
             if artifact.marker not in content:
@@ -188,7 +208,7 @@ def _present_artifacts(root: Path, artifacts: tuple[Artifact, ...], category: st
     return descriptions
 
 
-def evaluate(claims: list[Claim], root: Path) -> list[Finding]:
+def evaluate(claims: list[Claim], root: CodeTree) -> list[Finding]:
     """Confrontar cada afirmação com os artefatos da árvore de código."""
     findings: list[Finding] = []
     for claim in claims:
@@ -256,13 +276,14 @@ def main(argv: list[str] | None = None) -> int:
         help="raiz da árvore de código (padrão: diretório atual)",
     )
     args = parser.parse_args(argv)
+    tree = resolve_code_tree(args.root)
 
     for document in (args.plan, args.handoff):
         if not document.is_file():
             print(f"Erro: documento não encontrado: {document}", file=sys.stderr)
             return 2
-    if not args.root.is_dir():
-        print(f"Erro: raiz de código não encontrada: {args.root}", file=sys.stderr)
+    if not tree.root.is_dir():
+        print(f"Erro: raiz de código não encontrada: {tree.root}", file=sys.stderr)
         return 2
 
     try:
@@ -271,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Erro ao ler documento: {error}", file=sys.stderr)
         return 2
 
-    findings = evaluate(claims, args.root)
+    findings = evaluate(claims, tree)
     for finding in findings:
         print(format_finding(finding))
     if findings:

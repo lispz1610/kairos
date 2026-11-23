@@ -20,7 +20,7 @@ Este plano cobre a verificação do Kairos nos níveis de teste automatizado pre
 - Eventos de Contingência tipados e a orquestração HTTP do Replanejamento (`src/core/domain/events.py`, `src/adapters/web/contingency.py`, `POST /api/trip/replan`).
 - Adaptadores HTTP e de Ponto de Interesse, incluindo proteção SSRF, Modo Offline Replay e cache (`src/adapters/`).
 - Interface web FastAPI e o template `src/adapters/web/templates/index.html`.
-- Gate de qualidade `verify_quality.sh` e validadores docs-as-code/de rastreabilidade (`scripts/`), com testes de CLI em `tests/unit/`.
+- Gate de qualidade `verify_quality.sh` e validadores docs-as-code/de rastreabilidade (`scripts/`), com utilitário compartilhado `scripts/quality_cli_common.py` e testes de CLI em `tests/unit/`.
 
 **Fora de escopo (declarado)**
 
@@ -64,7 +64,7 @@ O gate unificado `verify_quality.sh` define a condição de conclusão:
 3. `radon cc src` sem função/método com complexidade ciclomática `>= 10`.
 4. `pytest --cov=src --cov-report=term-missing --cov-fail-under=85` com cobertura `>= 85%`.
 5. No modo `--full`, `mutmut` executado sobre `src/core/`, com mutation score consolidado e contagem de mutantes sobreviventes. Critério de monitoramento/evidência, não uma checagem automática: o `verify_quality.sh --full` reporta o score e os sobreviventes sem impor threshold; a equipe registra na revisão a justificativa de cada sobrevivente e decide pela conversão em novos casos de teste (§5.4).
-6. Rastreabilidade RF × teste (§7) com RF01–RF08 integralmente cobertos por ao menos um caso de teste existente, verificada pelo gate com `python scripts/validate_traceability.py --spec docs/especificacao-requisitos-funcionais.md --root .` e pela matriz com `python scripts/generate_traceability_matrix.py --plan docs/testing/test-plan-29119.md --spec docs/especificacao-requisitos-funcionais.md --root . --check`.
+6. Rastreabilidade RF × teste (§7) com RF01–RF08 integralmente cobertos por ao menos um caso de teste existente, verificada pelo gate com `python scripts/validate_traceability.py --spec docs/especificacao-requisitos-funcionais.md --root .` e pela matriz com `python scripts/generate_traceability_matrix.py --plan docs/testing/test-plan-29119.md --spec docs/especificacao-requisitos-funcionais.md --root . --check`. Validador e gerador compartilham a coleta de marcadores e títulos em `scripts/quality_cli_common.py`, por importação normal do módulo.
 7. Coerência docs-as-code, verificada pelo gate com `python scripts/validate_docs_as_code.py --plan docs/testing/test-plan-29119.md --handoff docs/HANDOFF.md --root .`, com Eventos de Contingência, Replanejamento e `verify_quality.sh` descritos como entregues.
 
 O gate `verify_quality.sh` está entregue e é executado antes de cada commit/PR; os validadores dos itens 6 e 7 passaram a integrar o gate rápido na issue #86 e são executados uma única vez, também pelo workflow de quality gate em cada pull request. Qualquer falha nas verificações automatizadas acima bloqueia o merge, conforme o gate de qualidade do issue-pai #19; o item 5 é monitoramento/evidência, sem threshold automático.
@@ -134,7 +134,7 @@ Técnica: classes de equivalência sobre os quatro tipos de Evento (`delay`, `cl
 
 ### 5.6 Validação docs-as-code e gate de qualidade
 
-Técnica: testes de CLI com documentos e árvore de código isolados por `tmp_path`, além de teste de integração do gate com ferramentas externas simuladas. `tests/unit/test_docs_as_code_validator.py` verifica que o validador aceita lacunas parciais de navegador e rejeita afirmações de ausência total quando os artefatos estão presentes; `tests/unit/test_traceability_matrix_generator.py` verifica geração/verificação da matriz a partir dos marcadores `requirement`; `tests/unit/test_quality_gate_validators.py` comprova que divergências propositais em marcadores, matriz e documentação derrubam o gate sem alterar o repositório. O script `verify_quality.sh` automatiza `ruff`, `mypy --strict`, `radon`, `pytest --cov`, os validadores de rastreabilidade (incluindo `--check` da matriz) e o validador docs-as-code (com estágio opcional de mutação), sendo executado como gate antes de commits e PRs e no CI.
+Técnica: testes de CLI com documentos e árvore de código isolados por `tmp_path`, além de teste de integração do gate com ferramentas externas simuladas. `tests/unit/test_docs_as_code_validator.py` verifica que o validador aceita lacunas parciais de navegador e rejeita afirmações de ausência total quando os artefatos estão presentes; `tests/unit/test_traceability_matrix_generator.py` verifica geração/verificação da matriz a partir dos marcadores `requirement`; `tests/unit/test_quality_gate_validators.py` comprova que divergências propositais em marcadores, matriz e documentação derrubam o gate sem alterar o repositório; `tests/unit/test_quality_cli_shared_imports.py` cobre a importação compartilhada, a ausência de mutação de path/supressão de lint e a execução dos CLIs como script e como módulo. O script `verify_quality.sh` automatiza `ruff`, `mypy --strict`, `radon`, `pytest --cov`, os validadores de rastreabilidade (incluindo `--check` da matriz) e o validador docs-as-code (com estágio opcional de mutação), sendo executado como gate antes de commits e PRs e no CI.
 
 ---
 
@@ -161,7 +161,7 @@ Técnica: testes de CLI com documentos e árvore de código isolados por `tmp_pa
 ## 7. Matriz de Rastreabilidade RF01–RF08 × testes
 
 Cada requisito é ligado a arquivos e casos de teste **existentes** no worktree. Caminhos em `tests/` e `src/` foram verificados quanto à existência.
-A matriz é gerada por `python scripts/generate_traceability_matrix.py --plan docs/testing/test-plan-29119.md --spec docs/especificacao-requisitos-funcionais.md --root .`; o gate rápido executa essa geração com `--check`, sem gravar (issues #83 e #86).
+A matriz é gerada por `python scripts/generate_traceability_matrix.py --plan docs/testing/test-plan-29119.md --spec docs/especificacao-requisitos-funcionais.md --root .` (equivalente a `python -m scripts.generate_traceability_matrix` com os mesmos argumentos); o gerador reutiliza a coleta de marcadores do módulo compartilhado e o gate rápido executa essa geração com `--check`, sem gravar (issues #83, #86 e #94).
 
 | RF | Requisito | Testes unitários | Testes de integração | Testes de propriedade | Código de produção relacionado |
 | --- | --- | --- | --- | --- | --- |
