@@ -146,7 +146,9 @@ PY
 
   (
     cd "$mutmut_dir"
-    mutmut run
+    # Apenas a execução do mutmut usa o perfil sem prazo do Hypothesis; o gate
+    # rápido e as execuções locais preservam os prazos padrão.
+    KAIROS_MUTATION=1 mutmut run
     mutmut export-cicd-stats
   )
   mutation_stats="$mutmut_dir/mutants/mutmut-cicd-stats.json"

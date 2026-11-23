@@ -1,12 +1,14 @@
-"""Configuração compartilhada dos testes baseados em propriedades.
+"""Perfil opcional do Hypothesis para o gate de mutação.
 
-O gate completo executa a suíte dentro do mutmut, sob carga variável de CPU. O
-prazo padrão de 200 ms do Hypothesis produz falhas de tempo intermitentes que
-não indicam violação das invariantes; o perfil abaixo remove apenas esse prazo,
-preservando todas as asserções dos testes de propriedade.
+Sob ``mutmut`` a CPU varia e o prazo padrão pode falhar sem indicar uma
+invariante violada. Com ``KAIROS_MUTATION=1`` o perfil remove apenas esse prazo;
+as demais execuções mantêm os prazos normais do Hypothesis.
 """
+
+import os
 
 from hypothesis import settings
 
-settings.register_profile("kairos_sem_prazo", deadline=None)
-settings.load_profile("kairos_sem_prazo")
+if os.environ.get("KAIROS_MUTATION") == "1":
+    settings.register_profile("kairos_sem_prazo", deadline=None)
+    settings.load_profile("kairos_sem_prazo")

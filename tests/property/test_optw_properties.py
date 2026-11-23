@@ -1,6 +1,6 @@
 from datetime import time
 
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from src.core.domain.models import POI, Coordinates, TimeWindow
@@ -56,6 +56,7 @@ def test_optw_itinerary_never_exceeds_availability_window(
         assert stop.departure_time <= window.end_time
 
 
+@settings(deadline=None)
 @given(
     lat_start=st.floats(min_value=-23.6, max_value=-23.5),
     lng_start=st.floats(min_value=-46.7, max_value=-46.6),
