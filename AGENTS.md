@@ -16,7 +16,7 @@ Single-context (`GLOSSARY.md` and `docs/adr/` at the repo root). See `docs/agent
 
 ## Quality gate
 
-Run `./verify_quality.sh` before every commit or PR. The change is not ready until the gate passes.
+Run `./verify_quality.sh` before every commit or PR. The change is not ready until the gate passes. The fast gate also runs the RF × test traceability validator, the traceability matrix `--check` and the docs-as-code validator; any failure blocks the gate.
 
 Run `./verify_quality.sh --full` when the change touches `src/core/`; it adds the mutation-testing stage on top of the fast checks.
 

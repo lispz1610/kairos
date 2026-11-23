@@ -37,5 +37,5 @@ Desenvolvido para o Trabalho Prático da disciplina **DCC061 - Engenharia de Sof
 
 O projeto adota práticas alinhadas a padrões internacionais de engenharia de software:
 - **ISO/IEC 25010**: Avaliação de qualidade de produto (Adequação Funcional, Tolerância a Falhas e Testabilidade via Ports & Adapters).
-- **ISO/IEC/IEEE 29119**: Estruturação de processos e casos de testes formais (Unitários, Integração e Property-Based Testing com `hypothesis`).
+- **ISO/IEC/IEEE 29119**: Estruturação de processos e casos de testes formais (Unitários, Integração e Property-Based Testing com `hypothesis`); o gate `./verify_quality.sh` verifica a rastreabilidade RF × teste, a matriz com `--check` e a coerência docs-as-code em cada execução, local e no CI.
 - **ISO/IEC 5055**: Métricas estáticas automatizadas (cobertura `pytest-cov ≥ 85%`, complexidade ciclomática `< 10` com `radon`, tipagem estática rigorosa com `mypy --strict`, estilo/docstrings com `ruff` e teste de mutação com `mutmut` em `src/core/`), consolidadas pelo gate `./verify_quality.sh` (`--full` para incluir mutação).
