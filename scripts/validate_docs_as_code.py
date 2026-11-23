@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -73,10 +74,7 @@ TEST_ABSENCE_RE = re.compile(
     re.IGNORECASE,
 )
 TOTAL_ABSENCE_RE = re.compile(
-    r"sem\s+c[oó]digo|sem\s+testes?|sem\s+casos\s+de\s+teste"
-    r"|sem\s+implementa[cç][aã]o|nem\s+implementa[cç][aã]o"
-    r"|n[aã]o\s+implementad[oa]|n[aã]o\s+(?:h[aá]|existe)\s+(?:c[oó]digo|testes?)"
-    r"|n[aã]o\s+possui\s+(?:.*\s+)?implementa[cç][aã]o",
+    rf"(?:{CODE_ABSENCE_RE.pattern})|(?:{TEST_ABSENCE_RE.pattern})",
     re.IGNORECASE,
 )
 PARTIAL_BROWSER_RE = re.compile(
@@ -85,6 +83,7 @@ PARTIAL_BROWSER_RE = re.compile(
     re.IGNORECASE,
 )
 PENDING_HEADING_RE = re.compile(r"^##\s+\d+\.\s*Pr[oó]ximos\s+Passos", re.IGNORECASE)
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 
 RULES: tuple[ComponentRule, ...] = (
     ComponentRule(
@@ -139,8 +138,26 @@ RULES: tuple[ComponentRule, ...] = (
 
 
 def _matches_rule(rule: ComponentRule, text: str) -> bool:
-    """Informar se algum termo do componente aparece na linha documental."""
+    """Informar se algum termo do componente aparece no bloco documental."""
     return any(re.search(term, text, re.IGNORECASE) for term in rule.terms)
+
+
+def _is_continuation(line: str) -> bool:
+    """Informar se a linha dá continuidade a um item de lista Markdown."""
+    return not line.strip() or line[0].isspace()
+
+
+def _document_blocks(text: str) -> Iterator[tuple[int, str]]:
+    """Agrupar as linhas de cada item de lista em uma única afirmação."""
+    lines = text.splitlines()
+    start = 0
+    while start < len(lines):
+        end = start + 1
+        if LIST_ITEM_RE.match(lines[start]):
+            while end < len(lines) and _is_continuation(lines[end]):
+                end += 1
+        yield start + 1, "\n".join(lines[start:end])
+        start = end
 
 
 def extract_claims(path: Path) -> list[Claim]:
@@ -148,23 +165,23 @@ def extract_claims(path: Path) -> list[Claim]:
     claims: dict[tuple[str, str], Claim] = {}
     pending_section = False
     source = str(path)
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if line.startswith("## "):
-            pending_section = bool(PENDING_HEADING_RE.match(line))
-        if PARTIAL_BROWSER_RE.search(line):
+    for number, block in _document_blocks(path.read_text(encoding="utf-8")):
+        if block.startswith("## "):
+            pending_section = bool(PENDING_HEADING_RE.match(block))
+        if PARTIAL_BROWSER_RE.search(block):
             continue
         for rule in RULES:
-            if not _matches_rule(rule, line):
+            if not _matches_rule(rule, block):
                 continue
             if pending_section:
                 kind = "pending"
-            elif TOTAL_ABSENCE_RE.search(line):
+            elif TOTAL_ABSENCE_RE.search(block):
                 kind = "total-absence"
             else:
                 continue
             claims.setdefault(
                 (rule.key, kind),
-                Claim(source=source, line=number, rule=rule, kind=kind, text=line),
+                Claim(source=source, line=number, rule=rule, kind=kind, text=block),
             )
     return list(claims.values())
 

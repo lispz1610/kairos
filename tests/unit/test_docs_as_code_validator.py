@@ -90,8 +90,10 @@ Documentação versionada.
     assert "contradição docs-as-code" not in result.stdout
 
 
-def test_ausencia_total_com_artefatos_presentes_falha_com_diagnostico(tmp_path: Path) -> None:
-    """Ausência total declarada e pendências com artefatos presentes falham."""
+def test_ausencia_total_em_item_multilinha_do_plano_falha_com_diagnostico(
+    tmp_path: Path,
+) -> None:
+    """Ausência total apenas no Plano de Testes, sem pendências no handoff, falha."""
     plan = tmp_path / "test-plan.md"
     _write(
         plan,
@@ -106,10 +108,7 @@ def test_ausencia_total_com_artefatos_presentes_falha_com_diagnostico(tmp_path: 
         handoff,
         """## 5. Próximos Passos Imediatos para o Próximo Agente
 
-2. **Implementação do Domínio Puro (`src/core/domain/`) via TDD**:
-   - `events.py`: Modelos dos 4 eventos de contingência.
-   - Motor de contingência: recálculo a partir do ponto/horário corrente.
-7. **Script de Automação de Qualidade**: `verify_quality.sh` executando `pytest`.
+Nenhuma pendência para este cenário.
 """,
     )
     root = tmp_path / "code"
@@ -119,11 +118,14 @@ def test_ausencia_total_com_artefatos_presentes_falha_com_diagnostico(tmp_path: 
     output = result.stdout + result.stderr
 
     assert result.returncode == 1, output
+    assert "test-plan.md:3" in output
+    assert "HANDOFF.md" not in output
     assert "Evento de Contingência" in output
     assert "Replanejamento" in output
-    assert "script de gate de qualidade" in output
     assert "src/core/domain/events.py" in output
-    assert "verify_quality.sh" in output
+    assert "src/adapters/web/contingency.py" in output
+    assert "src/core/services/replanning.py" in output
+    assert "src/adapters/web/app.py" in output
     assert "contradição docs-as-code" in output
 
 
