@@ -67,6 +67,7 @@ kairos/
 │   ├── especificacao-requisitos-funcionais.md
 │   └── testing/test-plan-29119.md
 ├── scripts/
+│   ├── quality_cli_common.py       # leitura UTF-8, seções ##, caminhos e coleta RFxx
 │   ├── validate_docs_as_code.py
 │   ├── validate_traceability.py
 │   └── generate_traceability_matrix.py
@@ -100,7 +101,7 @@ Os artefatos acima são os mesmos confrontados pelos validadores docs-as-code e 
 
 6. **Aplicação web (`src/adapters/web/`)**: rotas FastAPI, incluindo `POST /api/trip/replan`, orquestração dos Eventos de Contingência em `contingency.py`, template Jinja2 com controles na timeline do Dia de Viagem e banner de impacto. A interação em navegador real permanece como lacuna parcial, registrada no §8 do Plano de Testes.
 
-7. **Gate e validadores de qualidade entregues**: `verify_quality.sh` executa `ruff`, `mypy --strict`, `radon cc`, `pytest --cov` (com estágio opcional de mutação), `scripts/validate_traceability.py`, `scripts/generate_traceability_matrix.py --check` e `scripts/validate_docs_as_code.py`, sendo executado antes de commits/PRs e no CI. Qualquer divergência detectada bloqueia o gate. Os testes de CLI estão em `tests/unit/test_docs_as_code_validator.py`, `tests/unit/test_traceability_validator.py` e `tests/unit/test_traceability_matrix_generator.py`, e a integração dos validadores ao gate é verificada em `tests/unit/test_quality_gate_validators.py`.
+7. **Gate e validadores de qualidade entregues**: `verify_quality.sh` executa `ruff`, `mypy --strict`, `radon cc`, `pytest --cov` (com estágio opcional de mutação), `scripts/validate_traceability.py`, `scripts/generate_traceability_matrix.py --check` e `scripts/validate_docs_as_code.py`, sendo executado antes de commits/PRs e no CI. Os três CLIs importam `scripts/quality_cli_common.py` por importação normal (sem mutar o path de imports nem suprimir avisos de lint), reutilizando a mesma coleta de marcadores `requirement` e de títulos RFxx; funcionam tanto como `python scripts/<cli>.py ...` quanto como `python -m scripts.<cli> ...`. Qualquer divergência detectada bloqueia o gate. Os testes de CLI estão em `tests/unit/test_docs_as_code_validator.py`, `tests/unit/test_traceability_validator.py` e `tests/unit/test_traceability_matrix_generator.py`, a integração dos validadores ao gate é verificada em `tests/unit/test_quality_gate_validators.py` e o contrato de importação compartilhada em `tests/unit/test_quality_cli_shared_imports.py`.
 
 ---
 

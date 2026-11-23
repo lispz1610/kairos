@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Gerar ou verificar a matriz RF01–RF08 × testes do Plano de Testes 29119.
 
-A matriz é derivada exclusivamente dos marcadores ``requirement`` coletados pela
-mesma análise sintática usada por ``validate_traceability.py`` — sem importar a
-suíte, sem pytest e sem rede. Somente as linhas RF01–RF08 da seção da matriz são
+A matriz é derivada exclusivamente dos marcadores ``requirement`` coletados pelo
+módulo compartilhado ``quality_cli_common``, reutilizado por
+``validate_traceability.py`` — sem importar a suíte, sem pytest e sem rede.
+Somente as linhas RF01–RF08 da seção da matriz são
 recalculadas: cabeçalho, linha da extensão dinâmica, parágrafos de lacunas e
 todas as demais seções do Plano de Testes permanecem intactos.
 
@@ -19,19 +20,30 @@ import re
 import sys
 from pathlib import Path
 
-if str(Path(__file__).resolve().parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from scripts.quality_cli_common import (
+        REQUIRED_IDS,
+        Marker,
+        extract_canonical_ids,
+        extract_markers,
+        extract_requirement_titles,
+        iter_markdown_sections,
+        read_utf8,
+        resolve_code_tree,
+    )
+except ImportError:  # pragma: no cover - execução direta do script
+    from quality_cli_common import (
+        REQUIRED_IDS,
+        Marker,
+        extract_canonical_ids,
+        extract_markers,
+        extract_requirement_titles,
+        iter_markdown_sections,
+        read_utf8,
+        resolve_code_tree,
+    )
 
-from validate_traceability import (  # noqa: E402
-    REQUIRED_IDS,
-    Marker,
-    extract_canonical_ids,
-    extract_markers,
-    extract_requirement_titles,
-)
-
-SECTION_HEADING_RE = re.compile(r"^##\s+\d+\.\s+Matriz de Rastreabilidade\b", re.MULTILINE)
-NEXT_SECTION_RE = re.compile(r"^##\s+", re.MULTILINE)
+MATRIX_TITLE_RE = re.compile(r"^\d+\.\s+Matriz de Rastreabilidade\b")
 RF_ROW_RE = re.compile(r"^\|\s*\*\*(RF\d{2})\*\*\s*\|")
 
 LAYERS = ("unit", "integration", "property")
@@ -42,15 +54,9 @@ TABLE_HEADER = (
 TABLE_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 
 
-def _read_plan(plan: Path) -> str:
-    """Ler o Plano de Testes preservando as quebras de linha originais."""
-    with plan.open("r", encoding="utf-8", newline="") as handle:
-        return handle.read()
-
-
 def _write_plan(plan: Path, text: str) -> bool:
     """Gravar o plano apenas quando o conteúdo mudar; informar se houve escrita."""
-    if _read_plan(plan) == text:
+    if read_utf8(plan, preserve_newlines=True) == text:
         return False
     with plan.open("w", encoding="utf-8", newline="") as handle:
         handle.write(text)
@@ -64,17 +70,15 @@ def _newline(lines: list[str]) -> str:
 
 def _section_bounds(lines: list[str]) -> tuple[int, int] | None:
     """Localizar o intervalo de linhas da seção da matriz no plano."""
-    start = next(
-        (index for index, line in enumerate(lines) if SECTION_HEADING_RE.match(line)),
+    section = next(
+        (
+            candidate
+            for candidate in iter_markdown_sections(lines)
+            if MATRIX_TITLE_RE.match(candidate.title)
+        ),
         None,
     )
-    if start is None:
-        return None
-    end = next(
-        (index for index in range(start + 1, len(lines)) if NEXT_SECTION_RE.match(lines[index])),
-        len(lines),
-    )
-    return start, end
+    return (section.start, section.end) if section is not None else None
 
 
 def _cells(line: str) -> list[str]:
@@ -303,24 +307,24 @@ def main(argv: list[str] | None = None) -> int:
         help="apenas verificar: 0 se fiel à suíte, 1 se divergente (sem gravar)",
     )
     args = parser.parse_args(argv)
+    tree = resolve_code_tree(args.root, args.tests)
 
     for document in (args.plan, args.spec):
         if not document.is_file():
             print(f"Erro: documento não encontrado: {document}", file=sys.stderr)
             return 2
-    if not args.root.is_dir():
-        print(f"Erro: raiz de código não encontrada: {args.root}", file=sys.stderr)
+    if not tree.root.is_dir():
+        print(f"Erro: raiz de código não encontrada: {tree.root}", file=sys.stderr)
         return 2
-    tests_dir = args.tests if args.tests is not None else args.root / "tests"
-    if not tests_dir.is_dir():
-        print(f"Erro: diretório de testes não encontrado: {tests_dir}", file=sys.stderr)
+    if not tree.tests.is_dir():
+        print(f"Erro: diretório de testes não encontrado: {tree.tests}", file=sys.stderr)
         return 2
 
     try:
         canonical_ids = extract_canonical_ids(args.spec)
         titles = extract_requirement_titles(args.spec)
-        markers = extract_markers(tests_dir)
-        plan_text = _read_plan(args.plan)
+        markers = extract_markers(tree.tests)
+        plan_text = read_utf8(args.plan, preserve_newlines=True)
     except (OSError, UnicodeError, SyntaxError) as error:
         print(f"Erro ao ler entradas: {error}", file=sys.stderr)
         return 2
@@ -338,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    expected = build_expected(plan_text, markers, titles, args.root, tests_dir)
+    expected = build_expected(plan_text, markers, titles, tree.root, tree.tests)
     if expected is None:
         print(
             "Erro: seção 'Matriz de Rastreabilidade' não encontrada no Plano de Testes.",

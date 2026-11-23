@@ -14,10 +14,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATE = REPO_ROOT / "verify_quality.sh"
-VALIDATORS = (
+SHARED_SCRIPTS = (
     "validate_traceability.py",
     "generate_traceability_matrix.py",
     "validate_docs_as_code.py",
+    "quality_cli_common.py",
 )
 SPECIFICATION = (
     "\n".join(f"### RF{number:02d} — Requisito {number:02d}" for number in range(1, 9))
@@ -71,7 +72,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     bin_dir.mkdir()
 
     shutil.copy2(GATE, root / "verify_quality.sh")
-    for name in VALIDATORS:
+    for name in SHARED_SCRIPTS:
         shutil.copy2(REPO_ROOT / "scripts" / name, root / "scripts" / name)
 
     (root / "docs/especificacao-requisitos-funcionais.md").write_text(
