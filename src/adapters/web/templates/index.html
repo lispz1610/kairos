@@ -165,6 +165,11 @@
       </label>
       <button type="button" id="preview-ripple-shift">Pré-visualizar Deslocamento em Cascata</button>
     </div>
+    <div class="controls" id="trip-backup-controls">
+      <button type="button" id="export-backup-json">Exportar Backup JSON</button>
+      <button type="button" id="restore-backup-json">Restaurar Backup JSON</button>
+      <input id="backup-file-input" type="file" accept="application/json,.json" hidden />
+    </div>
   </section>
   <section class="panel">
     <h1>Kairos</h1>
@@ -225,6 +230,8 @@ const STORAGE_KEY = "kairos_trip_state_v1";
 const API_URL = "/api/trip/replan";
 const TRIP_STORAGE_KEY = "kairos_trip_v1";
 const RIPPLE_PREVIEW_URL = "/api/trip/ripple-shift/preview";
+const BACKUP_VALIDATE_URL = "/api/trip/backup/validate";
+const BACKUP_FILENAME = "viagem-kairos.json";
 
 function makeTripDays(startDate, endDate, accommodation) {
   const days = [];
@@ -425,6 +432,72 @@ async function previewRippleShift() {
   showImpactModal(trip, preview);
 }
 
+function exportTripBackup() {
+  const trip = loadTrip();
+  const blob = new Blob([JSON.stringify(trip)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = BACKUP_FILENAME;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function restoreTripBackup() {
+  const input = document.getElementById("backup-file-input");
+  const file = input.files && input.files[0];
+  if (!file) {
+    showError("Selecione um arquivo de Backup JSON para restaurar a Viagem.");
+    return;
+  }
+  input.value = "";
+  let raw;
+  try {
+    raw = await file.text();
+  } catch (error) {
+    showError(
+      "Não foi possível ler o arquivo de Backup JSON. " +
+      "A Viagem salva não foi alterada."
+    );
+    return;
+  }
+  try {
+    JSON.parse(raw);
+  } catch (error) {
+    showError(
+      "O arquivo selecionado não contém um Backup JSON válido. " +
+      "A Viagem salva não foi alterada."
+    );
+    return;
+  }
+  let response;
+  try {
+    response = await fetch(BACKUP_VALIDATE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: raw,
+    });
+  } catch (error) {
+    showError(
+      "Não foi possível restaurar o Backup JSON. A Viagem salva não foi alterada."
+    );
+    return;
+  }
+  if (!response.ok) {
+    showError(
+      "O Backup JSON é incompatível com a Viagem (status " + response.status +
+      "). A Viagem salva não foi alterada."
+    );
+    return;
+  }
+  const validatedTrip = await response.json();
+  saveTrip(validatedTrip);
+  renderTripStages(validatedTrip);
+  renderStageSelector(validatedTrip);
+}
+
 function defaultStop(id, name, start, durationMinutes) {
   return {
     poi: {
@@ -618,6 +691,8 @@ function init() {
 }
 
 document.getElementById("preview-ripple-shift").addEventListener("click", previewRippleShift);
+document.getElementById("export-backup-json").addEventListener("click", exportTripBackup);
+document.getElementById("restore-backup-json").addEventListener("click", restoreTripBackup);
 document.getElementById("modal-cancel-btn").addEventListener("click", closeImpactModal);
 document.getElementById("modal-close-btn").addEventListener("click", closeImpactModal);
 
