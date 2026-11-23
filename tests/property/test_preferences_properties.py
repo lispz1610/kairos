@@ -1,3 +1,4 @@
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -10,6 +11,7 @@ from src.core.services.preferences import PreferencesService
     weight_low=st.floats(min_value=0.0, max_value=4.9),
     weight_high=st.floats(min_value=5.0, max_value=10.0),
 )
+@pytest.mark.requirement("RF04")
 def test_preference_monotonicity_property(
     base_utility: float,
     weight_low: float,

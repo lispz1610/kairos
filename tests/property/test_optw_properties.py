@@ -1,5 +1,6 @@
 from datetime import time
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -14,6 +15,7 @@ from src.core.solvers.optw import OPTWSolver
     lng_end=st.floats(min_value=-46.7, max_value=-46.6),
     num_pois=st.integers(min_value=1, max_value=8),
 )
+@pytest.mark.requirement("RF03")
 def test_optw_itinerary_never_exceeds_availability_window(
     lat_start: float,
     lng_start: float,
@@ -66,6 +68,7 @@ def test_optw_itinerary_never_exceeds_availability_window(
     include_coffee=st.booleans(),
     include_wine=st.booleans(),
 )
+@pytest.mark.requirement("RF03", "RF04")
 def test_optw_itinerary_never_collides_with_reserved_slots(
     lat_start: float,
     lng_start: float,

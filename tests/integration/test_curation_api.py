@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app, places_adapter
@@ -7,6 +8,7 @@ from src.adapters.web.app import app, places_adapter
 client = TestClient(app)
 
 
+@pytest.mark.requirement("RF05")
 def test_suggested_curation_endpoint() -> None:
     # Test São Paulo
     """Verifica que a Lista de Curadoria sugerida é retornada para São Paulo e Lima."""
@@ -26,6 +28,7 @@ def test_suggested_curation_endpoint() -> None:
     assert any("50 Best" in t for t in titles_lima)
 
 
+@pytest.mark.requirement("RF05")
 def test_places_search_autocomplete_endpoint() -> None:
     # Search with city
     """Verifica a busca de Pontos de Interesse por cidade, globalmente e sem resultados."""
@@ -48,6 +51,7 @@ def test_places_search_autocomplete_endpoint() -> None:
     assert response_empty.json() == []
 
 
+@pytest.mark.requirement("RF05")
 def test_cache_persistence_and_offline_replay() -> None:
     # Query twice to exercise Cache-Aside
     """Verifica que consultas repetidas são servidas pelo cache e reproduzidas offline."""
@@ -68,6 +72,7 @@ def test_cache_persistence_and_offline_replay() -> None:
         assert "Fabrique" in cached
 
 
+@pytest.mark.requirement("RF04")
 def test_optimize_endpoint_applies_curation_boost() -> None:
     """Verifica que curadoria ativa aumenta a Pontuação de Utilidade e altera o Roteiro."""
     hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
@@ -123,6 +128,7 @@ def test_optimize_endpoint_applies_curation_boost() -> None:
     assert it_boosted["stops"][0]["poi"]["utility_score"] == 15.0
 
 
+@pytest.mark.requirement("RF04")
 def test_optimize_endpoint_respects_inactive_curation_list() -> None:
     """Verifica que Lista de Curadoria inativa não altera a Pontuação de Utilidade."""
     hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
@@ -166,6 +172,7 @@ def test_optimize_endpoint_respects_inactive_curation_list() -> None:
     assert it["stops"][0]["poi"]["id"] == "poi-y"
 
 
+@pytest.mark.requirement("RF05")
 def test_dining_recommend_with_curation_boost() -> None:
     """Verifica que a curadoria ativa reordena as recomendações de restaurantes."""
     ref_loc = {"latitude": -23.5600, "longitude": -46.6500}

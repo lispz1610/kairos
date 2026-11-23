@@ -1,5 +1,6 @@
 """Contrato HTTP da validação de Backup JSON da Viagem (RF08)."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -10,6 +11,7 @@ client = TestClient(app)
 BACKUP_VALIDATE_URL = "/api/trip/backup/validate"
 
 
+@pytest.mark.requirement("RF08")
 def test_backup_validate_returns_validated_trip_and_is_idempotent() -> None:
     """Um Backup JSON válido é devolvido normalizado e sobrevive a outro ciclo."""
     response = client.post(BACKUP_VALIDATE_URL, json=restorable_trip_payload())
@@ -32,6 +34,7 @@ def test_backup_validate_returns_validated_trip_and_is_idempotent() -> None:
     assert again.json() == validated
 
 
+@pytest.mark.requirement("RF08")
 def test_backup_validate_rejects_unknown_fields_and_untyped_numbers() -> None:
     """Campos desconhecidos e números em texto são recusados com 422 detalhado."""
     payload = restorable_trip_payload()
@@ -48,6 +51,7 @@ def test_backup_validate_rejects_unknown_fields_and_untyped_numbers() -> None:
     assert any(item["loc"][-1] == "campo_extra" for item in detail)
 
 
+@pytest.mark.requirement("RF08")
 def test_backup_validate_rejects_payload_without_required_trip_id() -> None:
     """Um corpo sem a identificação da Viagem recebe 422 com detalhe de schema."""
     response = client.post(BACKUP_VALIDATE_URL, json={"title": "Viagem sem id"})
@@ -59,6 +63,7 @@ def test_backup_validate_rejects_payload_without_required_trip_id() -> None:
     )
 
 
+@pytest.mark.requirement("RF08")
 def test_backup_validate_rejects_incomplete_stage_and_connection() -> None:
     """Etapa sem Hospedagem e Conexão sem partida são recusadas com 422."""
     payload = restorable_trip_payload()
@@ -74,6 +79,7 @@ def test_backup_validate_rejects_incomplete_stage_and_connection() -> None:
     assert any(item["loc"][-1] == "departure_datetime" for item in detail)
 
 
+@pytest.mark.requirement("RF08")
 def test_backup_validate_rejects_invalid_field_types() -> None:
     """Tipos incompatíveis com o schema da Viagem geram 422."""
     payload = restorable_trip_payload()
@@ -88,6 +94,7 @@ def test_backup_validate_rejects_invalid_field_types() -> None:
     assert any(item["loc"][-1] == "stages" for item in detail)
 
 
+@pytest.mark.requirement("RF08")
 def test_backup_validate_rejects_non_object_body() -> None:
     """Um JSON que não representa uma Viagem é recusado com detalhe de schema."""
     response = client.post(BACKUP_VALIDATE_URL, json=[1, 2, 3])

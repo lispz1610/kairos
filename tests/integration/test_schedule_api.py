@@ -1,5 +1,6 @@
 from typing import Any, Dict
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -45,6 +46,7 @@ def _sample_trip_payload() -> Dict[str, Any]:
     }
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_preview_endpoint() -> None:
     """Verifica a prévia do Deslocamento em Cascata sem alterar a Viagem."""
     trip_payload = _sample_trip_payload()
@@ -60,6 +62,7 @@ def test_ripple_shift_preview_endpoint() -> None:
     assert preview["shifted_stages"][0]["new_start"] == "2026-11-11"
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_preview_exposes_unchanged_target_start_for_positive_delta() -> None:
     """A prévia informa o início inalterado da Etapa de Viagem alvo com delta positivo."""
     response = client.post(
@@ -78,6 +81,7 @@ def test_ripple_shift_preview_exposes_unchanged_target_start_for_positive_delta(
     assert preview["new_target_end"] == "2026-11-12"
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_preview_exposes_old_and_new_dates_for_negative_delta() -> None:
     """Verifica que a prévia negativa informa datas anteriores e recalculadas ao modal."""
     trip_payload = with_departure_datetime(_sample_trip_payload())
@@ -102,6 +106,7 @@ def test_ripple_shift_preview_exposes_old_and_new_dates_for_negative_delta() -> 
     )
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_preview_preserves_target_start_for_negative_delta() -> None:
     """A prévia negativa mantém o início da Etapa de Viagem alvo e recalcula apenas o término."""
     response = client.post(
@@ -118,6 +123,7 @@ def test_ripple_shift_preview_preserves_target_start_for_negative_delta() -> Non
     assert preview["new_target_start"] == "2026-11-01"
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_apply_preserves_target_start_and_updates_end() -> None:
     """A aplicação mantém o início da Etapa de Viagem alvo da prévia e atualiza o término."""
     for delta_days, expected_end in ((2, "2026-11-12"), (-1, "2026-11-09")):
@@ -138,6 +144,7 @@ def test_ripple_shift_apply_preserves_target_start_and_updates_end() -> None:
         assert applied_stage["end_date"] == preview["new_target_end"] == expected_end
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_preview_and_apply_share_one_request_shape() -> None:
     """A prévia devolve Etapa, delta e id da Conexão para a confirmação reenviar o mesmo corpo."""
     trip_payload = with_departure_datetime(_sample_trip_payload())
@@ -157,6 +164,7 @@ def test_ripple_shift_preview_and_apply_share_one_request_shape() -> None:
     assert apply_response.json()["connections"][0]["departure_datetime"] == "2026-11-12T09:00:00"
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_apply_endpoint() -> None:
     """Verifica o Deslocamento em Cascata nas Etapas e Conexões Interurbanas."""
     trip_payload = _sample_trip_payload()
@@ -172,6 +180,7 @@ def test_ripple_shift_apply_endpoint() -> None:
     assert updated["connections"][0]["departure_time"] == "2026-11-11"
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_apply_matches_preview_dates_for_positive_delta() -> None:
     """Verifica que a Viagem aplicada reproduz as datas da prévia, inclusive conexões."""
     trip_payload = with_departure_datetime(_sample_trip_payload())
@@ -200,6 +209,7 @@ def test_ripple_shift_apply_matches_preview_dates_for_positive_delta() -> None:
         assert connection["departure_datetime"] == shifted["new_departure"] + "T09:00:00"
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_apply_rejects_unknown_stage_without_server_state() -> None:
     """Verifica que a rejeição detalha o erro e não deixa Viagem alterada no servidor."""
     trip_payload = _sample_trip_payload()
@@ -218,6 +228,7 @@ def test_ripple_shift_apply_rejects_unknown_stage_without_server_state() -> None
     assert accepted.json()["stages"][1]["start_date"] == "2026-11-11"
 
 
+@pytest.mark.requirement("RF06")
 def test_ripple_shift_apply_rejects_shrink_that_eliminates_stage() -> None:
     """Verifica que a aplicação rejeita remover todos os dias de uma Etapa de Viagem."""
     response = client.post(

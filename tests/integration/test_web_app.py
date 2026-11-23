@@ -2,6 +2,7 @@
 
 import re
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -16,6 +17,7 @@ def _html() -> str:
     return client.get("/").text
 
 
+@pytest.mark.requirement("RF08")
 def test_health_check() -> None:
     """Verifica que o endpoint de saúde responde com o status da aplicação."""
     response = client.get("/health")
@@ -23,6 +25,7 @@ def test_health_check() -> None:
     assert response.json() == {"status": "ok", "app": "kairos"}
 
 
+@pytest.mark.requirement("RF08")
 def test_index_page_renders_html() -> None:
     """Verifica que a página inicial renderiza o HTML da aplicação."""
     response = client.get("/")
@@ -47,6 +50,7 @@ def test_index_page_keeps_day_contingency_controls() -> None:
     assert "kairos_trip_state_v1" in html
 
 
+@pytest.mark.requirement("RF06")
 def test_index_page_exposes_trip_planning_section() -> None:
     """Expõe resumo, seletor e variação de dias com rótulos canônicos e chave dedicada."""
     html = _html()
@@ -68,6 +72,7 @@ def test_index_page_exposes_trip_planning_section() -> None:
     }
 
 
+@pytest.mark.requirement("RF06")
 def test_index_page_exposes_impact_confirmation_modal() -> None:
     """O modal declara campos observáveis para datas, partidas e linha de impacto."""
     html = _html()
@@ -103,6 +108,7 @@ def test_index_page_exposes_impact_confirmation_modal() -> None:
         assert attribute in row.group()
 
 
+@pytest.mark.requirement("RF06")
 def test_index_page_declares_target_stage_start_label() -> None:
     """O rótulo do início da Etapa de Viagem alvo é visível no modal."""
     html = _html()
@@ -113,6 +119,7 @@ def test_index_page_declares_target_stage_start_label() -> None:
     assert label.group(1).strip() == "Início da Etapa de Viagem alvo"
 
 
+@pytest.mark.requirement("RF06")
 def test_index_page_declares_ripple_actions_and_persistence_intent() -> None:
     """Os controles declaram ação, endpoint e intenção de persistência da Viagem."""
     html = _html()
@@ -138,6 +145,7 @@ def test_index_page_declares_ripple_actions_and_persistence_intent() -> None:
         assert element_attributes(html, element_id)["data-persist-trip"] == "never"
 
 
+@pytest.mark.requirement("RF08")
 def test_index_page_exposes_json_backup_controls() -> None:
     """A página oferece exportação/restauração de Backup JSON e entrada de arquivo oculta."""
     html = _html()
@@ -163,6 +171,7 @@ def test_index_page_exposes_json_backup_controls() -> None:
     assert "Rota" not in backup_section
 
 
+@pytest.mark.requirement("RF08")
 def test_backup_restore_controls_declare_picker_and_change_trigger() -> None:
     """O botão declara o seletor oculto e a escolha de arquivo dispara a restauração."""
     html = _html()
@@ -182,6 +191,7 @@ def test_backup_restore_controls_declare_picker_and_change_trigger() -> None:
     ) is not None
 
 
+@pytest.mark.requirement("RF08")
 def test_backup_restore_success_contract_uses_validated_trip_and_render_targets() -> None:
     """Só a Viagem validada com 200 alimenta o armazenamento e o resumo/selector."""
     html = _html()
@@ -202,6 +212,7 @@ def test_backup_restore_success_contract_uses_validated_trip_and_render_targets(
     assert element_attributes(html, "stage-selector")["aria-label"] == "Etapa de Viagem"
 
 
+@pytest.mark.requirement("RF08")
 def test_backup_restore_failure_contract_keeps_trip_and_reports_in_banner() -> None:
     """Falhas de leitura, JSON, rede e validação são comunicadas sem tocar a Viagem."""
     html = _html()
@@ -225,6 +236,7 @@ def test_backup_restore_failure_contract_keeps_trip_and_reports_in_banner() -> N
     assert element_attributes(html, "impact-banner")["role"] == "status"
 
 
+@pytest.mark.requirement("RF06", "RF08")
 def test_index_page_declares_user_facing_error_messages() -> None:
     """As mensagens de erro visíveis são declaradas no HTML e usam o banner de estado."""
     html = _html()

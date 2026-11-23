@@ -11,6 +11,8 @@ sem tocar nos controles pré-existentes de Eventos de Contingência.
 import re
 from pathlib import Path
 
+import pytest
+
 from tests.html_contract import _script_function_body, message_catalog, visible_literals
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -54,6 +56,7 @@ def test_index_html_card_title_uses_canonical_vocabulary() -> None:
     assert "Rota" not in html
 
 
+@pytest.mark.requirement("RF06", "RF08")
 def test_index_html_new_flow_sections_use_canonical_vocabulary() -> None:
     """Verifica rótulos canônicos nas seções de Viagem, modal e Backup JSON."""
     html = _html()
@@ -88,6 +91,7 @@ def test_index_html_new_flow_sections_use_canonical_vocabulary() -> None:
         assert term not in modal, f"{term} inadequado no Modal de Confirmação de Impacto"
 
 
+@pytest.mark.requirement("RF06", "RF08")
 def test_index_html_new_flow_scripts_use_canonical_vocabulary() -> None:
     """Verifica que os textos gerados e as mensagens visíveis seguem o glossário."""
     html = _html()

@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -5,6 +6,7 @@ from src.adapters.web.app import app
 client = TestClient(app)
 
 
+@pytest.mark.requirement("RF03")
 def test_dining_recommend_endpoint() -> None:
     """Verifica que o endpoint prioriza o restaurante próximo e bem avaliado."""
     payload = {
@@ -38,6 +40,7 @@ def test_dining_recommend_endpoint() -> None:
     assert data[0]["id"] == "rest-1"
 
 
+@pytest.mark.requirement("RF07")
 def test_trip_budget_endpoint() -> None:
     """Verifica a Estimativa de Gastos consolidada de hospedagem e alimentação da Viagem."""
     payload = {
@@ -89,6 +92,7 @@ def test_trip_budget_endpoint() -> None:
     assert data["total_trip_cost"] == 1360.0
 
 
+@pytest.mark.requirement("RF07")
 def test_trip_budget_endpoint_with_custom_food_profile_and_multiple_travelers() -> None:
     """Verifica a Estimativa de Gastos por perfil alimentar e número de viajantes."""
     payload = {
@@ -144,6 +148,7 @@ def test_trip_budget_endpoint_with_custom_food_profile_and_multiple_travelers() 
     assert data["stage_breakdowns"]["st-sp"]["total_cost"] == 3600.0
 
 
+@pytest.mark.requirement("RF03", "RF04")
 def test_contextual_dining_slots_endpoint() -> None:
     """Verifica os Slots de Refeição contextuais e as recomendações por Ponto de Interesse."""
     dep_hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}
