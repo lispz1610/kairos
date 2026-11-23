@@ -146,6 +146,7 @@ def test_trip_budget_endpoint_with_custom_food_profile_and_multiple_travelers() 
     assert data["stage_breakdowns"]["st-sp"]["total_cost"] == 3600.0
 
 
+@pytest.mark.requirement("RF03", "RF04")
 def test_contextual_dining_slots_endpoint() -> None:
     """Verifica os Slots de Refeição contextuais e as recomendações por Ponto de Interesse."""
     dep_hotel_loc = {"latitude": -23.5500, "longitude": -46.6300}

@@ -1,6 +1,7 @@
 import json
 from datetime import date, time, timedelta
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -24,6 +25,7 @@ from src.core.services.schedule import ScheduleService
     days_stage_2=st.integers(min_value=2, max_value=8),
     delta_days=st.integers(min_value=-2, max_value=4),
 )
+@pytest.mark.requirement("RF01")
 def test_ripple_shift_invariants(
     days_stage_1: int,
     days_stage_2: int,
@@ -222,6 +224,7 @@ def arbitrary_trips(draw: st.DrawFn) -> Trip:
 
 @settings(deadline=None)
 @given(trip=arbitrary_trips())
+@pytest.mark.requirement("RF01", "RF02")
 def test_trip_json_round_trip_idempotence(trip: Trip) -> None:
     # Validate round-trip via json.loads(trip.model_dump_json())
     """Invariante: serializar e desserializar a Viagem preserva dados e dias de transição."""
