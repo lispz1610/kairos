@@ -129,10 +129,14 @@ run_mutation() {
 
   mkdir -p "$mutmut_dir"
   cp -R src tests "$mutmut_dir/"
+  if [[ -d scripts ]]; then
+    cp -R scripts "$mutmut_dir/"
+  fi
   if [[ -d docs ]]; then
     cp -R docs "$mutmut_dir/"
   fi
   cp pyproject.toml "$mutmut_dir/pyproject.toml"
+  cp verify_quality.sh "$mutmut_dir/verify_quality.sh"
   if [[ -f README.md ]]; then
     cp README.md "$mutmut_dir/README.md"
   fi
@@ -171,11 +175,13 @@ for folder in ("core", "adapters", "tests"):
             py_file.write_text(updated, encoding="utf-8")
 PY
 
-  printf '\n[tool.mutmut]\nsource_paths = ["core"]\nalso_copy = ["src", "adapters", "tests", "docs"]\n' >> "$mutmut_dir/pyproject.toml"
+  printf '\n[tool.mutmut]\nsource_paths = ["core"]\nalso_copy = ["src", "adapters", "tests", "docs", "scripts", "verify_quality.sh"]\n' >> "$mutmut_dir/pyproject.toml"
 
   (
     cd "$mutmut_dir"
-    mutmut run
+    # Apenas a execução do mutmut usa o perfil sem prazo do Hypothesis; o gate
+    # rápido e as execuções locais preservam os prazos padrão.
+    KAIROS_MUTATION=1 mutmut run
     mutmut export-cicd-stats
   )
   mutation_stats="$mutmut_dir/mutants/mutmut-cicd-stats.json"

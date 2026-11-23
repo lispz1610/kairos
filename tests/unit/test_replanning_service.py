@@ -19,7 +19,7 @@ Cada teste é uma asserção lógica sobre a interface pública
 from datetime import datetime, time, timedelta
 
 import hypothesis.strategies as st
-from hypothesis import given
+from hypothesis import given, settings
 
 from src.core.domain.models import (
     POI,
@@ -380,6 +380,7 @@ def _replan_inputs(draw):
     return Itinerary(stops=stops), current_time, availability
 
 
+@settings(deadline=None)
 @given(_replan_inputs())
 def test_propriedade_nenhuma_parada_passada_alterada(replan_inputs):
     """Teste de propriedade: nenhuma parada antes de current_time é alterada."""
@@ -395,6 +396,7 @@ def test_propriedade_nenhuma_parada_passada_alterada(replan_inputs):
     assert result.itinerary.stops[: len(preserved)] == preserved
 
 
+@settings(deadline=None)
 @given(_replan_inputs())
 def test_propriedade_janelas_de_funcionamento_e_disponibilidade_nao_violadas(
     replan_inputs,

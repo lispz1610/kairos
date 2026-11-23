@@ -87,7 +87,60 @@
     cursor: pointer;
   }
   .control button:hover { background: #093f3d; }
+  .controls > button {
+    padding: 6px 10px;
+    border: 1px solid var(--primary);
+    background: var(--primary);
+    color: #fff;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #trip-planning { grid-column: 1 / -1; }
+  #trip-stages { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  #trip-stages li { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .stage-days { list-style: none; margin: 4px 0 0 12px; padding: 0; }
+  .stage-days li { padding: 2px 0; border-bottom: 0; color: var(--muted); }
   #map { height: 380px; border: 1px solid var(--line); border-radius: 8px; }
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.55);
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    width: min(520px, 100%);
+    max-height: 80vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .modal-header, .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .modal-footer { justify-content: flex-end; }
+  .modal-header h2 { margin: 0; }
+  .modal-body { margin: 12px 0; font-size: 13px; }
+  .modal-body p { margin: 6px 0; }
+  .impact-fields { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); }
+  .modal button {
+    padding: 6px 10px;
+    border: 1px solid var(--primary);
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #modal-cancel-btn { background: #fff; color: var(--primary); }
+  #modal-confirm-btn { background: var(--primary); color: #fff; }
+  #modal-confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   footer {
     text-align: center;
     font-size: 12px;
@@ -100,6 +153,39 @@
 <body>
 <header id="impact-banner" class="banner hidden" role="status"></header>
 <main>
+  <section class="panel" id="trip-planning"
+           data-trip-storage-key="kairos_trip_v1" data-trip-fallback="deterministic-seed">
+    <h2>Planejamento da Viagem</h2>
+    <ul id="trip-stages" data-role="trip-stage-summary"></ul>
+    <div class="controls">
+      <label class="control">
+        <span>Etapa de Viagem</span>
+        <select id="stage-selector" aria-label="Etapa de Viagem"></select>
+      </label>
+      <label class="control">
+        <span>Variação de dias</span>
+        <input id="delta-days" type="number" step="1" value="1"
+               aria-label="Variação de dias, positiva ou negativa" />
+      </label>
+      <button type="button" id="preview-ripple-shift"
+              data-action="preview-ripple-shift"
+              data-endpoint="/api/trip/ripple-shift/preview">
+        Pré-visualizar Deslocamento em Cascata
+      </button>
+    </div>
+    <div class="controls" id="trip-backup-controls">
+      <button type="button" id="export-backup-json" data-action="export-backup-json">
+        Exportar Backup JSON
+      </button>
+      <button type="button" id="restore-backup-json" data-action="restore-backup-json"
+              data-endpoint="/api/trip/backup/validate"
+              data-file-input-target="backup-file-input"
+              data-persist-trip="after-validate">
+        Restaurar Backup JSON
+      </button>
+      <input id="backup-file-input" type="file" accept="application/json,.json" hidden />
+    </div>
+  </section>
   <section class="panel">
     <h1>Kairos</h1>
     <h2>Roteiro — Dia de Viagem ativo</h2>
@@ -132,12 +218,452 @@
     <div id="map"></div>
   </section>
 </main>
+<div class="modal-overlay hidden" id="modal-overlay" role="dialog" aria-modal="true"
+     aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Modal de Confirmação de Impacto</h2>
+      <button type="button" id="modal-close-btn" aria-label="Fechar modal"
+              data-action="close-impact-modal" data-persist-trip="never">×</button>
+    </div>
+    <div class="modal-body" id="modal-body" data-role="impact-summary">
+      <p><strong>Datas anteriores</strong> e <strong>Datas recalculadas</strong>
+         das Etapas de Viagem e Conexões Interurbanas afetadas:</p>
+      <p class="impact-fields">
+        <span data-impact-field="target-stage-start">Início da Etapa de Viagem alvo</span>
+        <span data-impact-field="target-stage-end">Término da Etapa de Viagem alvo</span>
+        <span data-impact-field="stage">Etapa de Viagem</span>
+        <span data-impact-field="connection-date">Data de partida da Conexão Interurbana</span>
+        <span data-impact-field="connection-departure">Horário de partida da Conexão Interurbana</span>
+      </p>
+      <div id="modal-impact-list" data-role="impact-list"></div>
+      <template id="impact-row-template" data-role="impact-row">
+        <p data-field="" data-old-value="" data-new-value=""></p>
+      </template>
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="modal-cancel-btn"
+              data-action="close-impact-modal" data-persist-trip="never">Cancelar</button>
+      <!-- A confirmação é habilitada pela aplicação do Deslocamento em Cascata. -->
+      <button type="button" id="modal-confirm-btn" disabled
+              data-action="confirm-ripple-shift"
+              data-endpoint="/api/trip/ripple-shift/apply"
+              data-persist-trip="after-confirm">Confirmar</button>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="ui-messages">
+{
+  "invalidDelta": "Informe um número inteiro de dias para o Deslocamento em Cascata.",
+  "previewNetworkError": "Não foi possível consultar a prévia do Deslocamento em Cascata.",
+  "previewHttpError": "A prévia do Deslocamento em Cascata falhou (status {status}). A Viagem salva não foi alterada.",
+  "applyNetworkError": "Não foi possível aplicar o Deslocamento em Cascata. A Viagem salva não foi alterada.",
+  "applyHttpError": "A aplicação do Deslocamento em Cascata falhou (status {status}).{detail} A Viagem salva não foi alterada.",
+  "restoreNoFile": "Selecione um arquivo de Backup JSON para restaurar a Viagem. A Viagem salva não foi alterada.",
+  "restoreReadError": "Não foi possível ler o arquivo de Backup JSON. A Viagem salva não foi alterada.",
+  "restoreParseError": "O arquivo selecionado não contém um Backup JSON válido. A Viagem salva não foi alterada.",
+  "restoreNetworkError": "Não foi possível restaurar o Backup JSON. A Viagem salva não foi alterada.",
+  "restoreHttpError": "O Backup JSON é incompatível com a Viagem (status {status}). A Viagem salva não foi alterada.",
+  "replanHttpError": "O Roteiro não pôde ser replanejado (status {status})."
+}
+</script>
 <footer>Persistido em <b>localStorage</b>; replanejado via <b>POST /api/trip/replan</b>.</footer>
 <script>
 "use strict";
 
 const STORAGE_KEY = "kairos_trip_state_v1";
 const API_URL = "/api/trip/replan";
+const TRIP_STORAGE_KEY = document.getElementById("trip-planning").dataset.tripStorageKey;
+const RIPPLE_PREVIEW_URL = document.getElementById("preview-ripple-shift").dataset.endpoint;
+const RIPPLE_APPLY_URL = document.getElementById("modal-confirm-btn").dataset.endpoint;
+const BACKUP_VALIDATE_URL = document.getElementById("restore-backup-json").dataset.endpoint;
+const BACKUP_FILENAME = "viagem-kairos.json";
+const UI_MESSAGES = JSON.parse(document.getElementById("ui-messages").textContent || "{}");
+let pendingRippleShiftRequest = null;
+
+function showMessage(key, values) {
+  const template = UI_MESSAGES[key];
+  if (!template) {
+    showError(key);
+    return;
+  }
+  const data = values || {};
+  showError(template.replace(/\{(\w+)\}/g, (match, name) => (
+    Object.prototype.hasOwnProperty.call(data, name) ? String(data[name]) : match
+  )));
+}
+
+async function postAndRead(url, body, flow) {
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+  } catch (error) {
+    showMessage(flow + "NetworkError");
+    return null;
+  }
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload.detail === "string") {
+        detail = " " + payload.detail;
+      }
+    } catch (error) {
+      detail = "";
+    }
+    showMessage(flow + "HttpError", { status: response.status, detail: detail });
+    return null;
+  }
+  return await response.json();
+}
+
+function rippleShiftBody(trip, targetStageId, deltaDays) {
+  return { trip: trip, target_stage_id: targetStageId, delta_days: deltaDays };
+}
+
+function makeTripDays(startDate, endDate, accommodation) {
+  const days = [];
+  const dayMs = 24 * 60 * 60 * 1000;
+  for (let date = parseDate(startDate); date < parseDate(endDate); date += dayMs) {
+    days.push({
+      date: new Date(date).toISOString().slice(0, 10),
+      base_accommodation: accommodation,
+      previous_day_accommodation: days.length ? days[days.length - 1].base_accommodation : null,
+    });
+  }
+  return days;
+}
+
+function defaultTrip() {
+  const accommodation = (id, name, latitude, longitude) => ({
+    id,
+    name,
+    location: { latitude, longitude },
+  });
+  const spAccommodation = accommodation("h-sp", "Hospedagem SP", -23.55, -46.66);
+  const limaAccommodation = accommodation("h-lima", "Hospedagem Lima", -12.04, -77.03);
+  return {
+    id: "trip-sp-lima",
+    title: "São Paulo e Lima",
+    travelers: 1,
+    stages: [
+      {
+        id: "stage-sp",
+        city_name: "São Paulo",
+        start_date: "2026-11-01",
+        end_date: "2026-11-10",
+        base_accommodation: spAccommodation,
+        days: makeTripDays("2026-11-01", "2026-11-10", spAccommodation),
+      },
+      {
+        id: "stage-lima",
+        city_name: "Lima",
+        start_date: "2026-11-10",
+        end_date: "2026-11-15",
+        base_accommodation: limaAccommodation,
+        days: makeTripDays("2026-11-10", "2026-11-15", limaAccommodation),
+      },
+    ],
+    connections: [
+      {
+        id: "conn-1",
+        from_stage_id: "stage-sp",
+        to_stage_id: "stage-lima",
+        mode: "flying",
+        departure_time: "2026-11-10",
+        departure_datetime: "2026-11-10T09:00:00",
+        modal: "flying",
+        boarding_cutoff_minutes: 120,
+      },
+    ],
+    preferences: { intensities: {} },
+    curation_lists: [],
+  };
+}
+
+function saveTrip(trip) {
+  window.localStorage.setItem(TRIP_STORAGE_KEY, JSON.stringify(trip));
+}
+
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isIsoDate(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isValidTrip(trip) {
+  if (!isObject(trip) || typeof trip.id !== "string" || !trip.id) {
+    return false;
+  }
+  if (typeof trip.title !== "string" || !trip.title) {
+    return false;
+  }
+  if (!Array.isArray(trip.stages) || !Array.isArray(trip.connections)) {
+    return false;
+  }
+  if (!isObject(trip.preferences) || !Array.isArray(trip.curation_lists)) {
+    return false;
+  }
+  const stagesValid = trip.stages.every((stage) =>
+    isObject(stage) && typeof stage.id === "string" &&
+    typeof stage.city_name === "string" && isIsoDate(stage.start_date) &&
+    isIsoDate(stage.end_date) && isObject(stage.base_accommodation) &&
+    Array.isArray(stage.days) && stage.days.every((day) =>
+      isObject(day) && isIsoDate(day.date) && isObject(day.base_accommodation)
+    )
+  );
+  const connectionsValid = trip.connections.every((connection) =>
+    isObject(connection) && typeof connection.id === "string" &&
+    (isIsoDate(String(connection.departure_datetime || "").slice(0, 10)) ||
+     isIsoDate(connection.departure_time))
+  );
+  return stagesValid && connectionsValid;
+}
+
+function loadTrip() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(TRIP_STORAGE_KEY));
+    if (isValidTrip(parsed)) {
+      return parsed;
+    }
+  } catch (error) {
+    /* Estado de Viagem ausente ou ilegível: recuar para a semente determinística. */
+  }
+  const trip = defaultTrip();
+  saveTrip(trip);
+  return trip;
+}
+
+function parseDate(isoDate) {
+  const parts = isoDate.split("-").map(Number);
+  return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+}
+
+function formatDate(isoDate) {
+  const parts = isoDate.split("-");
+  return parts[2] + "/" + parts[1] + "/" + parts[0];
+}
+
+function stageDurationDays(stage) {
+  return Math.round(
+    (parseDate(stage.end_date) - parseDate(stage.start_date)) / (24 * 60 * 60 * 1000)
+  );
+}
+
+function connectionDepartureDate(connection) {
+  const departure = connection.departure_datetime || connection.departure_time;
+  return String(departure).slice(0, 10);
+}
+
+function connectionDepartureTime(connection) {
+  const departure = String(connection.departure_datetime || connection.departure_time || "");
+  const parts = departure.split("T");
+  return parts.length > 1 ? parts[1].slice(0, 5) : "";
+}
+
+function renderTripStages(trip) {
+  const list = document.getElementById("trip-stages");
+  list.replaceChildren();
+  trip.stages.forEach((stage) => {
+    const item = document.createElement("li");
+    item.textContent =
+      stage.city_name + " — " + formatDate(stage.start_date) +
+      " a " + formatDate(stage.end_date) + " · " + stageDurationDays(stage) + " dias";
+    const days = document.createElement("ul");
+    days.className = "stage-days";
+    stage.days.forEach((day, dayIndex) => {
+      const dayItem = document.createElement("li");
+      dayItem.textContent = "Dia de Viagem " + (dayIndex + 1) + " — " + formatDate(day.date);
+      days.appendChild(dayItem);
+    });
+    item.appendChild(days);
+    list.appendChild(item);
+  });
+  trip.connections.forEach((connection) => {
+    const item = document.createElement("li");
+    item.textContent = "Conexão Interurbana " + connection.id + " — partida " +
+      formatDate(connectionDepartureDate(connection));
+    list.appendChild(item);
+  });
+}
+
+function renderStageSelector(trip, selectedStageId) {
+  const selector = document.getElementById("stage-selector");
+  selector.replaceChildren();
+  trip.stages.forEach((stage) => {
+    const option = document.createElement("option");
+    option.value = stage.id;
+    option.textContent = stage.city_name;
+    selector.appendChild(option);
+  });
+  const hasSelection = trip.stages.some((stage) => stage.id === selectedStageId);
+  selector.value = hasSelection ? selectedStageId : (trip.stages[0] ? trip.stages[0].id : "");
+}
+
+function initTripPlanning() {
+  const trip = loadTrip();
+  renderTripStages(trip);
+  renderStageSelector(trip);
+}
+
+function closeImpactModal() {
+  document.getElementById("modal-overlay").classList.add("hidden");
+  document.getElementById("modal-impact-list").replaceChildren();
+  document.getElementById("modal-confirm-btn").disabled = true;
+  pendingRippleShiftRequest = null;
+}
+
+function addImpactRow(field, oldValue, newValue) {
+  const label = document.querySelector('[data-impact-field="' + field + '"]');
+  const template = document.getElementById("impact-row-template");
+  const row = template.content.firstElementChild.cloneNode(true);
+  row.dataset.field = field;
+  row.dataset.oldValue = oldValue;
+  row.dataset.newValue = newValue;
+  row.textContent =
+    (label ? label.textContent.trim() : field) + ": " + oldValue + " → " + newValue;
+  document.getElementById("modal-impact-list").appendChild(row);
+}
+
+function showImpactModal(request, preview) {
+  const trip = request.trip;
+  document.getElementById("modal-impact-list").replaceChildren();
+  addImpactRow(
+    "target-stage-start",
+    formatDate(preview.old_target_start),
+    formatDate(preview.new_target_start)
+  );
+  addImpactRow(
+    "target-stage-end",
+    formatDate(preview.old_target_end),
+    formatDate(preview.new_target_end)
+  );
+  preview.shifted_stages.forEach((stage) => {
+    addImpactRow(
+      "stage",
+      stage.city_name + " (" + stage.preserved_days_count + " dias preservados): " +
+        formatDate(stage.old_start) + " a " + formatDate(stage.old_end),
+      stage.city_name + ": " + formatDate(stage.new_start) + " a " + formatDate(stage.new_end)
+    );
+  });
+  preview.shifted_connections.forEach((connection) => {
+    const source = trip.connections.find((item) => item.id === connection.connection_id);
+    const time = source ? connectionDepartureTime(source) : "";
+    const withTime = (value) => formatDate(value) + (time ? " " + time : "");
+    addImpactRow(
+      "connection-date",
+      withTime(connection.old_departure),
+      withTime(connection.new_departure)
+    );
+    if (time) {
+      addImpactRow("connection-departure", time, time);
+    }
+  });
+  pendingRippleShiftRequest = request;
+  document.getElementById("modal-confirm-btn").disabled = false;
+  document.getElementById("modal-overlay").classList.remove("hidden");
+}
+
+async function confirmRippleShift() {
+  if (!pendingRippleShiftRequest) {
+    return;
+  }
+  const previewedRequest = pendingRippleShiftRequest;
+  document.getElementById("modal-confirm-btn").disabled = true;
+  const currentTrip = loadTrip();
+  const request = rippleShiftBody(
+    currentTrip,
+    previewedRequest.target_stage_id,
+    previewedRequest.delta_days
+  );
+  const updatedTrip = await postAndRead(RIPPLE_APPLY_URL, request, "apply");
+  if (!updatedTrip) {
+    closeImpactModal();
+    return;
+  }
+  const selectedStageId = document.getElementById("stage-selector").value;
+  saveTrip(updatedTrip);
+  closeImpactModal();
+  renderTripStages(updatedTrip);
+  renderStageSelector(updatedTrip, selectedStageId);
+}
+
+async function previewRippleShift() {
+  const trip = loadTrip();
+  const targetStageId = document.getElementById("stage-selector").value;
+  const rawDelta = document.getElementById("delta-days").value;
+  const deltaDays = Number(rawDelta);
+  if (rawDelta === "" || !Number.isInteger(deltaDays)) {
+    showMessage("invalidDelta");
+    return;
+  }
+  const request = rippleShiftBody(trip, targetStageId, deltaDays);
+  const preview = await postAndRead(RIPPLE_PREVIEW_URL, request, "preview");
+  if (!preview) {
+    return;
+  }
+  showImpactModal(request, preview);
+}
+
+function exportTripBackup() {
+  const trip = loadTrip();
+  const blob = new Blob([JSON.stringify(trip)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = BACKUP_FILENAME;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function openBackupFilePicker() {
+  const button = document.getElementById("restore-backup-json");
+  const input = document.getElementById(button.dataset.fileInputTarget);
+  if (!input) {
+    showMessage("restoreReadError");
+    return;
+  }
+  input.value = "";
+  input.click();
+}
+
+async function restoreTripBackup() {
+  const input = document.getElementById("backup-file-input");
+  const file = input.files && input.files[0];
+  if (!file) {
+    showMessage("restoreNoFile");
+    return;
+  }
+  input.value = "";
+  let raw;
+  try {
+    raw = await file.text();
+  } catch (error) {
+    showMessage("restoreReadError");
+    return;
+  }
+  try {
+    JSON.parse(raw);
+  } catch (error) {
+    showMessage("restoreParseError");
+    return;
+  }
+  const validatedTrip = await postAndRead(BACKUP_VALIDATE_URL, raw, "restore");
+  if (!validatedTrip) {
+    return;
+  }
+  saveTrip(validatedTrip);
+  renderTripStages(validatedTrip);
+  renderStageSelector(validatedTrip);
+}
 
 function defaultStop(id, name, start, durationMinutes) {
   return {
@@ -310,7 +836,7 @@ async function replan(events, afterReplanned) {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    showError("O Roteiro não pôde ser replanejado (status " + response.status + ").");
+    showMessage("replanHttpError", { status: response.status });
     return null;
   }
   const data = await response.json();
@@ -328,7 +854,29 @@ function init() {
   const state = loadState();
   renderTimeline(state);
   initMap(state);
+  initTripPlanning();
 }
+
+const ACTION_HANDLERS = {
+  "preview-ripple-shift": previewRippleShift,
+  "confirm-ripple-shift": confirmRippleShift,
+  "close-impact-modal": closeImpactModal,
+  "export-backup-json": exportTripBackup,
+  "restore-backup-json": openBackupFilePicker,
+};
+document.querySelectorAll("[data-action]").forEach((element) => {
+  element.addEventListener("click", ACTION_HANDLERS[element.dataset.action]);
+});
+
+function wireBackupRestorePicker() {
+  const button = document.getElementById("restore-backup-json");
+  const input = document.getElementById(button.dataset.fileInputTarget);
+  if (!input) {
+    return;
+  }
+  input.addEventListener("change", restoreTripBackup);
+}
+wireBackupRestorePicker();
 
 document.getElementById("apply-delay").addEventListener("click", () => {
   const minutes = Number(document.getElementById("delay-minutes").value);

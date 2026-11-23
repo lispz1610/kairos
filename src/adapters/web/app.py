@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date as iso_date
 from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
@@ -10,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.adapters.http.safe_fetcher import SafeHttpFetcher
 from src.adapters.places import create_places_adapter
@@ -18,6 +19,7 @@ from src.adapters.web.contingency import orchestrate_trip_replan
 from src.adapters.web.contingency import to_domain_event as _to_domain_event
 from src.core.domain.models import (
     POI,
+    Accommodation,
     Coordinates,
     CurationList,
     InterCityConnection,
@@ -27,6 +29,8 @@ from src.core.domain.models import (
     RouteStop,
     TimeWindow,
     Trip,
+    TripDay,
+    TripStage,
 )
 from src.core.services.curation import CurationService
 from src.core.services.dining_and_budget import BudgetSummary, DiningService
@@ -350,11 +354,14 @@ def preview_ripple_shift(req: RippleShiftRequest) -> RippleShiftPreview:
 @app.post("/api/trip/ripple-shift/apply", response_model=Trip)
 def apply_ripple_shift(req: RippleShiftRequest) -> Trip:
     """Aplica o deslocamento em cascata nas etapas e conexões da viagem."""
-    return schedule_service.apply_ripple_shift(
-        trip=req.trip,
-        target_stage_id=req.target_stage_id,
-        delta_days=req.delta_days,
-    )
+    try:
+        return schedule_service.apply_ripple_shift(
+            trip=req.trip,
+            target_stage_id=req.target_stage_id,
+            delta_days=req.delta_days,
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
 
 
 @app.post("/api/trip/export-markdown")
@@ -362,6 +369,107 @@ def export_trip_markdown(trip: Trip) -> dict[str, str]:
     """Exporta a viagem completa em formato Markdown estruturado."""
     md = markdown_service.export_trip_markdown(trip)
     return {"markdown": md}
+
+
+class BackupCoordinates(Coordinates):
+    """Coordenada de um Backup de Viagem, sem aceitar campos desconhecidos."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class BackupAccommodation(Accommodation):
+    """Hospedagem de um Backup, com identificadores estritamente textuais."""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(strict=True, min_length=1)
+    name: str = Field(strict=True, min_length=1)
+    location: BackupCoordinates
+
+
+class BackupTripDay(TripDay):
+    """Dia de Viagem de um Backup, com datas ISO aceitas e campos extras recusados."""
+
+    model_config = ConfigDict(extra="forbid")
+    date: iso_date = Field(strict=False)
+    base_accommodation: BackupAccommodation
+    custom_accommodation: BackupAccommodation | None = None
+    previous_day_accommodation: BackupAccommodation | None = None
+
+
+class BackupTripStage(TripStage):
+    """Etapa de Viagem de um Backup, com datas ISO aceitas e campos extras recusados."""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(strict=True, min_length=1)
+    city_name: str = Field(strict=True, min_length=1)
+    start_date: iso_date = Field(strict=False)
+    end_date: iso_date = Field(strict=False)
+    base_accommodation: BackupAccommodation
+    # Cada item é um subtipo estrito do tipo do modelo base; a lista em si não é reatribuída.
+    days: list[BackupTripDay] = Field(default_factory=list)  # type: ignore[assignment]
+
+
+class BackupInterCityConnection(InterCityConnection):
+    """Conexão Interurbana de um Backup, com partida ISO aceita e campos extras recusados."""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(strict=True, min_length=1)
+    from_stage_id: str = Field(strict=True)
+    to_stage_id: str = Field(strict=True)
+    departure_time: iso_date | None = Field(default=None, strict=False)
+    departure_datetime: datetime = Field(strict=False, description="Partida com data e hora.")
+    modal: str = Field(default="driving", min_length=1, strict=True)
+    boarding_cutoff_minutes: int = Field(default=30, ge=0, strict=True)
+
+
+class BackupPreferencesProfile(PreferencesProfile):
+    """Perfil de Preferência de um Backup, sem aceitar campos desconhecidos."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class BackupCurationList(CurationList):
+    """Lista de Curadoria de um Backup, sem aceitar campos desconhecidos."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class TripBackup(Trip):
+    """Corpo estrito de ``POST /api/trip/backup/validate``: a própria Viagem, sem envelope.
+
+    Regra de normalização adotada: strings ISO de data/hora são convertidas para os
+    tipos temporais do modelo e valores ausentes usam os padrões de ``Trip``; todo
+    o restante é estrito — números texto, booleanos texto e campos desconhecidos
+    (inclusive em Etapas, Dias de Viagem e Conexões Interurbanas) geram HTTP 422.
+    O objeto devolvido já está normalizado e pode ser reenviado idempotentemente.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(strict=True, min_length=1)
+    title: str = Field(strict=True, min_length=1)
+    travelers: int = Field(default=1, ge=1, strict=True)
+    # Subtipos estritos de cada item: Pydantic valida a lista completa com estes modelos.
+    stages: list[BackupTripStage] = Field(default_factory=list)  # type: ignore[assignment]
+    connections: list[BackupInterCityConnection] = Field(  # type: ignore[assignment]
+        default_factory=list
+    )
+    preferences: BackupPreferencesProfile = Field(default_factory=BackupPreferencesProfile)
+    curation_lists: list[BackupCurationList] = Field(  # type: ignore[assignment]
+        default_factory=list
+    )
+
+
+@app.post("/api/trip/backup/validate", response_model=Trip)
+def validate_trip_backup(trip: TripBackup) -> Trip:
+    """Validar e normalizar o JSON de uma Viagem recebido como Backup.
+
+    O corpo é a própria Viagem, sem envelope. A normalização limita-se a strings
+    ISO de datas/horários e a padrões de campos ausentes; escalares com tipos
+    incompatíveis e campos desconhecidos em qualquer nível produzem HTTP 422 com
+    detalhes de schema. O objeto normalizado devolvido pode ser reenviado em um
+    ciclo idempotente.
+    """
+    return trip
 
 
 @app.get("/api/curation/suggested", response_model=List[CurationList])
