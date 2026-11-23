@@ -16,6 +16,7 @@ from src.core.domain.models import (
 from src.core.services.dining_and_budget import DiningService
 
 
+@pytest.mark.requirement("RF03")
 def test_dining_service_proximity_recommendations() -> None:
     # Reference POI (e.g. visited at morning)
     """Verifica que as recomendações priorizam restaurantes proximos e bem avaliados."""

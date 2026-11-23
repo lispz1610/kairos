@@ -1,5 +1,6 @@
 from datetime import time
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -65,6 +66,7 @@ def test_optw_itinerary_never_exceeds_availability_window(
     include_coffee=st.booleans(),
     include_wine=st.booleans(),
 )
+@pytest.mark.requirement("RF03", "RF04")
 def test_optw_itinerary_never_collides_with_reserved_slots(
     lat_start: float,
     lng_start: float,
