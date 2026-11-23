@@ -3,66 +3,44 @@ from typing import Any, Dict
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
+from tests.trip_payloads import (
+    accommodation_payload,
+    intercity_connection_payload,
+    stage_payload,
+    with_departure_datetime,
+)
 
 client = TestClient(app)
 
 
 def _sample_trip_payload() -> Dict[str, Any]:
+    sp_accommodation = accommodation_payload("h-sp", "Hotel SP", -23.55, -46.66)
+    lima_accommodation = accommodation_payload("h-lima", "Hotel Lima", -12.04, -77.03)
     return {
         "id": "trip-sp-lima",
         "title": "SP & Lima",
         "stages": [
-            {
-                "id": "st-sp",
-                "city_name": "São Paulo",
-                "start_date": "2026-11-01",
-                "end_date": "2026-11-10",
-                "base_accommodation": {
-                    "id": "h-sp",
-                    "name": "Hotel SP",
-                    "location": {"latitude": -23.55, "longitude": -46.66},
-                },
-                "days": [
-                    {
-                        "date": "2026-11-01",
-                        "base_accommodation": {
-                            "id": "h-sp",
-                            "name": "Hotel SP",
-                            "location": {"latitude": -23.55, "longitude": -46.66},
-                        },
-                    }
-                ],
-            },
-            {
-                "id": "st-lima",
-                "city_name": "Lima",
-                "start_date": "2026-11-10",
-                "end_date": "2026-11-15",
-                "base_accommodation": {
-                    "id": "h-lima",
-                    "name": "Hotel Lima",
-                    "location": {"latitude": -12.04, "longitude": -77.03},
-                },
-                "days": [
-                    {
-                        "date": "2026-11-10",
-                        "base_accommodation": {
-                            "id": "h-lima",
-                            "name": "Hotel Lima",
-                            "location": {"latitude": -12.04, "longitude": -77.03},
-                        },
-                    }
-                ],
-            },
+            stage_payload(
+                stage_id="st-sp",
+                city_name="São Paulo",
+                start_date="2026-11-01",
+                end_date="2026-11-10",
+                accommodation=sp_accommodation,
+            ),
+            stage_payload(
+                stage_id="st-lima",
+                city_name="Lima",
+                start_date="2026-11-10",
+                end_date="2026-11-15",
+                accommodation=lima_accommodation,
+            ),
         ],
         "connections": [
-            {
-                "id": "conn-1",
-                "from_stage_id": "st-sp",
-                "to_stage_id": "st-lima",
-                "mode": "flying",
-                "departure_time": "2026-11-10",
-            }
+            intercity_connection_payload(
+                from_stage_id="st-sp",
+                to_stage_id="st-lima",
+                departure_date="2026-11-10",
+            )
         ],
     }
 
@@ -84,14 +62,7 @@ def test_ripple_shift_preview_endpoint() -> None:
 
 def test_ripple_shift_preview_exposes_old_and_new_dates_for_negative_delta() -> None:
     """Verifica que a prévia negativa informa datas anteriores e recalculadas ao modal."""
-    trip_payload = _sample_trip_payload()
-    trip_payload["connections"][0].update(
-        {
-            "departure_datetime": "2026-11-10T09:00:00",
-            "modal": "flying",
-            "boarding_cutoff_minutes": 120,
-        }
-    )
+    trip_payload = with_departure_datetime(_sample_trip_payload())
     response = client.post(
         "/api/trip/ripple-shift/preview",
         json={"trip": trip_payload, "target_stage_id": "st-sp", "delta_days": -1},
@@ -113,6 +84,25 @@ def test_ripple_shift_preview_exposes_old_and_new_dates_for_negative_delta() -> 
     )
 
 
+def test_ripple_shift_preview_and_apply_share_one_request_shape() -> None:
+    """A prévia devolve Etapa, delta e id da Conexão para a confirmação reenviar o mesmo corpo."""
+    trip_payload = with_departure_datetime(_sample_trip_payload())
+    request = {"trip": trip_payload, "target_stage_id": "st-sp", "delta_days": 2}
+
+    preview_response = client.post("/api/trip/ripple-shift/preview", json=request)
+    apply_response = client.post("/api/trip/ripple-shift/apply", json=request)
+
+    assert preview_response.status_code == 200
+    assert apply_response.status_code == 200
+    preview = preview_response.json()
+    assert preview["target_stage_id"] == request["target_stage_id"]
+    assert preview["delta_days"] == request["delta_days"]
+    assert [connection["connection_id"] for connection in preview["shifted_connections"]] == [
+        "conn-1"
+    ]
+    assert apply_response.json()["connections"][0]["departure_datetime"] == "2026-11-12T09:00:00"
+
+
 def test_ripple_shift_apply_endpoint() -> None:
     """Verifica o Deslocamento em Cascata nas Etapas e Conexões Interurbanas."""
     trip_payload = _sample_trip_payload()
@@ -130,14 +120,7 @@ def test_ripple_shift_apply_endpoint() -> None:
 
 def test_ripple_shift_apply_matches_preview_dates_for_positive_delta() -> None:
     """Verifica que a Viagem aplicada reproduz as datas da prévia, inclusive conexões."""
-    trip_payload = _sample_trip_payload()
-    trip_payload["connections"][0].update(
-        {
-            "departure_datetime": "2026-11-10T09:00:00",
-            "modal": "flying",
-            "boarding_cutoff_minutes": 120,
-        }
-    )
+    trip_payload = with_departure_datetime(_sample_trip_payload())
     payload = {"trip": trip_payload, "target_stage_id": "st-sp", "delta_days": 2}
     preview_response = client.post("/api/trip/ripple-shift/preview", json=payload)
     assert preview_response.status_code == 200
