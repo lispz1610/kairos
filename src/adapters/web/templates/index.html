@@ -228,7 +228,10 @@
       <p><strong>Datas anteriores</strong> e <strong>Datas recalculadas</strong>
          das Etapas de Viagem e Conexões Interurbanas afetadas:</p>
       <p class="impact-fields">
-        <span data-impact-field="target-stage-start">Início da Etapa de Viagem alvo</span>
+        <span data-impact-field="target-stage-start"
+              data-impact-source="preview"
+              data-preview-old="old_target_start"
+              data-preview-new="new_target_start">Início da Etapa de Viagem alvo</span>
         <span data-impact-field="target-stage-end">Término da Etapa de Viagem alvo</span>
         <span data-impact-field="stage">Etapa de Viagem</span>
         <span data-impact-field="connection-date">Data de partida da Conexão Interurbana</span>
@@ -465,10 +468,6 @@ function connectionDepartureTime(connection) {
   return parts.length > 1 ? parts[1].slice(0, 5) : "";
 }
 
-function shiftDate(isoDate, deltaDays) {
-  return new Date(parseDate(isoDate) + deltaDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
 function renderTripStages(trip) {
   const list = document.getElementById("trip-stages");
   list.replaceChildren();
@@ -535,15 +534,13 @@ function addImpactRow(field, oldValue, newValue) {
 
 function showImpactModal(request, preview) {
   const trip = request.trip;
-  const target = trip.stages.find((stage) => stage.id === preview.target_stage_id);
+  const startSource = document.querySelector('[data-impact-field="target-stage-start"]').dataset;
   document.getElementById("modal-impact-list").replaceChildren();
-  if (target) {
-    addImpactRow(
-      "target-stage-start",
-      formatDate(target.start_date),
-      formatDate(shiftDate(target.start_date, request.delta_days))
-    );
-  }
+  addImpactRow(
+    "target-stage-start",
+    formatDate(preview[startSource.previewOld]),
+    formatDate(preview[startSource.previewNew])
+  );
   addImpactRow(
     "target-stage-end",
     formatDate(preview.old_target_end),

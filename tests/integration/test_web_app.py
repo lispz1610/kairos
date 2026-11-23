@@ -102,6 +102,19 @@ def test_index_page_exposes_impact_confirmation_modal() -> None:
         assert attribute in row.group()
 
 
+def test_index_page_declares_target_stage_start_from_preview_values() -> None:
+    """O início da Etapa alvo declara rótulo canônico e origem dos valores na prévia."""
+    html = _html()
+    label = re.search(
+        r"<span[^>]*data-impact-field=\"target-stage-start\"[^>]*>([^<]*)</span>", html
+    )
+    assert label is not None
+    assert label.group(1).strip() == "Início da Etapa de Viagem alvo"
+    assert 'data-impact-source="preview"' in label.group()
+    assert 'data-preview-old="old_target_start"' in label.group()
+    assert 'data-preview-new="new_target_start"' in label.group()
+
+
 def test_index_page_declares_ripple_actions_and_persistence_intent() -> None:
     """Os controles declaram ação, endpoint e intenção de persistência da Viagem."""
     html = _html()
