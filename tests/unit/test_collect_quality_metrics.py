@@ -191,3 +191,33 @@ def test_coletor_marca_metricas_ausentes_como_indisponiveis(tmp_path: Path) -> N
     assert iso_25010["manutencionabilidade"]["volume_bruto"]["status"] == "unavailable"
     assert report["tools"]["mutmut"]["available"] is False
     assert "não disponível" in markdown_path.read_text(encoding="utf-8")
+
+
+def test_coletor_check_imprime_resumo_unificado(tmp_path: Path) -> None:
+    """``--check`` consome o mesmo relatório e mostra o inventário AST."""
+    reports = _reports_dir(tmp_path, {"pytest.txt": "TOTAL 3200 800 95%\n"})
+
+    result, json_path, _ = _run_collector(tmp_path, reports, "--check")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "==> Consolidated quality summary" in result.stdout
+    assert "Coverage:                  95.0 (minimum 85%)" in result.stdout
+    assert "Max syntactic complexity:" in result.stdout
+    assert "Structural inventory:" in result.stdout
+    assert "Mutation (src/core):       não executado" in result.stdout
+    report = json.loads(json_path.read_text(encoding="utf-8"))
+    inventory = report["standards"]["iso_5055"]["inventario_estrutural"]["value"]
+    assert inventory["core"]["modules"] > 0
+    assert inventory["adapters"]["modules"] > 0
+    assert inventory["total"]["complexity_distribution"]["10+"] == 0
+
+
+def test_coletor_check_falha_com_violacao_de_limiar(tmp_path: Path) -> None:
+    """Um limiar violado gera diagnóstico único e código de saída 1."""
+    reports = _reports_dir(tmp_path)
+
+    result, _, _ = _run_collector(tmp_path, reports, "--check")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "VIOLATION: cobertura 75.0% abaixo do mínimo 85%" in result.stderr
+    assert "==> Consolidated quality summary" in result.stdout
