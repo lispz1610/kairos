@@ -31,6 +31,7 @@ from src.core.domain.models import (
     Trip,
     TripDay,
     TripStage,
+    UrbanMode,
 )
 from src.core.services.curation import CurationService
 from src.core.services.dining_and_budget import BudgetSummary, DiningService
@@ -86,6 +87,7 @@ class OptimizeRequest(BaseModel):
     preferences: Optional[PreferencesProfile] = None
     reserved_slots: Optional[List[TimeWindow]] = None
     curation_lists: Optional[List[CurationList]] = None
+    urban_mode: UrbanMode = UrbanMode.DRIVING
 
 
 class RippleShiftRequest(BaseModel):

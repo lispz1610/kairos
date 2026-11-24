@@ -142,9 +142,18 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
   3. Interface (timeline do Dia de Viagem): controles ``+ Atraso (min)`` (envia ``[{"type": "delay", "delay_minutes": ...}]`` e adianta ``current_time``), ``Fechou`` (envia ``[{"type": "closure", "poi_id": ...}]``), ``Pular parada`` (envia ``[{"type": "skip", "poi_id": ...}]``) e ``Ajustar permanência`` (envia ``[{"type": "duration_adjustment", "poi_id": ..., "new_duration_minutes": ...}]``).
   4. O endpoint constrói os Eventos de Domínio via ``_to_domain_event`` (``DelayEvent`` com ``current_time``/``coordinates`` do pedido) e acumula ``duration_adjustments`` a partir dos ``DurationAdjustmentEvent``, repassando ``reserved_future_stops`` e ``duration_adjustments`` a ``ReplanningService.replan``.
 
+### RF14 — Modal Urbano do Dia de Viagem no Deslocamento do Roteiro
+- **Descrição**: O Dia de Viagem passa a guardar o Modal Urbano escolhido e o ``POST /api/trip/optimize`` aceita o mesmo modal, de forma opcional.
+- **Comportamento**:
+  1. ``TripDay.urban_mode`` aceita `walking` e `driving`; quando omitido, o Dia de Viagem fica em `driving`, inclusive em backup JSON escrito antes da existência do campo.
+  2. `flying` e `transit` pertencem à Conexão Interurbana e são recusados no Dia de Viagem e no pedido de otimização, sem conversão para `driving`.
+  3. O ``POST /api/trip/optimize`` aceita ``urban_mode`` opcional; omiti-lo equivale a informar `driving`.
+  4. Sem ``urban_mode`` ou com ``urban_mode: driving``, o Deslocamento do Roteiro permanece estimado a 25 km/h; ambos os pedidos produzem o mesmo Roteiro.
+
 ---
 
 ## 3. Diretrizes de Qualidade e Casos de Teste (ISO/IEC 25010 & 29119)
+
 
 1. **Adequação Funcional (OPTW com Hospedagens Variáveis)**:
    - Teste de propriedade (`hypothesis`): Provar que para qualquer combinação de Hotel A (partida) e Hotel B (retorno), a soma dos tempos de deslocamento, permanências nos POIs e slots de refeição nunca ultrapassa a Janela de Disponibilidade diária.
