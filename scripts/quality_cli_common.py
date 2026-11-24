@@ -565,3 +565,123 @@ def parse_mutmut(path: Path, full_mode: bool) -> dict[str, object]:
     }
 
 
+MIN_COVERAGE = 85.0
+MAX_COMPLEXITY = 9
+
+
+def _section(report: Mapping[str, object], *keys: str) -> object | None:
+    """Navegar com segurança por uma seção do relatório estruturado."""
+    current: object = report
+    for key in keys:
+        if not isinstance(current, Mapping) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+def _metric_value(metric: object | None) -> object | None:
+    """Extrair o valor de uma medição, preservando ausências."""
+    if isinstance(metric, Mapping) and "value" in metric:
+        return metric["value"]
+    return None
+
+
+def _is_number(value: object) -> bool:
+    """Identificar um número, excluindo booleanos."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def check_quality_thresholds(report: Mapping[str, object]) -> list[str]:
+    """Listar violações dos limiares bloqueantes do gate de qualidade."""
+    violations: list[str] = []
+    coverage = _metric_value(
+        _section(report, "standards", "iso_25010", "adequacao_funcional", "cobertura_percentual")
+    )
+    if _is_number(coverage) and coverage < MIN_COVERAGE:
+        violations.append(f"cobertura {coverage}% abaixo do mínimo {MIN_COVERAGE:g}%")
+
+    syntactic = _section(report, "standards", "iso_5055", "complexidade_sintatica", "value")
+    maximum = syntactic.get("maxima") if isinstance(syntactic, Mapping) else None
+    if _is_number(maximum) and maximum > MAX_COMPLEXITY:
+        violations.append(
+            f"complexidade sintática máxima {maximum} acima do limite {MAX_COMPLEXITY}"
+        )
+
+    zero_limits = (
+        ("erros de tipagem", "confiabilidade", "erros_de_tipagem"),
+        ("violações Ruff", "manutencionabilidade", "violacoes_ruff"),
+        (
+            "contratos arquiteturais rompidos",
+            "manutencionabilidade",
+            "violacoes_contrato_arquitetural",
+        ),
+        ("achados Bandit", "seguranca", "achados_bandit"),
+    )
+    for label, characteristic, metric in zero_limits:
+        value = _metric_value(
+            _section(report, "standards", "iso_25010", characteristic, metric)
+        )
+        if _is_number(value) and value > 0:
+            violations.append(f"{label}: {value}")
+    return violations
+
+
+def _display(metric: object | None) -> str:
+    """Formatar uma medição para o resumo de console."""
+    if not isinstance(metric, Mapping):
+        return "não medido" if metric is None else str(metric)
+    status = metric.get("status")
+    status_labels = {"not run": "não executado", "unavailable": "não disponível"}
+    if status in status_labels:
+        return status_labels[status]
+    if "value" not in metric:
+        return json.dumps(metric, ensure_ascii=False, sort_keys=True)
+    value = metric["value"]
+    if value is None:
+        return "não medido"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value)
+
+
+def format_quality_summary(report: Mapping[str, object]) -> str:
+    """Resumo determinístico do relatório consolidado para o console do gate."""
+    raw_25010 = _section(report, "standards", "iso_25010")
+    raw_5055 = _section(report, "standards", "iso_5055")
+    iso_25010 = raw_25010 if isinstance(raw_25010, Mapping) else {}
+    iso_5055 = raw_5055 if isinstance(raw_5055, Mapping) else {}
+    coverage = _metric_value(
+        _section(iso_25010, "adequacao_funcional", "cobertura_percentual")
+    )
+    syntactic = _section(iso_5055, "complexidade_sintatica")
+    syntactic_value = syntactic.get("value") if isinstance(syntactic, Mapping) else None
+    maximum = syntactic_value.get("maxima") if isinstance(syntactic_value, Mapping) else None
+    inventory = _metric_value(_section(iso_5055, "inventario_estrutural"))
+    docstrings = _metric_value(_section(iso_5055, "cobertura_de_docstrings"))
+    mutation = _section(iso_25010, "confiabilidade", "mutacao")
+    mutation_text = _display(mutation)
+    coverage_text = _display(
+        {"value": coverage, "status": "measured" if coverage is not None else "unavailable"}
+    )
+    complexity_text = maximum if maximum is not None else "não disponível"
+    typing_text = _display(_section(iso_25010, "confiabilidade", "erros_de_tipagem"))
+    ruff_text = _display(_section(iso_25010, "manutencionabilidade", "violacoes_ruff"))
+    architecture_text = _display(
+        _section(iso_25010, "manutencionabilidade", "violacoes_contrato_arquitetural")
+    )
+    bandit_text = _display(_section(iso_25010, "seguranca", "achados_bandit"))
+
+    lines = [
+        "==> Consolidated quality summary",
+        f"  Coverage:                  {coverage_text} (minimum {MIN_COVERAGE:g}%)",
+        f"  Max syntactic complexity:  {complexity_text} (limit < {MAX_COMPLEXITY + 1})",
+        f"  Typing errors:             {typing_text}",
+        f"  Ruff violations:           {ruff_text}",
+        f"  Architecture violations:   {architecture_text}",
+        f"  Bandit findings:           {bandit_text}",
+        f"  Structural inventory:      {_display(inventory)}",
+        f"  Docstring coverage:        {_display(docstrings)}",
+        f"  Mutation (src/core):       {mutation_text}",
+        "  Relatório ISO:             reports/quality-metrics.json / .md",
+    ]
+    return "\n".join(lines)
