@@ -11,9 +11,24 @@ import os
 import re
 import sys
 from typing import Any, Callable
-from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
-from urllib.request import Request, urlopen
+
+try:
+    from scripts.github_client import (
+        DEFAULT_BASE_URL,
+        ApiError as _SharedApiError,
+        GitHubApi as _SharedGitHubApi,
+        paginate_pages as _paginate_pages,
+    )
+    from scripts.path_security import validated_repo_api_path
+except ImportError:  # pragma: no cover - direct script execution
+    from github_client import (
+        DEFAULT_BASE_URL,
+        ApiError as _SharedApiError,
+        GitHubApi as _SharedGitHubApi,
+        paginate_pages as _paginate_pages,
+    )
+    from path_security import validated_repo_api_path
 
 
 _SECTION_HEADER = re.compile(r"(?im)^#{1,6}\s+Implementation issues\s*#*\s*$")
@@ -278,12 +293,12 @@ class GitHubApiError(RuntimeError):
     """Raised when a GitHub API request fails."""
 
 
-class GitHubClient:
-    """Minimal REST client for issue lookup and check-run publication."""
+class GitHubClient(_SharedGitHubApi):
+    """Issue State Gate REST client backed by the shared transport."""
 
-    def __init__(self, token: str, api_url: str = "https://api.github.com") -> None:
-        self.token = token
-        self.api_url = api_url.rstrip("/")
+    def __init__(self, token: str, api_url: str = DEFAULT_BASE_URL) -> None:
+        super().__init__(token, base_url=api_url, user_agent="sciflow-cicd-issue-state-gate")
+        self.api_url = self.base_url
 
     def _request(
         self,
@@ -291,34 +306,18 @@ class GitHubClient:
         path: str,
         payload: dict[str, Any] | None = None,
     ) -> Any:
-        body = json.dumps(payload).encode("utf-8") if payload is not None else None
-        request = Request(
-            f"{self.api_url}{path}",
-            data=body,
-            method=method,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {self.token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "Content-Type": "application/json",
-                "User-Agent": "sciflow-cicd-issue-state-gate",
-            },
-        )
         try:
-            with urlopen(request, timeout=20) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise GitHubApiError(f"GitHub API returned HTTP {exc.code}: {detail}") from exc
-        except (URLError, TimeoutError) as exc:
+            status, _headers, body = self.request_with_headers(method, path, payload=payload)
+        except _SharedApiError as exc:
             raise GitHubApiError(f"GitHub API request failed: {exc}") from exc
+        if status >= 400:
+            detail = body.get("message", "") if isinstance(body, dict) else body
+            raise GitHubApiError(f"GitHub API returned HTTP {status}: {detail}")
+        return body
 
     @staticmethod
     def _repo_path(repository: str) -> str:
-        owner, separator, name = repository.partition("/")
-        if not separator or not owner or not name:
-            raise ValueError(f"Invalid repository name: {repository}")
-        return f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
+        return validated_repo_api_path(repository)
 
     def fetch_issue(self, repository: str, number: int) -> dict[str, Any]:
         return self._request("GET", f"{self._repo_path(repository)}/issues/{number}")
@@ -328,16 +327,17 @@ class GitHubClient:
         return self._request("GET", f"{self._repo_path(repository)}/pulls/{number}")
 
     def _list_pages(self, path: str, description: str) -> list[dict[str, Any]]:
-        items: list[dict[str, Any]] = []
-        page = 1
-        while True:
-            response = self._request("GET", f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}")
-            if not isinstance(response, list) or any(not isinstance(item, dict) for item in response):
-                raise GitHubApiError(f"GitHub returned an invalid {description} list.")
-            items.extend(response)
-            if len(response) < 100:
-                return items
-            page += 1
+        try:
+            items = _paginate_pages(
+                lambda paged_path: self._request("GET", paged_path),
+                path,
+                max_pages=None,
+            )
+        except _SharedApiError as exc:
+            raise GitHubApiError(f"GitHub returned an invalid {description} list.") from exc
+        if any(not isinstance(item, dict) for item in items):
+            raise GitHubApiError(f"GitHub returned an invalid {description} list.")
+        return items
 
     def list_open_pull_requests(self, repository: str) -> list[dict[str, Any]]:
         """List every open pull request, following the REST API's page size."""
@@ -348,14 +348,22 @@ class GitHubClient:
         return self._list_pages(f"{self._repo_path(repository)}/pulls?state=all", "pull request")
 
     def list_check_runs(self, repository: str, head_sha: str) -> list[dict[str, Any]]:
-        """List check runs recorded on a commit."""
-        response = self._request(
-            "GET",
-            f"{self._repo_path(repository)}/commits/{quote(head_sha, safe='')}/check-runs?per_page=100",
-        )
-        if not isinstance(response, dict) or not isinstance(response.get("check_runs"), list):
-            raise GitHubApiError("GitHub returned an invalid check run list.")
-        return [run for run in response["check_runs"] if isinstance(run, dict)]
+        """List check runs recorded on a commit, following pagination."""
+        runs: list[dict[str, Any]] = []
+        page = 1
+        base = f"{self._repo_path(repository)}/commits/{quote(head_sha, safe='')}/check-runs"
+        while True:
+            response = self._request("GET", f"{base}?per_page=100&page={page}")
+            if not isinstance(response, dict) or not isinstance(response.get("check_runs"), list):
+                raise GitHubApiError("GitHub returned an invalid check run list.")
+            page_runs = [run for run in response["check_runs"] if isinstance(run, dict)]
+            runs.extend(page_runs)
+            if len(response["check_runs"]) < 100:
+                return runs
+            total_count = response.get("total_count")
+            if isinstance(total_count, int) and len(runs) >= total_count:
+                return runs
+            page += 1
 
     def list_pull_request_commits(self, repository: str, number: int) -> list[dict[str, Any]]:
         """List commits belonging to a pull request, following pagination."""
