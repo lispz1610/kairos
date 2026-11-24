@@ -56,6 +56,41 @@ def test_coleta_de_marcadores_e_titulos_tem_uma_unica_implementacao() -> None:
         assert "def extract_markers(" not in text, f"{source.name} duplica a coleta"
 
 
+def test_parsers_e_limiares_tem_uma_unica_implementacao() -> None:
+    """Issue #106: parsers e limiares vivem no módulo compartilhado."""
+    shared = _source(SHARED_SOURCE)
+    collector = _source(REPO_ROOT / "scripts" / "collect_quality_metrics.py")
+    gate = _source(REPO_ROOT / "verify_quality.sh")
+    parsers = (
+        "parse_ruff",
+        "parse_mypy",
+        "parse_radon_cc",
+        "parse_radon_mi",
+        "parse_radon_raw",
+        "parse_coverage",
+        "parse_import_linter",
+        "parse_bandit",
+        "parse_pip_audit",
+        "parse_vulture",
+        "parse_mutmut",
+    )
+    for name in parsers:
+        assert f"def {name}(" in shared, f"{name} não está no módulo compartilhado"
+        assert f"def {name}(" not in collector, f"{name} duplicado no coletor"
+
+    for helper in (
+        "build_structural_inventory",
+        "check_quality_thresholds",
+        "format_quality_summary",
+    ):
+        assert f"def {helper}(" in shared
+        assert f"qc.{helper}" in collector
+
+    assert "awk" not in gate
+    assert "max_complexity" not in gate
+    assert "collect_quality_metrics.py" in gate and "--check" in gate
+
+
 def test_validador_docs_as_code_reutiliza_leitura_agrupamento_e_caminhos() -> None:
     """O terceiro CLI consome os mesmos utilitários de documento e árvore."""
     text = _source(CLI_SOURCES[2])
