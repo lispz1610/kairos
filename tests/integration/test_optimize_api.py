@@ -118,8 +118,13 @@ def test_optimize_omitted_and_driving_modal_have_same_25_kmh_displacement() -> N
 
     assert default_response.status_code == 200
     assert driving_response.status_code == 200
-    assert default_response.json() == driving_response.json()
-    assert default_response.json()["stops"][0]["transit_duration_minutes"] == 267
+    default_displacement = [
+        stop["transit_duration_minutes"] for stop in default_response.json()["stops"]
+    ]
+    driving_displacement = [
+        stop["transit_duration_minutes"] for stop in driving_response.json()["stops"]
+    ]
+    assert default_displacement == driving_displacement == [267]
 
 
 @pytest.mark.requirement("RF14")
@@ -133,10 +138,10 @@ def test_optimize_accepts_walking_urban_modal() -> None:
 
 
 @pytest.mark.requirement("RF14")
-@pytest.mark.parametrize("interurban_mode", ["flying", "transit"])
-def test_optimize_rejects_interurban_modal(interurban_mode: str) -> None:
+@pytest.mark.parametrize("non_urban_mode", ["flying", "transit"])
+def test_optimize_rejects_flying_and_transit(non_urban_mode: str) -> None:
     """Verifica que flying e transit são recusados, sem coerção para driving."""
     response = client.post(
-        "/api/trip/optimize", json={**_RF14_PAYLOAD, "urban_mode": interurban_mode}
+        "/api/trip/optimize", json={**_RF14_PAYLOAD, "urban_mode": non_urban_mode}
     )
     assert response.status_code == 422

@@ -148,7 +148,7 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
   1. ``TripDay.urban_mode`` aceita `walking` e `driving`; quando omitido, o Dia de Viagem fica em `driving`, inclusive em backup JSON escrito antes da existência do campo.
   2. `flying` e `transit` pertencem à Conexão Interurbana e são recusados no Dia de Viagem e no pedido de otimização, sem conversão para `driving`.
   3. O ``POST /api/trip/optimize`` aceita ``urban_mode`` opcional; omiti-lo equivale a informar `driving`.
-  4. Sem ``urban_mode`` ou com ``urban_mode: driving``, o Deslocamento do Roteiro permanece estimado a 25 km/h; ambos os pedidos produzem o mesmo Roteiro.
+  4. Sem ``urban_mode`` ou com ``urban_mode: driving``, o Deslocamento do Roteiro permanece estimado a 25 km/h; ambos os pedidos produzem o mesmo Deslocamento.
 
 ---
 

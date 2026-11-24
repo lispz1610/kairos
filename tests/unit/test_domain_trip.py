@@ -221,8 +221,8 @@ def test_trip_day_urban_mode_defaults_to_driving_and_keeps_urban_values() -> Non
 
 
 @pytest.mark.requirement("RF14")
-@pytest.mark.parametrize("interurban_mode", ["flying", "transit"])
-def test_trip_day_rejects_interurban_modal(interurban_mode: str) -> None:
+@pytest.mark.parametrize("non_urban_mode", ["flying", "transit"])
+def test_trip_day_rejects_flying_and_transit(non_urban_mode: str) -> None:
     """Verifica que um Modal de Transporte interurbano não vira Modal Urbano do dia."""
     with pytest.raises(ValidationError):
         TripDay.model_validate(
@@ -233,7 +233,7 @@ def test_trip_day_rejects_interurban_modal(interurban_mode: str) -> None:
                     "name": "Hotel Urbano",
                     "location": {"latitude": -23.55, "longitude": -46.66},
                 },
-                "urban_mode": interurban_mode,
+                "urban_mode": non_urban_mode,
             }
         )
 
