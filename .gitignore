@@ -39,6 +39,7 @@ cache/
 .cache/
 
 # Testing & Quality (ISO 25010 / ISO 29119)
+reports/
 .pytest_cache/
 .coverage
 htmlcov/
