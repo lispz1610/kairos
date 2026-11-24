@@ -164,6 +164,24 @@ def test_gate_passa_com_documentos_e_marcadores_fieis(tmp_path: Path) -> None:
     assert metrics["standards"]["iso_25010"]["confiabilidade"]["mutacao"]["status"] == "not run"
 
 
+def test_gate_falha_com_limiar_de_cobertura_violado(tmp_path: Path) -> None:
+    """O gate usa o coletor como fonte única de limiares e resumo."""
+    root, env = _fixture(tmp_path)
+    pytest_stub = Path(env["PATH"].split(os.pathsep)[0]) / "pytest"
+    pytest_stub.write_text(
+        "#!/usr/bin/env bash\nset -eu\necho 'TOTAL 70%'\n", encoding="utf-8"
+    )
+    pytest_stub.chmod(0o755)
+
+    result = _run_gate(root, env)
+    output = result.stdout + result.stderr
+
+    assert result.returncode != 0, output
+    assert "VIOLATION: cobertura 70.0% abaixo do mínimo 85%" in output
+    assert "==> Consolidated quality summary" in output
+    assert "Quality gate PASSED" not in output
+
+
 def test_gate_falha_com_marcador_de_rf_inexistente(tmp_path: Path) -> None:
     """Um marcador apontando para RF inexistente derruba o gate."""
     root, env = _fixture(tmp_path)
