@@ -680,16 +680,18 @@ function defaultStop(id, name, start, durationMinutes) {
 }
 
 function defaultState() {
+  const firstDay = loadTrip().stages.flatMap((stage) => stage.days)[0];
+  const dayDate = firstDay ? firstDay.date : defaultTrip().stages[0].days[0].date;
   return {
-    day_id: "dia-2026-11-20",
+    day_id: "dia-" + dayDate,
     itinerary: [
-      defaultStop("POI-001", "Mirante da História", "2026-11-20T09:00:00", 45),
-      defaultStop("POI-002", "Café Central", "2026-11-20T09:50:00", 30),
-      defaultStop("POI-003", "Praça da Matriz", "2026-11-20T10:40:00", 30),
+      defaultStop("POI-001", "Mirante da História", dayDate + "T09:00:00", 45),
+      defaultStop("POI-002", "Café Central", dayDate + "T09:50:00", 30),
+      defaultStop("POI-003", "Praça da Matriz", dayDate + "T10:40:00", 30),
     ],
     reserved_future_stops: [],
     availability_window: { start: "08:00", end: "18:00" },
-    current_time: "2026-11-20T09:00:00",
+    current_time: dayDate + "T09:00:00",
     closed_pois: [],
     skipped_pois: [],
     intercity_connection: null,
@@ -818,10 +820,8 @@ function selectUpcoming(state, route) {
 }
 
 function tripDay(trip, state) {
-  const stageId = document.getElementById("stage-selector").value;
-  const stage = trip.stages.find((item) => item.id === stageId);
-  return stage && stage.days.find(
-    (item) => item.date === state.current_time.slice(0, 10)
+  return trip.stages.flatMap((stage) => stage.days).find(
+    (day) => day.date === state.current_time.slice(0, 10)
   );
 }
 
@@ -836,8 +836,37 @@ function futureMealSlots(state) {
   }).map((slot) => slot.window);
 }
 
+function futureReservedStops(state) {
+  const day = tripDay(loadTrip(), state);
+  const slots = day && Array.isArray(day.meal_slots) ? day.meal_slots : [];
+  const reserved = (state.reserved_future_stops || []).filter((stop) =>
+    stop.start.slice(0, 10) === state.current_time.slice(0, 10) &&
+    new Date(stop.start).getTime() + stop.duration_minutes * 60000 >
+      new Date(state.current_time).getTime()
+  );
+  slots.filter((slot) => slot.selected_place &&
+    (slot.window.end_time || slot.window.end) > state.current_time.slice(11, 19)
+  ).forEach((slot) => {
+    const start = slot.window.start_time || slot.window.start;
+    const end = slot.window.end_time || slot.window.end;
+    const minutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+    const stop = {
+      poi: slot.selected_place,
+      start: day.date + "T" + start,
+      duration_minutes: minutes(end) - minutes(start),
+    };
+    if (!reserved.some((item) => item.poi.id === stop.poi.id && item.start === stop.start)) {
+      reserved.push(stop);
+    }
+  });
+  return reserved;
+}
+
 async function replan(events, afterReplanned) {
   const state = loadState();
+  const trip = loadTrip();
+  const day = tripDay(trip, state);
+  state.reserved_future_stops = futureReservedStops(state);
   const body = {
     day_id: state.day_id,
     itinerary: { stops: state.itinerary },
@@ -864,8 +893,6 @@ async function replan(events, afterReplanned) {
   const data = await response.json();
   state.itinerary = data.itinerary;
   afterReplanned(state);
-  const trip = loadTrip();
-  const day = tripDay(trip, state);
   if (day) {
     day.itinerary = { stops: data.itinerary };
     saveTrip(trip);

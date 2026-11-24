@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from types import SimpleNamespace
 
 import pytest
@@ -88,6 +90,7 @@ def test_places_search_autocomplete_endpoint() -> None:
 @pytest.mark.requirement("RF05")
 def test_cache_persistence_and_offline_replay(
     isolated_places_adapter: CachedPlacesAdapter,
+    monkeypatch,
 ) -> None:
     # Query twice to exercise Cache-Aside
     """Verifica que consultas repetidas são servidas pelo cache e reproduzidas offline."""
@@ -101,10 +104,48 @@ def test_cache_persistence_and_offline_replay(
     data2 = resp2.json()
     assert data1 == data2
 
-    # Verify cache contains the search entry
-    cached = isolated_places_adapter._read_cache("search:fabrique:são paulo")
-    assert cached is not None
-    assert "Fabrique" in cached
+    # A resposta permanece disponível pelo contrato público mesmo sem o fallback.
+    def unavailable_fallback(query: str, city: str | None) -> list[POI]:
+        raise AssertionError("cache miss inesperado")
+
+    monkeypatch.setattr(
+        isolated_places_adapter,
+        "fallback_adapter",
+        SimpleNamespace(search_places=unavailable_fallback),
+    )
+    replay = client.get("/api/places/search?query=Fabrique&city_name=São%20Paulo")
+    assert replay.status_code == 200
+    assert replay.json() == data1
+
+
+@pytest.mark.requirement("RF05")
+def test_concurrent_places_caches_remain_isolated(tmp_path: Path) -> None:
+    """Consultas simultâneas idênticas preservam os dados de cada banco SQLite."""
+    barrier = Barrier(2)
+
+    def search(name: str) -> str:
+        poi = POI(id="same-id", name=name, location=Coordinates(latitude=0, longitude=0))
+        fallback = SimpleNamespace(search_places=lambda query, city: [poi])
+        adapter = CachedPlacesAdapter(
+            api_key="", cache_path=tmp_path / name / "places.db", fallback_adapter=fallback
+        )
+        try:
+            barrier.wait(timeout=5)
+            first = adapter.search_places("same-query", "São Paulo")
+
+            def unavailable_fallback(query: str, city: str | None) -> list[POI]:
+                raise AssertionError("cache miss inesperado")
+
+            adapter.fallback_adapter = SimpleNamespace(search_places=unavailable_fallback)
+            replay = adapter.search_places("same-query", "São Paulo")
+            assert [item.name for item in replay] == [name]
+            return first[0].name
+        finally:
+            adapter._conn.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(search, ["primeiro", "segundo"]))
+    assert results == ["primeiro", "segundo"]
 
 
 @pytest.mark.requirement("RF04")

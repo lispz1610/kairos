@@ -54,7 +54,9 @@ class ReplanResult(BaseModel):
     Contém o Roteiro replanejado e metadados de impacto.
     """
 
-    itinerary: Itinerary = Field(description="Roteiro replanejado do Dia de Viagem.")
+    itinerary: Itinerary = Field(
+        description="Roteiro replanejado do Dia de Viagem."
+    )
     preserved_pois: list[str] = Field(
         description=(
             "Identificação dos POIs preservados: histórico do Roteiro até o "
@@ -62,7 +64,9 @@ class ReplanResult(BaseModel):
         )
     )
     removed_pois: list[str] = Field(
-        description=("Identificação dos POIs removidos ou substituídos na janela restante.")
+        description=(
+            "Identificação dos POIs removidos ou substituídos na janela restante."
+        )
     )
     intercity_risk_alert: InterCityRiskAlert | None = Field(
         description=(
@@ -133,9 +137,15 @@ class ReplanningService:
         )
         prefix_ids = {stop.poi.id for stop in prefix}
 
-        replan_start = ReplanningService._replan_start(prefix, current_time, availability_window)
-        window_end = ReplanningService._window_end(availability_window, intercity_connection)
-        alert = ReplanningService._intercity_alert(intercity_connection, window_end, replan_start)
+        replan_start = ReplanningService._replan_start(
+            prefix, current_time, availability_window
+        )
+        window_end = ReplanningService._window_end(
+            availability_window, intercity_connection
+        )
+        alert = ReplanningService._intercity_alert(
+            intercity_connection, window_end, replan_start
+        )
 
         solver_route = (
             ReplanningService._solve_remaining_window(
@@ -161,7 +171,9 @@ class ReplanningService:
         # ordenado por horário de início.
         final_stops = sorted(prefix + solver_route.stops, key=lambda stop: stop.start)
         final_ids = {stop.poi.id for stop in final_stops}
-        removed_pois = [stop.poi.id for stop in itinerary.stops if stop.poi.id not in final_ids]
+        removed_pois = [
+            stop.poi.id for stop in itinerary.stops if stop.poi.id not in final_ids
+        ]
         return ReplanResult(
             itinerary=Itinerary(stops=final_stops, start_location=coordinates),
             preserved_pois=[stop.poi.id for stop in prefix],
@@ -177,11 +189,17 @@ class ReplanningService:
         duration_adjustments: Mapping[str, int] | None,
     ) -> list[StopUnion]:
         """Construir lista cronológica de paradas preservadas e futuras reservadas."""
-        preserved: list[StopUnion] = ReplanningService._preserved_stops(itinerary, current_time)
+        preserved: list[StopUnion] = ReplanningService._preserved_stops(
+            itinerary, current_time
+        )
         reserved: list[StopUnion] = list(reserved_future_stops)
         if duration_adjustments:
-            preserved = ReplanningService._with_adjusted_durations(preserved, duration_adjustments)
-            reserved = ReplanningService._with_adjusted_durations(reserved, duration_adjustments)
+            preserved = ReplanningService._with_adjusted_durations(
+                preserved, duration_adjustments
+            )
+            reserved = ReplanningService._with_adjusted_durations(
+                reserved, duration_adjustments
+            )
         return sorted(preserved + reserved, key=lambda stop: stop.start)
 
     @staticmethod
@@ -325,7 +343,9 @@ class ReplanningService:
                 if stop_end > replan_start:
                     replan_start = stop_end
         if replan_start.time() < availability_window.start:
-            replan_start = datetime.combine(replan_start.date(), availability_window.start)
+            replan_start = datetime.combine(
+                replan_start.date(), availability_window.start
+            )
         return replan_start
 
     @staticmethod
@@ -377,7 +397,9 @@ class ReplanningService:
         Verdade quando não há Alerta de Risco e o quadro replanejado é viável
         dentro da Janela de Disponibilidade.
         """
-        window_end = ReplanningService._window_end(availability_window, intercity_connection)
+        window_end = ReplanningService._window_end(
+            availability_window, intercity_connection
+        )
         return (
             alert is None
             and availability_window.start <= window_end

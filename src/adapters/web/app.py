@@ -130,7 +130,8 @@ class ContingencyEventRequest(BaseModel):
 
     type: Literal["delay", "closure", "skip", "duration_adjustment"] = Field(
         description=(
-            "Tipo do Evento de Contingência: 'delay', 'closure', 'skip' ou 'duration_adjustment'."
+            "Tipo do Evento de Contingência: 'delay', 'closure', 'skip' "
+            "ou 'duration_adjustment'."
         ),
     )
     poi_id: str | None = Field(
@@ -149,23 +150,33 @@ class ContingencyEventRequest(BaseModel):
     new_duration_minutes: int | None = Field(
         default=None,
         ge=0,
-        description=("Novo Tempo de Permanência do POI, em minutos ('duration_adjustment')."),
+        description=(
+            "Novo Tempo de Permanência do POI, em minutos "
+            "('duration_adjustment')."
+        ),
     )
 
     @model_validator(mode="after")
     def _fields_required_by_type(self) -> ContingencyEventRequest:
         if self.type == "delay":
             if self.delay_minutes is None:
-                raise ValueError("delay_minutes é obrigatório para o Evento 'delay'.")
+                raise ValueError(
+                    "delay_minutes é obrigatório para o Evento 'delay'."
+                )
         elif self.type == "duration_adjustment":
             if self.poi_id is None:
-                raise ValueError("poi_id é obrigatório para o Evento 'duration_adjustment'.")
+                raise ValueError(
+                    "poi_id é obrigatório para o Evento 'duration_adjustment'."
+                )
             if self.new_duration_minutes is None:
                 raise ValueError(
-                    "new_duration_minutes é obrigatório para o Evento 'duration_adjustment'."
+                    "new_duration_minutes é obrigatório para o Evento "
+                    "'duration_adjustment'."
                 )
         elif self.poi_id is None:
-            raise ValueError("poi_id é obrigatório para os Eventos 'closure' e 'skip'.")
+            raise ValueError(
+                "poi_id é obrigatório para os Eventos 'closure' e 'skip'."
+            )
         return self
 
 
@@ -180,7 +191,9 @@ class ReplanRequest(BaseModel):
     availability_window: TimeWindow = Field(
         description="Janela de Disponibilidade do Dia de Viagem."
     )
-    current_coordinate: Coordinates = Field(description="Coordenada geográfica atual do visitante.")
+    current_coordinate: Coordinates = Field(
+        description="Coordenada geográfica atual do visitante."
+    )
     events: list[ContingencyEventRequest] = Field(
         default_factory=list,
         description="Eventos de Contingência aplicados ao Roteiro do Dia de Viagem.",
@@ -266,7 +279,9 @@ def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
     """Otimiza a sequência de visitas para um dia de viagem via algoritmo OPTW."""
     candidates = req.candidates
     if req.curation_lists:
-        candidates = curation_service.apply_curation_boost(candidates, req.curation_lists)
+        candidates = curation_service.apply_curation_boost(
+            candidates, req.curation_lists
+        )
     return solver.solve(
         start_location=req.start_location,
         end_location=req.end_location,
@@ -282,7 +297,9 @@ def recommend_dining(req: DiningRecommendRequest) -> List[POI]:
     """Recomenda estabelecimentos gastronômicos com base na proximidade e curadoria."""
     candidates = req.candidates
     if req.curation_lists:
-        candidates = curation_service.apply_curation_boost(candidates, req.curation_lists)
+        candidates = curation_service.apply_curation_boost(
+            candidates, req.curation_lists
+        )
     return dining_service.recommend_meal_places(
         reference_location=req.reference_location,
         candidates=candidates,
@@ -297,11 +314,17 @@ def get_contextual_meal_slots(req: ContextualDiningRequest) -> List[MealSlot]:
     cafes = req.cafe_candidates
     wines = req.wine_candidates
     if req.curation_lists:
-        restaurants = curation_service.apply_curation_boost(restaurants, req.curation_lists)
+        restaurants = curation_service.apply_curation_boost(
+            restaurants, req.curation_lists
+        )
         if cafes:
-            cafes = curation_service.apply_curation_boost(cafes, req.curation_lists)
+            cafes = curation_service.apply_curation_boost(
+                cafes, req.curation_lists
+            )
         if wines:
-            wines = curation_service.apply_curation_boost(wines, req.curation_lists)
+            wines = curation_service.apply_curation_boost(
+                wines, req.curation_lists
+            )
     return dining_service.create_contextual_meal_slots(
         departure_location=req.departure_location,
         return_location=req.return_location,

@@ -22,7 +22,9 @@ class MarkdownExportService:
         """Inicializar o exportador com o serviço de Estimativa de Gastos usado no relatório."""
         self.dining_service = DiningService()
 
-    def export_trip_markdown(self, trip: Trip, budget: Optional[BudgetSummary] = None) -> str:
+    def export_trip_markdown(
+        self, trip: Trip, budget: Optional[BudgetSummary] = None
+    ) -> str:
         """Exporta os dados estruturados da viagem em formato GitHub Flavored Markdown."""
         for stage in trip.stages:
             stage._relink_accommodations()

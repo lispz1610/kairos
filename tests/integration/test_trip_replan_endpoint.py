@@ -41,7 +41,9 @@ def _stop(poi, start, duration_minutes=30):
     return RouteStop(poi=poi, start=start, duration_minutes=duration_minutes)
 
 
-def _payload(day, current_time, availability_window, events, **overrides) -> dict[str, Any]:
+def _payload(
+    day, current_time, availability_window, events, **overrides
+) -> dict[str, Any]:
     """Montar payload da requisição de replanejamento.
 
     Corpo da requisição de ``POST /api/trip/replan`` — ``events`` no
@@ -188,7 +190,9 @@ def test_duration_adjustment_event_replan_applies_the_new_duration() -> None:
             _stop(poi_b, datetime(2026, 11, 20, 10, 0), 30),
         ]
     )
-    events = [{"type": "duration_adjustment", "poi_id": "POI-A", "new_duration_minutes": 60}]
+    events = [
+        {"type": "duration_adjustment", "poi_id": "POI-A", "new_duration_minutes": 60}
+    ]
 
     response = client.post(
         "/api/trip/replan",

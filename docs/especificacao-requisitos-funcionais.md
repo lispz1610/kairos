@@ -143,7 +143,7 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
   2. ``ReplanRequest`` aceita ``reserved_future_stops: list[RouteStop]`` — Paradas futuras já reservadas que devem permanecer no Roteiro replanejado.
   3. Interface (timeline do Dia de Viagem): controles ``+ Atraso (min)`` (envia ``[{"type": "delay", "delay_minutes": ...}]`` e adianta ``current_time``), ``Fechou`` (envia ``[{"type": "closure", "poi_id": ...}]``), ``Pular parada`` (envia ``[{"type": "skip", "poi_id": ...}]``) e ``Ajustar permanência`` (envia ``[{"type": "duration_adjustment", "poi_id": ..., "new_duration_minutes": ...}]``).
   4. O endpoint constrói os Eventos de Domínio via ``_to_domain_event`` (``DelayEvent`` com ``current_time``/``coordinates`` do pedido) e acumula ``duration_adjustments`` a partir dos ``DurationAdjustmentEvent``, repassando ``reserved_future_stops`` e ``duration_adjustments`` a ``ReplanningService.replan``.
-  5. A interface envia ``reserved_future_stops`` do estado da timeline e ``reserved_meal_slots`` dos Slots de Refeição futuros do Dia de Viagem salvo. O Roteiro replanejado é persistido no Dia de Viagem para a exportação.
+  5. A interface associa a timeline ao Dia de Viagem pela data, alimenta ``reserved_future_stops`` com as paradas já reservadas e os estabelecimentos selecionados nos Slots de Refeição, e envia ``reserved_meal_slots`` dos Slots futuros desse dia. O Roteiro replanejado é persistido no Dia de Viagem original para a exportação, mesmo quando o Evento de Contingência altera a data do relógio da timeline.
 
 ---
 
