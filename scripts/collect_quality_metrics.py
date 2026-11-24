@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Coletor consolidado de métricas ISO/IEC 25010 e ISO/IEC 5055 do Kairos.
 
-O coletor não reinventa medições: ele consome os parsers e o inventário AST de
-``scripts/quality_cli_common.py`` sobre as saídas produzidas pelo gate
-``verify_quality.sh`` (ruff, mypy, radon, pytest, import-linter, bandit,
+O coletor não reinventa medições: ele lê os arquivos de saída produzidos pelo
+gate ``verify_quality.sh`` (ruff, mypy, radon, pytest, import-linter, bandit,
 pip-audit, vulture e, no modo ``--full``, mutmut), converte o que é observável
 em um relatório JSON estruturado e o traduz para Markdown legível.
 
@@ -12,17 +11,13 @@ correspondente recebe ``status: "unavailable"``. No modo rápido o mutation
 score é explicitamente registado como ``"not run"``. O relatório não define
 limiar mínimo para mutação; a meta numérica fica para revisão posterior da
 linha de base, conforme a issue #65.
-
-A opção ``--check`` imprime o resumo consolidado e aplica os limiares
-bloqueantes em ``quality_cli_common.check_quality_thresholds``, devolvendo 1 em
-caso de violação. É essa interface que ``verify_quality.sh`` consome, sem
-parsers próprios em shell.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -55,21 +50,32 @@ REPORT_FILES: tuple[ReportFile, ...] = (
     ReportFile("vulture", "vulture.txt"),
 )
 
-# Aliases públicos preservados para consumidores que importavam as funções do
-# coletor antes da consolidação na issue #106. As implementações são únicas no
-# módulo compartilhado.
-COMPLEXITY_LIMIT = qc.MAX_COMPLEXITY
-parse_ruff = qc.parse_ruff
-parse_mypy = qc.parse_mypy
-parse_radon_cc = qc.parse_radon_cc
-parse_radon_mi = qc.parse_radon_mi
-parse_radon_raw = qc.parse_radon_raw
-parse_coverage = qc.parse_coverage
-parse_import_linter = qc.parse_import_linter
-parse_bandit = qc.parse_bandit
-parse_pip_audit = qc.parse_pip_audit
-parse_vulture = qc.parse_vulture
-parse_mutmut = qc.parse_mutmut
+RUFF_ISSUE_RE = re.compile(r"\.py:\d+:\d+:", re.MULTILINE)
+RUFF_TOTAL_RE = re.compile(r"Found\s+(\d+)\s+error", re.IGNORECASE)
+MYPY_ERROR_RE = re.compile(r"\berror:\b")
+MYPY_TOTAL_RE = re.compile(r"Found\s+(\d+)\s+error", re.IGNORECASE)
+CC_SCORE_RE = re.compile(r"\((\d+)\)")
+MI_SCORE_RE = re.compile(r"\(\s*(\d+(?:\.\d+)?)\s*\)\s*$", re.MULTILINE)
+RAW_ITEM_RE = re.compile(
+    r"^\s*(LOC|LLOC|SLOC|Comments|Single comments|Multi|Blank):\s*(\d+)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+COVERAGE_RE = re.compile(r"TOTAL\s+[^\n]*?(\d+(?:\.\d+)?)%\s*$", re.MULTILINE)
+BANDIT_ISSUE_RE = re.compile(r"^>>\s*Issue:", re.MULTILINE)
+IMPORT_LINTER_BROKEN_RE = re.compile(r"is broken|Broken contract", re.IGNORECASE)
+VULTURE_RE = re.compile(r"\bunused\b", re.IGNORECASE)
+VULNERABILITY_ID_RE = re.compile(r"CVE-\d{4}-\d+|GHSA-[a-z0-9-]+", re.IGNORECASE)
+
+RAW_KEYS: tuple[str, ...] = (
+    "loc",
+    "lloc",
+    "sloc",
+    "comments",
+    "single_comments",
+    "multi",
+    "blank",
+)
+COMPLEXITY_LIMIT = 9
 
 
 def _read_report(reports_dir: Path, filename: str) -> str:
@@ -86,102 +92,198 @@ def _measurement(value: object | None) -> dict[str, object]:
     return {"value": value, "status": status}
 
 
-def _syntactic_complexity(inventory: dict[str, dict[str, object]]) -> dict[str, object]:
-    """Montar a métrica de complexidade sintática a partir do inventário AST."""
-    total = inventory.get("total", {})
-    maximum = total.get("complexity_max") if isinstance(total, dict) else None
-    average = total.get("complexity_average") if isinstance(total, dict) else None
-    by_layer = {
-        name: data["complexity_max"]
-        for name, data in inventory.items()
-        if name != "total" and isinstance(data, dict) and "complexity_max" in data
-    }
+def _count_matching_lines(pattern: re.Pattern[str], text: str) -> int:
+    """Contar linhas que casam com um padrão, sem duplicar ocorrências."""
+    return sum(1 for line in text.splitlines() if pattern.search(line))
+
+
+def parse_ruff(text: str, available: bool = True) -> int | None:
+    """Extrair o número de violações do ruff, se a saída foi produzida."""
+    if not available:
+        return None
+    if not text.strip():
+        return 0
+    total = RUFF_TOTAL_RE.search(text)
+    return int(total.group(1)) if total else _count_matching_lines(RUFF_ISSUE_RE, text)
+
+
+def parse_mypy(text: str, available: bool = True) -> int | None:
+    """Extrair o número de erros de tipagem do mypy."""
+    if not available:
+        return None
+    if not text.strip() or "Success:" in text:
+        return 0
+    total = MYPY_TOTAL_RE.search(text)
+    return int(total.group(1)) if total else _count_matching_lines(MYPY_ERROR_RE, text)
+
+
+def parse_radon_cc(text: str) -> int | None:
+    """Maior complexidade ciclomática numérica relatada pelo radon cc."""
+    scores = [int(score) for score in CC_SCORE_RE.findall(text)]
+    return max(scores) if scores else None
+
+
+def parse_radon_mi(text: str) -> dict[str, object]:
+    """Menor e médio índice de manutenibilidade relatados pelo radon mi."""
+    values = [float(score) for score in MI_SCORE_RE.findall(text)]
+    if not values:
+        return _measurement(None)
+    average = round(sum(values) / len(values), 2)
+    return {"value": {"min": min(values), "average": average}, "status": "measured"}
+
+
+def parse_radon_raw(text: str) -> dict[str, object]:
+    """Somar os volumes brutos por categoria relatados pelo radon raw."""
+    # O radon repete todos os valores no bloco `** Total **`; somá-lo também
+    # duplicaria cada métrica. Considera-se apenas a seção por arquivo.
+    per_file = text.split("** Total **", 1)[0]
+    totals: dict[str, int] = {}
+    for label, raw_value in RAW_ITEM_RE.findall(per_file):
+        key = label.casefold().replace(" ", "_")
+        totals[key] = totals.get(key, 0) + int(raw_value)
+    value = {key: totals.get(key) for key in RAW_KEYS}
+    return {"value": value, "status": "measured" if totals else "unavailable"}
+
+
+def parse_coverage(text: str) -> float | None:
+    """Última porcentagem TOTAL reportada pela suíte pytest-cov."""
+    matches = COVERAGE_RE.findall(text)
+    return float(matches[-1]) if matches else None
+
+
+def parse_import_linter(text: str, available: bool = True) -> int | None:
+    """Contar contratos arquiteturais rompidos pelo import-linter."""
+    if not available:
+        return None
+    if not text.strip():
+        return 0
+    return _count_matching_lines(IMPORT_LINTER_BROKEN_RE, text)
+
+
+def parse_bandit(text: str, available: bool = True) -> int | None:
+    """Contar achados de segurança do bandit."""
+    if not available:
+        return None
+    if not text.strip():
+        return 0
+    return _count_matching_lines(BANDIT_ISSUE_RE, text)
+
+
+def parse_pip_audit(text: str, available: bool = True) -> dict[str, object]:
+    """Resumir a auditoria de dependências sem inventar contagens ausentes."""
+    if not available or not text.strip():
+        return _measurement(None)
+    if "No known vulnerabilities found" in text:
+        return {"value": 0, "status": "measured", "policy": "warning"}
+    identifiers = sorted(set(VULNERABILITY_ID_RE.findall(text)))
+    if not identifiers:
+        return {"value": None, "status": "review", "policy": "warning"}
     return {
-        "value": {
-            "maxima": maximum,
-            "media": average,
-            "por_camada": by_layer,
-        },
-        "status": "measured" if maximum is not None else "unavailable",
-        "limite": qc.MAX_COMPLEXITY,
+        "value": len(identifiers),
+        "status": "measured",
+        "policy": "warning",
+        "identifiers": identifiers,
     }
 
 
-def collect(
-    reports_dir: Path,
-    full_mode: bool,
-    generated_at: str,
-    root: Path | None = None,
-) -> dict[str, object]:
-    """Agregar todas as saídas e o inventário AST em um único documento estruturado."""
+def parse_vulture(text: str, available: bool = True) -> int | None:
+    """Contar itens de código potencialmente morto apontados pelo vulture."""
+    if not available:
+        return None
+    if not text.strip():
+        return 0
+    return _count_matching_lines(VULTURE_RE, text)
+
+
+def parse_mutmut(path: Path, full_mode: bool) -> dict[str, object]:
+    """Calcular o mutation score somente quando o modo completo foi executado."""
+    if not full_mode:
+        return {"status": "not run", "score_percent": None}
+    if not path.is_file():
+        return {"status": "unavailable", "score_percent": None}
+    try:
+        stats = json.loads(qc.read_utf8(path))
+    except (OSError, ValueError):
+        return {"status": "unavailable", "score_percent": None}
+    if not isinstance(stats, dict):
+        return {"status": "unavailable", "score_percent": None}
+
+    def number(key: str) -> int:
+        """Ler um contador inteiro do JSON do mutmut com valor ausente igual a zero."""
+        try:
+            return int(stats.get(key, 0))
+        except (TypeError, ValueError):
+            return 0
+
+    killed = number("killed")
+    survived = number("survived")
+    timeout = number("timeout")
+    tested = number("total") - number("skipped")
+    score = None if tested <= 0 else round((killed + timeout) / tested * 100, 1)
+    return {
+        "status": "measured" if score is not None else "unavailable",
+        "score_percent": score,
+        "killed": killed,
+        "survived": survived,
+        "timeout": timeout,
+        "tested": tested,
+    }
+
+
+def collect(reports_dir: Path, full_mode: bool, generated_at: str) -> dict[str, object]:
+    """Agregar todas as saídas em um único documento estruturado."""
     texts = {report.key: _read_report(reports_dir, report.filename) for report in REPORT_FILES}
     available = {
         report.key: (reports_dir / report.filename).is_file() for report in REPORT_FILES
     }
 
-    coverage = qc.parse_coverage(texts["pytest"]) if available["pytest"] else None
-    radon_complexity = qc.parse_radon_cc(texts["radon_cc"]) if available["radon_cc"] else None
-    mutation = qc.parse_mutmut(reports_dir / "mutmut.json", full_mode)
-    pip_audit = qc.parse_pip_audit(texts["pip_audit"], available["pip_audit"])
-
-    inventory = qc.build_structural_inventory(root) if root is not None else {}
-    inventory_measurement = _measurement(inventory) if inventory else _measurement(None)
-    total_inventory = inventory.get("total", {})
-    docstrings = (
-        total_inventory.get("docstring_coverage_percent")
-        if isinstance(total_inventory, dict)
-        else None
-    )
-    syntactic = _syntactic_complexity(inventory)
-    maintainability_index = qc.parse_radon_mi(texts["radon_mi"])
-    raw_volume = qc.parse_radon_raw(texts["radon_raw"])
-    ruff_violations = _measurement(qc.parse_ruff(texts["ruff"], available["ruff"]))
-    architecture_violations = _measurement(
-        qc.parse_import_linter(texts["import_linter"], available["import_linter"])
-    )
-    dead_code = _measurement(qc.parse_vulture(texts["vulture"], available["vulture"]))
-    typing_errors = _measurement(qc.parse_mypy(texts["mypy"], available["mypy"]))
-    bandit_findings = _measurement(qc.parse_bandit(texts["bandit"], available["bandit"]))
+    coverage = parse_coverage(texts["pytest"]) if available["pytest"] else None
+    complexity = parse_radon_cc(texts["radon_cc"]) if available["radon_cc"] else None
+    mutation = parse_mutmut(reports_dir / "mutmut.json", full_mode)
+    pip_audit = parse_pip_audit(texts["pip_audit"], available["pip_audit"])
 
     iso_25010: dict[str, dict[str, object]] = {
         "adequacao_funcional": {
             "cobertura_percentual": _measurement(coverage),
         },
         "confiabilidade": {
-            "erros_de_tipagem": typing_errors,
+            "erros_de_tipagem": _measurement(parse_mypy(texts["mypy"], available["mypy"])),
             "mutacao": mutation,
         },
         "seguranca": {
-            "achados_bandit": bandit_findings,
+            "achados_bandit": _measurement(parse_bandit(texts["bandit"], available["bandit"])),
             "vulnerabilidades_de_dependencias": pip_audit,
         },
         "manutencionabilidade": {
-            "violacoes_contrato_arquitetural": architecture_violations,
-            "violacoes_ruff": ruff_violations,
-            "itens_de_codigo_morto": dead_code,
-            "indice_de_manutencionabilidade": maintainability_index,
-            "volume_bruto": raw_volume,
-            "inventario_estrutural": inventory_measurement,
-            "cobertura_de_docstrings": _measurement(docstrings),
+            "violacoes_contrato_arquitetural": _measurement(
+                parse_import_linter(texts["import_linter"], available["import_linter"])
+            ),
+            "violacoes_ruff": _measurement(parse_ruff(texts["ruff"], available["ruff"])),
+            "itens_de_codigo_morto": _measurement(
+                parse_vulture(texts["vulture"], available["vulture"])
+            ),
+            "indice_de_manutencionabilidade": parse_radon_mi(texts["radon_mi"]),
+            "volume_bruto": parse_radon_raw(texts["radon_raw"]),
         },
     }
 
     iso_5055: dict[str, object] = {
         "cobertura_percentual": _measurement(coverage),
         "complexidade_ciclomatica": {
-            "maxima": _measurement(radon_complexity),
+            "maxima": _measurement(complexity),
             "limite": COMPLEXITY_LIMIT,
         },
-        "complexidade_sintatica": syntactic,
-        "indice_de_manutencionabilidade": maintainability_index,
-        "volume_bruto": raw_volume,
+        "indice_de_manutencionabilidade": parse_radon_mi(texts["radon_mi"]),
+        "volume_bruto": parse_radon_raw(texts["radon_raw"]),
         "pontuacao_de_mutacao": mutation,
-        "violacoes_ruff": ruff_violations,
-        "violacoes_contrato_arquitetural": architecture_violations,
-        "achados_bandit": bandit_findings,
-        "itens_de_codigo_morto": dead_code,
-        "inventario_estrutural": inventory_measurement,
-        "cobertura_de_docstrings": _measurement(docstrings),
+        "violacoes_ruff": _measurement(parse_ruff(texts["ruff"], available["ruff"])),
+        "violacoes_contrato_arquitetural": _measurement(
+            parse_import_linter(texts["import_linter"], available["import_linter"])
+        ),
+        "achados_bandit": _measurement(parse_bandit(texts["bandit"], available["bandit"])),
+        "itens_de_codigo_morto": _measurement(
+            parse_vulture(texts["vulture"], available["vulture"])
+        ),
     }
 
     tools = {
@@ -210,17 +312,14 @@ def _format_metric(metric: object) -> str:
     if not isinstance(metric, dict):
         return "não medido" if metric is None else str(metric)
     status = metric.get("status")
-    status_labels = {"not run": "não executado", "unavailable": "não disponível"}
-    if status in status_labels:
-        return status_labels[status]
-    if "value" not in metric:
-        return json.dumps(metric, ensure_ascii=False, sort_keys=True)
-    value = metric["value"]
-    if value is None:
-        return "não medido"
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    return str(value)
+    if status == "not run":
+        return "não executado"
+    if status == "unavailable":
+        return "não disponível"
+    if "value" in metric:
+        value = metric["value"]
+        return "não medido" if value is None else str(value)
+    return json.dumps(metric, ensure_ascii=False, sort_keys=True)
 
 
 def render_markdown(report: dict[str, object]) -> str:
@@ -306,11 +405,6 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="inclui o mutation score produzido pelo modo --full do gate",
     )
-    parser.add_argument(
-        "--check",
-        action="store_true",
-        help="imprime o resumo consolidado e falha se algum limiar for violado",
-    )
     args = parser.parse_args(argv)
 
     tree = qc.resolve_code_tree(args.root)
@@ -322,21 +416,12 @@ def main(argv: list[str] | None = None) -> int:
         args.reports_dir,
         args.full,
         datetime.now(timezone.utc).isoformat(),
-        root=tree.root,
     )
     serialized = json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False)
     _write_output(args.json_output, serialized)
     _write_output(args.markdown_output, render_markdown(report))
     print(f"Relatório JSON: {args.json_output}")
     print(f"Relatório Markdown: {args.markdown_output}")
-
-    if args.check:
-        print(qc.format_quality_summary(report))
-        violations = qc.check_quality_thresholds(report)
-        if violations:
-            for violation in violations:
-                print(f"  VIOLATION: {violation}", file=sys.stderr)
-            return 1
     return 0
 
 
