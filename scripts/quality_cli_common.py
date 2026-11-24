@@ -11,6 +11,7 @@ tempo de execução.
 from __future__ import annotations
 
 import ast
+import json
 import re
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -408,5 +409,159 @@ def build_structural_inventory(
         total.add(counts)
     result["total"] = total.as_dict()
     return result
+
+
+RUFF_ISSUE_RE = re.compile(r"\.py:\d+:\d+:", re.MULTILINE)
+RUFF_TOTAL_RE = re.compile(r"Found\s+(\d+)\s+error", re.IGNORECASE)
+MYPY_ERROR_RE = re.compile(r"\berror:\b")
+MYPY_TOTAL_RE = re.compile(r"Found\s+(\d+)\s+error", re.IGNORECASE)
+CC_SCORE_RE = re.compile(r"\((\d+)\)")
+MI_SCORE_RE = re.compile(r"\(\s*(\d+(?:\.\d+)?)\s*\)\s*$", re.MULTILINE)
+RAW_ITEM_RE = re.compile(
+    r"^\s*(LOC|LLOC|SLOC|Comments|Single comments|Multi|Blank):\s*(\d+)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+COVERAGE_RE = re.compile(r"TOTAL\s+[^\n]*?(\d+(?:\.\d+)?)%\s*$", re.MULTILINE)
+BANDIT_ISSUE_RE = re.compile(r"^>>\s*Issue:", re.MULTILINE)
+IMPORT_LINTER_BROKEN_RE = re.compile(r"is broken|Broken contract", re.IGNORECASE)
+VULTURE_RE = re.compile(r"\bunused\b", re.IGNORECASE)
+VULNERABILITY_ID_RE = re.compile(r"CVE-\d{4}-\d+|GHSA-[a-z0-9-]+", re.IGNORECASE)
+RAW_KEYS = ("loc", "lloc", "sloc", "comments", "single_comments", "multi", "blank")
+
+
+def _count_matching_lines(pattern: re.Pattern[str], text: str) -> int:
+    """Contar linhas que casam com um padrão, sem duplicar ocorrências."""
+    return sum(1 for line in text.splitlines() if pattern.search(line))
+
+
+def parse_ruff(text: str, available: bool = True) -> int | None:
+    """Extrair o número de violações do ruff, se a saída foi produzida."""
+    if not available:
+        return None
+    if not text.strip():
+        return 0
+    total = RUFF_TOTAL_RE.search(text)
+    return int(total.group(1)) if total else _count_matching_lines(RUFF_ISSUE_RE, text)
+
+
+def parse_mypy(text: str, available: bool = True) -> int | None:
+    """Extrair o número de erros de tipagem do mypy."""
+    if not available:
+        return None
+    if not text.strip() or "Success:" in text:
+        return 0
+    total = MYPY_TOTAL_RE.search(text)
+    return int(total.group(1)) if total else _count_matching_lines(MYPY_ERROR_RE, text)
+
+
+def parse_radon_cc(text: str) -> int | None:
+    """Maior complexidade ciclomática numérica relatada pelo radon cc."""
+    scores = [int(score) for score in CC_SCORE_RE.findall(text)]
+    return max(scores) if scores else None
+
+
+def parse_radon_mi(text: str) -> dict[str, object]:
+    """Menor e médio índice de manutenibilidade relatados pelo radon mi."""
+    values = [float(score) for score in MI_SCORE_RE.findall(text)]
+    if not values:
+        return {"value": None, "status": "unavailable"}
+    average = round(sum(values) / len(values), 2)
+    return {"value": {"min": min(values), "average": average}, "status": "measured"}
+
+
+def parse_radon_raw(text: str) -> dict[str, object]:
+    """Somar os volumes brutos por categoria relatados pelo radon raw."""
+    per_file = text.split("** Total **", 1)[0]
+    totals: dict[str, int] = {}
+    for label, raw_value in RAW_ITEM_RE.findall(per_file):
+        key = label.casefold().replace(" ", "_")
+        totals[key] = totals.get(key, 0) + int(raw_value)
+    value = {key: totals.get(key) for key in RAW_KEYS}
+    return {"value": value, "status": "measured" if totals else "unavailable"}
+
+
+def parse_coverage(text: str) -> float | None:
+    """Última porcentagem TOTAL reportada pela suíte pytest-cov."""
+    matches = COVERAGE_RE.findall(text)
+    return float(matches[-1]) if matches else None
+
+
+def parse_import_linter(text: str, available: bool = True) -> int | None:
+    """Contar contratos arquiteturais rompidos pelo import-linter."""
+    if not available:
+        return None
+    if not text.strip():
+        return 0
+    return _count_matching_lines(IMPORT_LINTER_BROKEN_RE, text)
+
+
+def parse_bandit(text: str, available: bool = True) -> int | None:
+    """Contar achados de segurança do bandit."""
+    if not available:
+        return None
+    if not text.strip():
+        return 0
+    return _count_matching_lines(BANDIT_ISSUE_RE, text)
+
+
+def parse_pip_audit(text: str, available: bool = True) -> dict[str, object]:
+    """Resumir a auditoria de dependências sem inventar contagens ausentes."""
+    if not available or not text.strip():
+        return {"value": None, "status": "unavailable"}
+    if "No known vulnerabilities found" in text:
+        return {"value": 0, "status": "measured", "policy": "warning"}
+    identifiers = sorted(set(VULNERABILITY_ID_RE.findall(text)))
+    if not identifiers:
+        return {"value": None, "status": "review", "policy": "warning"}
+    return {
+        "value": len(identifiers),
+        "status": "measured",
+        "policy": "warning",
+        "identifiers": identifiers,
+    }
+
+
+def parse_vulture(text: str, available: bool = True) -> int | None:
+    """Contar itens de código potencialmente morto apontados pelo vulture."""
+    if not available:
+        return None
+    if not text.strip():
+        return 0
+    return _count_matching_lines(VULTURE_RE, text)
+
+
+def parse_mutmut(path: Path, full_mode: bool) -> dict[str, object]:
+    """Calcular o mutation score somente quando o modo completo foi executado."""
+    if not full_mode:
+        return {"status": "not run", "score_percent": None}
+    if not path.is_file():
+        return {"status": "unavailable", "score_percent": None}
+    try:
+        stats = json.loads(read_utf8(path))
+    except (OSError, ValueError):
+        return {"status": "unavailable", "score_percent": None}
+    if not isinstance(stats, dict):
+        return {"status": "unavailable", "score_percent": None}
+
+    def number(key: str) -> int:
+        """Ler um contador inteiro do JSON do mutmut com valor ausente igual a zero."""
+        try:
+            return int(stats.get(key, 0))
+        except (TypeError, ValueError):
+            return 0
+
+    killed = number("killed")
+    survived = number("survived")
+    timeout = number("timeout")
+    tested = number("total") - number("skipped")
+    score = None if tested <= 0 else round((killed + timeout) / tested * 100, 1)
+    return {
+        "status": "measured" if score is not None else "unavailable",
+        "score_percent": score,
+        "killed": killed,
+        "survived": survived,
+        "timeout": timeout,
+        "tested": tested,
+    }
 
 
