@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import List, Optional
 
 from src.core.domain.models import (
@@ -21,9 +22,7 @@ class MarkdownExportService:
         """Inicializar o exportador com o serviço de Estimativa de Gastos usado no relatório."""
         self.dining_service = DiningService()
 
-    def export_trip_markdown(
-        self, trip: Trip, budget: Optional[BudgetSummary] = None
-    ) -> str:
+    def export_trip_markdown(self, trip: Trip, budget: Optional[BudgetSummary] = None) -> str:
         """Exporta os dados estruturados da viagem em formato GitHub Flavored Markdown."""
         for stage in trip.stages:
             stage._relink_accommodations()
@@ -61,7 +60,7 @@ class MarkdownExportService:
         for conn in trip.connections:
             d_time = conn.effective_departure_time.strftime("%d/%m/%Y")
             lines.append(
-                f"- ✈️ **Conexão Interurbana**: Partida em {d_time} (Modal: `{conn.mode.value}`)"
+                f"- ✈️ **Conexão Interurbana**: Partida em {d_time} (Modal: `{conn.modal}`)"
             )
         return "\n".join(lines)
 
@@ -137,12 +136,19 @@ class MarkdownExportService:
                     if stop.transit_duration_minutes > 0
                     else ""
                 )
+                dur = int(
+                    (
+                        datetime.combine(date.min, stop.departure_time)
+                        - datetime.combine(date.min, stop.arrival_time)
+                    ).total_seconds()
+                    // 60
+                )
             else:
                 # RouteStop has start (datetime) and end (property)
                 arr = stop.start.strftime("%H:%M")
                 dep = stop.end.strftime("%H:%M")
                 transit = ""
-            dur = stop.poi.stay_duration_minutes
+                dur = stop.duration_minutes
             result.append(
                 f"  - `{arr} – {dep}`: **{stop.poi.name}** ({dur} min){transit}{awards_str}"
             )

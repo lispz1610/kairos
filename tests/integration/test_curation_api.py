@@ -1,11 +1,45 @@
 from __future__ import annotations
 
+import importlib
+from collections.abc import Iterator
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
-from src.adapters.web.app import app, places_adapter
+from src.adapters.places.cached_adapter import CachedPlacesAdapter
+from src.adapters.web.app import app
+from src.core.domain.models import POI, Coordinates
+from src.core.services.curation import CurationService
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolated_places_adapter(monkeypatch, tmp_path: Path) -> Iterator[CachedPlacesAdapter]:
+    """Usar um cache SQLite exclusivo por caso de integração."""
+    web_module = importlib.import_module("src.adapters.web.app")
+    adapter = CachedPlacesAdapter(api_key="", cache_path=tmp_path / "places.db")
+    monkeypatch.setattr(web_module, "places_adapter", adapter)
+    monkeypatch.setattr(web_module, "curation_service", CurationService(places_port=adapter))
+    yield adapter
+    adapter._conn.close()
+
+
+@pytest.mark.requirement("RF05")
+@pytest.mark.parametrize("name", ["primeira execução", "segunda execução"])
+def test_places_cache_is_independent_between_cases(monkeypatch, name: str) -> None:
+    """Consultas idênticas em casos distintos recebem seus próprios dados."""
+    web_module = importlib.import_module("src.adapters.web.app")
+    poi = POI(id="isolated", name=name, location=Coordinates(latitude=0, longitude=0))
+    fallback = SimpleNamespace(search_places=lambda query, city: [poi])
+    monkeypatch.setattr(web_module.places_adapter, "fallback_adapter", fallback)
+
+    response = client.get("/api/places/search?query=isolation_probe_104")
+
+    assert response.status_code == 200
+    assert response.json()[0]["name"] == name
 
 
 @pytest.mark.requirement("RF05")
@@ -52,7 +86,9 @@ def test_places_search_autocomplete_endpoint() -> None:
 
 
 @pytest.mark.requirement("RF05")
-def test_cache_persistence_and_offline_replay() -> None:
+def test_cache_persistence_and_offline_replay(
+    isolated_places_adapter: CachedPlacesAdapter,
+) -> None:
     # Query twice to exercise Cache-Aside
     """Verifica que consultas repetidas são servidas pelo cache e reproduzidas offline."""
     resp1 = client.get("/api/places/search?query=Fabrique&city_name=São%20Paulo")
@@ -66,10 +102,9 @@ def test_cache_persistence_and_offline_replay() -> None:
     assert data1 == data2
 
     # Verify cache contains the search entry
-    if hasattr(places_adapter, "_read_cache"):
-        cached = places_adapter._read_cache("search:fabrique:são paulo")
-        assert cached is not None
-        assert "Fabrique" in cached
+    cached = isolated_places_adapter._read_cache("search:fabrique:são paulo")
+    assert cached is not None
+    assert "Fabrique" in cached
 
 
 @pytest.mark.requirement("RF04")

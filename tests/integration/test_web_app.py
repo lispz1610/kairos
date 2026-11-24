@@ -185,10 +185,13 @@ def test_backup_restore_controls_declare_picker_and_change_trigger() -> None:
     assert file_input_tag is not None
     assert "hidden" in file_input_tag.group()
     assert file_input["accept"] == "application/json,.json"
-    assert re.search(
-        r'<button[^>]*id="restore-backup-json"[^>]*>\s*Restaurar Backup JSON\s*</button>',
-        html,
-    ) is not None
+    assert (
+        re.search(
+            r'<button[^>]*id="restore-backup-json"[^>]*>\s*Restaurar Backup JSON\s*</button>',
+            html,
+        )
+        is not None
+    )
 
 
 @pytest.mark.requirement("RF08")
@@ -205,9 +208,7 @@ def test_backup_restore_success_contract_uses_validated_trip_and_render_targets(
     assert [stage["city_name"] for stage in validated["stages"]] == ["São Paulo", "Lima"]
     assert [stage["id"] for stage in validated["stages"]] == ["stage-sp", "stage-lima"]
     assert all(stage["days"] for stage in validated["stages"])
-    assert element_attributes(html, "trip-planning")["data-trip-storage-key"] == (
-        "kairos_trip_v1"
-    )
+    assert element_attributes(html, "trip-planning")["data-trip-storage-key"] == ("kairos_trip_v1")
     assert element_attributes(html, "trip-stages")["data-role"] == "trip-stage-summary"
     assert element_attributes(html, "stage-selector")["aria-label"] == "Etapa de Viagem"
 
@@ -247,3 +248,27 @@ def test_index_page_declares_user_facing_error_messages() -> None:
     assert "Não foi possível ler o arquivo de Backup JSON" in messages["restoreReadError"]
     assert element_attributes(html, "impact-banner")["role"] == "status"
     assert "alert(" not in html
+
+
+@pytest.mark.requirement("RF12", "RF13")
+def test_replan_request_sends_future_reserved_stops_from_day_state() -> None:
+    """A interface envia paradas futuras reservadas ao endpoint de Replanejamento."""
+    html = _html()
+    assert "reserved_future_stops: state.reserved_future_stops || []" in html
+
+
+@pytest.mark.requirement("RF03", "RF13")
+def test_replan_request_reads_future_meal_slots_from_trip_day() -> None:
+    """A requisição usa Slots de Refeição do Dia de Viagem salvo."""
+    html = _html()
+    assert "reserved_meal_slots: futureMealSlots(state)" in html
+    assert "function futureMealSlots(state)" in html
+    assert "const trip = loadTrip();" in html
+
+
+@pytest.mark.requirement("RF08", "RF13")
+def test_replan_saves_effective_itinerary_in_trip_day_for_export() -> None:
+    """O guia da Viagem usa o Roteiro persistido após o Replanejamento."""
+    html = _html()
+    assert "day.itinerary = { stops: data.itinerary };" in html
+    assert "saveTrip(trip);" in html

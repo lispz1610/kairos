@@ -687,6 +687,7 @@ function defaultState() {
       defaultStop("POI-002", "Café Central", "2026-11-20T09:50:00", 30),
       defaultStop("POI-003", "Praça da Matriz", "2026-11-20T10:40:00", 30),
     ],
+    reserved_future_stops: [],
     availability_window: { start: "08:00", end: "18:00" },
     current_time: "2026-11-20T09:00:00",
     closed_pois: [],
@@ -816,6 +817,25 @@ function selectUpcoming(state, route) {
   state.selectedIndex = upcoming >= 0 ? upcoming : Math.max(0, route.length - 1);
 }
 
+function tripDay(trip, state) {
+  const stageId = document.getElementById("stage-selector").value;
+  const stage = trip.stages.find((item) => item.id === stageId);
+  return stage && stage.days.find(
+    (item) => item.date === state.current_time.slice(0, 10)
+  );
+}
+
+function futureMealSlots(state) {
+  const trip = loadTrip();
+  const day = tripDay(trip, state);
+  const slots = day && Array.isArray(day.meal_slots) ? day.meal_slots : [];
+  const currentHour = state.current_time.slice(11, 16);
+  return slots.filter((slot) => {
+    const end = slot.window && (slot.window.end_time || slot.window.end);
+    return end && end.slice(0, 5) > currentHour;
+  }).map((slot) => slot.window);
+}
+
 async function replan(events, afterReplanned) {
   const state = loadState();
   const body = {
@@ -825,6 +845,8 @@ async function replan(events, afterReplanned) {
     availability_window: state.availability_window,
     current_coordinate: currentCoordinate(state),
     events: events,
+    reserved_future_stops: state.reserved_future_stops || [],
+    reserved_meal_slots: futureMealSlots(state),
     closed_pois: state.closed_pois,
     skipped_pois: state.skipped_pois,
     intercity_connection: state.intercity_connection,
@@ -842,6 +864,12 @@ async function replan(events, afterReplanned) {
   const data = await response.json();
   state.itinerary = data.itinerary;
   afterReplanned(state);
+  const trip = loadTrip();
+  const day = tripDay(trip, state);
+  if (day) {
+    day.itinerary = { stops: data.itinerary };
+    saveTrip(trip);
+  }
   selectUpcoming(state, state.itinerary);
   saveState(state);
   renderTimeline(state);

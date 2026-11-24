@@ -19,6 +19,7 @@ Cada teste é uma asserção lógica sobre a interface pública
 from datetime import datetime, time, timedelta
 
 import hypothesis.strategies as st
+import pytest
 from hypothesis import given, settings
 
 from src.core.domain.models import (
@@ -56,6 +57,42 @@ def _replan(**overrides):
     }
     arguments.update(overrides)
     return ReplanningService.replan(**arguments)
+
+
+@pytest.mark.requirement("RF11", "RF12")
+def test_replan_uses_poi_stay_duration_when_no_adjustment_exists() -> None:
+    """POI sem ajuste mantém o Tempo de Permanência de cadastro."""
+    poi = _make_poi("POI-A", time(9, 0), time(12, 0))
+    poi.stay_duration_minutes = 45
+    result = _replan(
+        itinerary=Itinerary(stops=[_stop(poi, datetime(2026, 11, 20, 10, 0), 45)]),
+        availability_window=TimeWindow(start=time(9, 0), end=time(12, 0)),
+        current_time=datetime(2026, 11, 20, 9, 0),
+    )
+
+    assert result.itinerary.stops[0].duration_minutes == 45
+
+
+@pytest.mark.requirement("RF03", "RF12")
+def test_replan_does_not_overlap_future_reserved_meal_slot() -> None:
+    """Um Slot de Refeição futuro bloqueia visitas que cruzariam seu intervalo."""
+    poi = _make_poi("POI-A", time(9, 0), time(14, 0))
+    poi.stay_duration_minutes = 90
+    meal = _stop(
+        _make_poi("MEAL", time(11, 0), time(11, 30)),
+        datetime(2026, 11, 20, 11, 0),
+        30,
+    )
+    result = _replan(
+        itinerary=Itinerary(stops=[_stop(poi, datetime(2026, 11, 20, 12, 0), 90)]),
+        availability_window=TimeWindow(start=time(9, 0), end=time(14, 0)),
+        current_time=datetime(2026, 11, 20, 10, 0),
+        reserved_future_stops=[meal],
+        travel_time_minutes=0,
+    )
+
+    candidate = next(stop for stop in result.itinerary.stops if stop.poi.id == "POI-A")
+    assert candidate.start >= meal.end or candidate.end <= meal.start
 
 
 def test_ac1_paradas_ate_current_time_preservadas_como_historico():
@@ -109,10 +146,7 @@ def test_ac2_janela_restante_reotimizada_via_optw_dentro_da_disponibilidade():
     assert result.itinerary.stops
     assert ScheduleService.validate_itinerary(result.itinerary, availability) == []
     assert all(current_time <= stop.start for stop in result.itinerary.stops)
-    assert all(
-        stop.poi.id in {"POI-A", "POI-B", "POI-C"}
-        for stop in result.itinerary.stops
-    )
+    assert all(stop.poi.id in {"POI-A", "POI-B", "POI-C"} for stop in result.itinerary.stops)
 
 
 def test_ac2_slots_de_refeicao_futuros_ja_reservados_sao_preservados():
@@ -142,9 +176,7 @@ def test_ac2_slots_de_refeicao_futuros_ja_reservados_sao_preservados():
     assert ScheduleService.validate_itinerary(result.itinerary, availability) == []
     # Roteiro cronológico: POIs agendados pelo solver antes do Slot
     # permanecem antes dele.
-    assert result.itinerary.stops == sorted(
-        result.itinerary.stops, key=lambda stop: stop.start
-    )
+    assert result.itinerary.stops == sorted(result.itinerary.stops, key=lambda stop: stop.start)
 
 
 def test_replan_keeps_free_window_before_future_reserved_slot() -> None:
@@ -170,12 +202,9 @@ def test_replan_keeps_free_window_before_future_reserved_slot() -> None:
         for stop in result.itinerary.stops
     )
 
-
     poi_d = _make_poi("POI-D", time(11, 0), time(13, 0), utility_score=8.0)
     current_time = datetime(2026, 11, 20, 9, 0)
-    itinerary = Itinerary(
-        stops=[_stop(poi_a, datetime(2026, 11, 20, 9, 0), duration_minutes=30)]
-    )
+    itinerary = Itinerary(stops=[_stop(poi_a, datetime(2026, 11, 20, 9, 0), duration_minutes=30)])
     reserved_stop = _stop(poi_d, datetime(2026, 11, 20, 11, 0), 30)
 
     result = _replan(
@@ -186,9 +215,7 @@ def test_replan_keeps_free_window_before_future_reserved_slot() -> None:
         duration_adjustments={"POI-D": 60},
     )
 
-    stop_d = next(
-        stop for stop in result.itinerary.stops if stop.poi.id == "POI-D"
-    )
+    stop_d = next(stop for stop in result.itinerary.stops if stop.poi.id == "POI-D")
     assert stop_d.start == reserved_stop.start
     assert stop_d.duration_minutes == 60
     assert "POI-D" in result.preserved_pois
@@ -211,8 +238,7 @@ def test_ac3_teto_seguro_da_conexao_interurbana_aplicado_no_ultimo_dia():
         modal="flying",
     )
     limit = (
-        connection.departure_datetime
-        - timedelta(minutes=connection.boarding_cutoff_minutes)
+        connection.departure_datetime - timedelta(minutes=connection.boarding_cutoff_minutes)
     ).time()
     current_time = datetime(2026, 11, 20, 9, 0)
     itinerary = Itinerary(
@@ -332,9 +358,7 @@ def test_replan_passes_current_coordinate_to_reoptimization():
     """
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=5.0)
-    itinerary = Itinerary(
-        stops=[_stop(poi_a, datetime(2026, 11, 20, 9, 30), duration_minutes=30)]
-    )
+    itinerary = Itinerary(stops=[_stop(poi_a, datetime(2026, 11, 20, 9, 30), duration_minutes=30)])
 
     result = _replan(
         itinerary=itinerary,
@@ -362,9 +386,7 @@ def _replan_inputs(draw):
     """
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
     start_minutes = sorted(
-        draw(
-            st.lists(st.integers(min_value=480, max_value=1140), min_size=0, max_size=8)
-        )
+        draw(st.lists(st.integers(min_value=480, max_value=1140), min_size=0, max_size=8))
     )
     stops = [
         _stop(

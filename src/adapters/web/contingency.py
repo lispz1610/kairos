@@ -100,9 +100,7 @@ def apply_contingency_event(
 def _require_field[T](value: T | None, field_name: str, event_type: str) -> T:
     """Garantir que atributo obrigatório do Evento de Contingência não seja None."""
     if value is None:
-        raise ValueError(
-            f"Campo '{field_name}' é obrigatório para Evento '{event_type}'."
-        )
+        raise ValueError(f"Campo '{field_name}' é obrigatório para Evento '{event_type}'.")
     return value
 
 
@@ -114,20 +112,14 @@ def to_domain_event(
     """Construir o Evento de Contingência de domínio a partir da entrada HTTP."""
     if event_req.type == "delay":
         return DelayEvent(
-            delay_minutes=_require_field(
-                event_req.delay_minutes, "delay_minutes", event_req.type
-            ),
+            delay_minutes=_require_field(event_req.delay_minutes, "delay_minutes", event_req.type),
             current_time=current_time,
             coordinates=coordinates,
         )
     if event_req.type == "closure":
-        return ClosureEvent(
-            poi_id=_require_field(event_req.poi_id, "poi_id", event_req.type)
-        )
+        return ClosureEvent(poi_id=_require_field(event_req.poi_id, "poi_id", event_req.type))
     if event_req.type == "skip":
-        return SkipStopEvent(
-            poi_id=_require_field(event_req.poi_id, "poi_id", event_req.type)
-        )
+        return SkipStopEvent(poi_id=_require_field(event_req.poi_id, "poi_id", event_req.type))
     return DurationAdjustmentEvent(
         poi_id=_require_field(event_req.poi_id, "poi_id", event_req.type),
         new_duration_minutes=_require_field(
@@ -144,8 +136,8 @@ def orchestrate_trip_replan(
     current_coordinate: Coordinates,
     events: Sequence[ContingencyEventInput] = (),
     reserved_future_stops: Sequence[RouteStop | ItineraryStop] = (),
-    closed_pois: Sequence[str] = (),
-    skipped_pois: Sequence[str] = (),
+    reserved_meal_slots: Sequence[TimeWindow] = (),
+    excluded_pois: Sequence[str] = (),
     intercity_connection: InterCityConnection | None = None,
     travel_time_minutes: float = 15.0,
 ) -> ReplanResult:
@@ -156,8 +148,8 @@ def orchestrate_trip_replan(
     duration_adjustments: dict[str, int] = {}
     for event_req in events:
         event = to_domain_event(event_req, effective_time, current_coordinate)
-        effective_time, event_closed, event_skipped, adjusted_duration = (
-            apply_contingency_event(itinerary, effective_time, event)
+        effective_time, event_closed, event_skipped, adjusted_duration = apply_contingency_event(
+            itinerary, effective_time, event
         )
         event_closed_pois.extend(event_closed)
         event_skipped_pois.extend(event_skipped)
@@ -172,11 +164,11 @@ def orchestrate_trip_replan(
         coordinates=current_coordinate,
         intercity_connection=intercity_connection,
         excluded_pois=[
-            *closed_pois,
+            *excluded_pois,
             *event_closed_pois,
-            *skipped_pois,
             *event_skipped_pois,
         ],
         reserved_future_stops=reserved_future_stops,
+        reserved_meal_slots=reserved_meal_slots,
         duration_adjustments=duration_adjustments,
     )

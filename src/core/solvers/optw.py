@@ -21,8 +21,6 @@ from src.core.services.schedule import ScheduleService
 
 __all__ = ["OPTWSolver", "haversine_distance_km", "estimate_transit_minutes"]
 
-_VISIT_DURATION_MINUTES = 0
-
 
 def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
     """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
@@ -165,9 +163,7 @@ class OPTWSolver:
             )
             if inserted == 0 and moved == 0:
                 break
-        return _simulate(
-            route, start_time, travel_time_minutes, visit_durations, start_location
-        )
+        return _simulate(route, start_time, travel_time_minutes, visit_durations, start_location)
 
     def _prepare_candidates(
         self, candidates: List[POI], preferences: Optional[PreferencesProfile]
@@ -184,8 +180,7 @@ class OPTWSolver:
         if not reserved_slots:
             return []
         ranges = [
-            (time_to_minutes(s.start_time), time_to_minutes(s.end_time))
-            for s in reserved_slots
+            (time_to_minutes(s.start_time), time_to_minutes(s.end_time)) for s in reserved_slots
         ]
         return sorted(ranges, key=lambda r: r[0])
 
@@ -248,9 +243,7 @@ class OPTWSolver:
             service_start_min = max(arr_min, poi_open)
             dep_min = service_start_min + poi.stay_duration_minutes
 
-            overlap = self._find_overlapping_slot(
-                arr_min, dep_min, context.reserved_ranges
-            )
+            overlap = self._find_overlapping_slot(arr_min, dep_min, context.reserved_ranges)
             if overlap is not None:
                 _, r_end = overlap
                 t = r_end
@@ -342,9 +335,7 @@ class OPTWSolver:
             remaining.remove(poi)
 
         final_transit = (
-            estimate_transit_minutes(
-                current_location, context.end_location, self.transit_speed_kmh
-            )
+            estimate_transit_minutes(current_location, context.end_location, self.transit_speed_kmh)
             if selected_stops
             else 0
         )
@@ -373,9 +364,7 @@ class OPTWSolver:
         total_utility = 0.0
 
         for poi in pois:
-            sched = self._compute_schedule(
-                poi, current_location, current_time_min, context
-            )
+            sched = self._compute_schedule(poi, current_location, current_time_min, context)
             if sched is None:
                 return None
 
@@ -410,14 +399,10 @@ class OPTWSolver:
         if abs(candidate.total_utility - current.total_utility) > 1e-6:
             return False
         cand_transit = sum(
-            s.transit_duration_minutes
-            for s in candidate.stops
-            if isinstance(s, ItineraryStop)
+            s.transit_duration_minutes for s in candidate.stops if isinstance(s, ItineraryStop)
         )
         curr_transit = sum(
-            s.transit_duration_minutes
-            for s in current.stops
-            if isinstance(s, ItineraryStop)
+            s.transit_duration_minutes for s in current.stops if isinstance(s, ItineraryStop)
         )
         if cand_transit < curr_transit:
             return True
@@ -603,10 +588,8 @@ def _simulate(
     stops: list[RouteStop] = []
     cursor = start_time
     for poi in sequence:
-        duration_minutes = durations.get(poi.id, _VISIT_DURATION_MINUTES)
-        stops.append(
-            RouteStop(poi=poi, start=cursor, duration_minutes=duration_minutes)
-        )
+        duration_minutes = durations.get(poi.id, poi.stay_duration_minutes)
+        stops.append(RouteStop(poi=poi, start=cursor, duration_minutes=duration_minutes))
         cursor = cursor + timedelta(minutes=duration_minutes + travel_time_minutes)
     return Itinerary(stops=stops, start_location=start_location)
 
@@ -684,9 +667,7 @@ def _insert_pass(
                 ):
                     continue
                 marginal_cost = (
-                    _route_completion(
-                        candidate, start_time, travel_time_minutes, visit_durations
-                    )
+                    _route_completion(candidate, start_time, travel_time_minutes, visit_durations)
                     - route_completion
                 ).total_seconds() / 60
                 weight = _weight(poi, marginal_cost)
@@ -713,9 +694,7 @@ def _improving_completion(
         sequence, start_time, travel_time_minutes, availability_window, visit_durations
     ):
         return None
-    completion = _route_completion(
-        sequence, start_time, travel_time_minutes, visit_durations
-    )
+    completion = _route_completion(sequence, start_time, travel_time_minutes, visit_durations)
     if completion >= bound:
         return None
     return completion
@@ -752,7 +731,7 @@ def _local_search_contingency(
                     best_route = candidate
         for i in range(len(route) - 1):
             for j in range(i + 1, len(route)):
-                candidate = route[: i + 1] + route[i + 1: j + 1][::-1] + route[j + 1:]
+                candidate = route[: i + 1] + route[i + 1 : j + 1][::-1] + route[j + 1 :]
                 completion = _improving_completion(
                     candidate,
                     start_time,

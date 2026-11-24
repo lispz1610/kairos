@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, datetime, time
 
 import pytest
 
@@ -10,11 +10,45 @@ from src.core.domain.models import (
     Itinerary,
     ItineraryStop,
     MealSlot,
+    RouteStop,
     TimeWindow,
     Trip,
     TripStage,
 )
 from src.core.services.markdown_export import MarkdownExportService
+
+
+@pytest.mark.requirement("RF08")
+def test_markdown_uses_effective_stop_duration_and_connection_modal() -> None:
+    """O guia reflete o Roteiro replanejado e o Modal de Transporte efetivo."""
+    hotel = Accommodation(
+        id="hotel", name="Hospedagem", location=Coordinates(latitude=0, longitude=0)
+    )
+    stage = TripStage.create(
+        id="stage",
+        city_name="Cidade",
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 21),
+        base_accommodation=hotel,
+    )
+    poi = POI(id="poi", name="Museu", location=hotel.location, stay_duration_minutes=60)
+    stage.days[0].itinerary = Itinerary(
+        stops=[RouteStop(poi=poi, start=datetime(2026, 11, 20, 10, 0), duration_minutes=35)]
+    )
+    connection = InterCityConnection(
+        from_stage_id="stage",
+        to_stage_id="next",
+        departure_datetime=datetime(2026, 11, 21, 18, 0),
+        mode="flying",
+        modal="transit",
+    )
+
+    markdown = MarkdownExportService().export_trip_markdown(
+        Trip(id="trip", title="Viagem", stages=[stage], connections=[connection])
+    )
+
+    assert "**Museu** (35 min)" in markdown
+    assert "Modal: `transit`" in markdown
 
 
 @pytest.mark.requirement("RF02", "RF08")
