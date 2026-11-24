@@ -12,7 +12,7 @@ permissions:
 jobs:
   quality-gate:
     name: quality-gate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
 
     steps:
       - name: Check out repository
@@ -28,8 +28,8 @@ jobs:
         run: pip install -e '.[dev]'
 
       # verify_quality.sh is the single source of truth for local and CI checks.
-      # It runs ruff, mypy, radon, pytest, validate_traceability.py,
-      # generate_traceability_matrix.py --check and validate_docs_as_code.py in
-      # this one invocation; do not add duplicate validator steps here.
-      - name: Run fast quality gate (ruff, mypy, radon, pytest, traceability, docs-as-code)
+      # It runs ruff, mypy, radon, pytest, traceability/docs-as-code validators,
+      # import-linter contracts, bandit, vulture, pip-audit (advisory) and the
+      # ISO 25010/5055 collector in this one invocation; do not add duplicates.
+      - name: Run fast quality gate (static, tests, security, architecture and ISO metrics)
         run: bash ./verify_quality.sh

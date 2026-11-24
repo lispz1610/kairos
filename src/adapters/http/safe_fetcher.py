@@ -10,6 +10,8 @@ import httpx
 
 from src.core.ports.fetcher import SSRFValidationError, UrlFetcherPort
 
+# Denylist usada na validação anti-SSRF; "0.0.0.0" não é endereço de bind
+# (B104 excluído no gate: bandit -s B104).
 FORBIDDEN_HOSTNAMES = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
 UNSAFE_IP_CHECKS = (
     "is_private",

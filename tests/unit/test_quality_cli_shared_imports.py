@@ -16,6 +16,7 @@ CLI_NAMES = (
     "validate_traceability",
     "generate_traceability_matrix",
     "validate_docs_as_code",
+    "collect_quality_metrics",
 )
 CLI_SOURCES = tuple(REPO_ROOT / "scripts" / f"{name}.py" for name in CLI_NAMES)
 SHARED_SOURCE = REPO_ROOT / "scripts" / "quality_cli_common.py"

@@ -34,7 +34,10 @@ jobs:
     name: "status-check"
     needs: [ci]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
     permissions:
       contents: read
     steps:
