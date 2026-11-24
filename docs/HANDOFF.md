@@ -40,14 +40,17 @@ Toda a concepção do sistema foi refinada através de *Grilling* e registrada e
 - **ISO/IEC 25010 (Qualidade de Produto)**:
   - *Adequação Funcional*: Validada por suíte de testes unitários e de integração (`pytest`).
   - *Confiabilidade & Tolerância a Falhas*: Validada por Property-Based Testing (`hypothesis`) provando matematicamente que o roteiro nunca viola janelas de funcionamento ou disponibilidade, e pelos 4 Eventos de Contingência entregues (atraso, fechamento prematuro, cancelamento de parada e ajuste de Tempo de Permanência), com Replanejamento do Roteiro restante coberto por testes unitários e de integração.
-  - *Manutenibilidade & Testabilidade*: Arquitetura Hexagonal (Ports & Adapters) garantindo desacoplamento do core algorítmico contra I/O.
+  - *Manutenibilidade & Testabilidade*: Arquitetura Hexagonal (Ports & Adapters) garantindo desacoplamento do core algorítmico contra I/O, com os contratos `ARQ-1` (camadas) e `ARQ-2` (núcleo sem I/O/web) validados automaticamente por `import-linter`.
+  - *Segurança*: varredura estática com `bandit` e auditoria de dependências com `pip-audit` (política de aviso em ambiente `self-hosted` com conectividade restrita).
 - **ISO/IEC/IEEE 29119 (Testes de Software)**:
   - Estruturação do plano de testes e especificação formal de casos de teste no relatório técnico.
 - **ISO/IEC 5055 (Métricas de Código Automatizadas)**:
   - Cobertura de código `pytest-cov ≥ 85%`.
   - Complexidade ciclomática `< 10` por função (`radon`).
   - Tipagem estática rigorosa (`mypy --strict`).
-  - Linting e formatação PEP 8 / PEP 257 (`ruff`).
+  - Linting e formatação PEP 8 / PEP 257 (`ruff`), incluindo `C901` e as regras selecionadas `PLR0911`/`PLR0912`/`PLR0913`.
+  - Índice de manutenibilidade e volume de código (`radon mi` / `radon raw`) e detecção de código morto (`vulture`).
+  - Relatório consolidado `reports/quality-metrics.json` / `.md` gerado por `scripts/collect_quality_metrics.py`, agrupando evidências por característica da ISO/IEC 25010 e métricas da ISO/IEC 5055; o mutation score é registrado apenas quando medido (`--full`).
 
 ---
 
@@ -60,7 +63,7 @@ kairos/
 ├── AGENTS.md
 ├── GLOSSARY.md
 ├── README.md
-├── verify_quality.sh           # gate de qualidade (ruff, mypy, radon, pytest --cov)
+├── verify_quality.sh           # gate de qualidade (ruff, mypy, radon, pytest, segurança, contratos e coletor ISO)
 ├── docs/
 │   ├── HANDOFF.md
 │   ├── adr/                    # ADR 0001 a 0007
@@ -68,6 +71,7 @@ kairos/
 │   └── testing/test-plan-29119.md
 ├── scripts/
 │   ├── quality_cli_common.py       # leitura UTF-8, seções ##, caminhos e coleta RFxx
+│   ├── collect_quality_metrics.py  # coletor JSON/Markdown ISO 25010 + ISO 5055
 │   ├── validate_docs_as_code.py
 │   ├── validate_traceability.py
 │   └── generate_traceability_matrix.py
@@ -78,7 +82,8 @@ kairos/
 │   └── adapters/web/           # app.py, contingency.py e template HTML
 └── tests/
     ├── unit/                   # inclusive test_events.py, test_replanning_service.py,
-    │                           # test_docs_as_code_validator.py e test_traceability_matrix_generator.py
+    │                           # test_docs_as_code_validator.py, test_hexagonal_contracts.py,
+    │                           # test_collect_quality_metrics.py e test_traceability_matrix_generator.py
     ├── integration/            # inclusive test_trip_replan_endpoint.py
     └── property/
 ```
@@ -89,7 +94,7 @@ Os artefatos acima são os mesmos confrontados pelos validadores docs-as-code e 
 
 ## 5. Estado Entregue e Rastreabilidade
 
-1. **Configuração do Projeto Python**: `pyproject.toml` com dependências de execução (`fastapi`, `uvicorn`, `jinja2`, `pydantic`, `pydantic-settings`, `httpx`) e de desenvolvimento/teste (`pytest`, `pytest-cov`, `hypothesis`, `mutmut`, `mypy`, `ruff`, `radon`).
+1. **Configuração do Projeto Python**: `pyproject.toml` com dependências de execução (`fastapi`, `uvicorn`, `jinja2`, `pydantic`, `pydantic-settings`, `httpx`) e de desenvolvimento/teste (`pytest`, `pytest-cov`, `hypothesis`, `mutmut`, `mypy`, `ruff`, `radon`, `import-linter`, `bandit`, `pip-audit`, `vulture`).
 
 2. **Domínio puro (`src/core/domain/`)**: modelos de Viagem, Etapa de Viagem, Dia de Viagem, Conexão Interurbana e Roteiro em `models.py`; os 4 Eventos de Contingência tipados em `events.py` (`DelayEvent`, `ClosureEvent`, `SkipStopEvent`, `DurationAdjustmentEvent`), com testes em `tests/unit/test_events.py` e `tests/unit/test_apply_contingency_event.py`.
 
@@ -101,7 +106,7 @@ Os artefatos acima são os mesmos confrontados pelos validadores docs-as-code e 
 
 6. **Aplicação web (`src/adapters/web/`)**: rotas FastAPI, incluindo `POST /api/trip/replan`, orquestração dos Eventos de Contingência em `contingency.py`, template Jinja2 com controles na timeline do Dia de Viagem e banner de impacto. A interação em navegador real permanece como lacuna parcial, registrada no §8 do Plano de Testes.
 
-7. **Gate e validadores de qualidade entregues**: `verify_quality.sh` executa `ruff`, `mypy --strict`, `radon cc`, `pytest --cov` (com estágio opcional de mutação), `scripts/validate_traceability.py`, `scripts/generate_traceability_matrix.py --check` e `scripts/validate_docs_as_code.py`, sendo executado antes de commits/PRs e no CI. Os três CLIs importam `scripts/quality_cli_common.py` por importação normal (sem mutar o path de imports nem suprimir avisos de lint), reutilizando a mesma coleta de marcadores `requirement` e de títulos RFxx; funcionam tanto como `python scripts/<cli>.py ...` quanto como `python -m scripts.<cli> ...`. Qualquer divergência detectada bloqueia o gate. Os testes de CLI estão em `tests/unit/test_docs_as_code_validator.py`, `tests/unit/test_traceability_validator.py` e `tests/unit/test_traceability_matrix_generator.py`, a integração dos validadores ao gate é verificada em `tests/unit/test_quality_gate_validators.py` e o contrato de importação compartilhada em `tests/unit/test_quality_cli_shared_imports.py`.
+7. **Gate e validadores de qualidade entregues**: `verify_quality.sh` executa `ruff`, `mypy --strict`, `radon cc`, `pytest --cov`, `scripts/validate_traceability.py`, `scripts/generate_traceability_matrix.py --check`, `scripts/validate_docs_as_code.py`, `lint-imports`, `bandit`, `vulture`, `radon mi/raw`, `pip-audit` (aviso) e `scripts/collect_quality_metrics.py`, com estágio opcional de mutação. Os quatro CLIs importam `scripts/quality_cli_common.py` por importação normal (sem mutar o path de imports nem suprimir avisos de lint), reutilizando a mesma coleta de marcadores `requirement` e de títulos RFxx; funcionam tanto como `python scripts/<cli>.py ...` quanto como `python -m scripts.<cli> ...`. Qualquer divergência detectada bloqueia o gate, exceto `pip-audit`/`vulture`, que são informativos conforme política documentada; o coletor grava `reports/quality-metrics.json`/`.md` e registra mutação como `not run` fora do modo `--full`. Os testes de CLI estão em `tests/unit/test_docs_as_code_validator.py`, `tests/unit/test_traceability_validator.py`, `tests/unit/test_traceability_matrix_generator.py` e `tests/unit/test_collect_quality_metrics.py`; os contratos hexagonais em `tests/unit/test_hexagonal_contracts.py`; a integração dos validadores ao gate em `tests/unit/test_quality_gate_validators.py`; e o contrato de importação compartilhada em `tests/unit/test_quality_cli_shared_imports.py`.
 
 ---
 

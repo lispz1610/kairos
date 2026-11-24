@@ -6,6 +6,7 @@ substituídas por stubs, de modo que o teste exercite apenas a orquestração do
 gate. Cada divergência proposital é aplicada à cópia, nunca ao repositório.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -18,6 +19,7 @@ SHARED_SCRIPTS = (
     "validate_traceability.py",
     "generate_traceability_matrix.py",
     "validate_docs_as_code.py",
+    "collect_quality_metrics.py",
     "quality_cli_common.py",
 )
 SPECIFICATION = (
@@ -102,9 +104,25 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     assert generated.returncode == 0, generated.stdout + generated.stderr
 
     _write_stub(bin_dir, "ruff", "exit 0\n")
-    _write_stub(bin_dir, "mypy", "exit 0\n")
-    _write_stub(bin_dir, "radon", 'echo "src/core/domain/events.py:1:0 -> funcao (3)"\n')
+    _write_stub(bin_dir, "mypy", "echo 'Success: no issues found in 1 source file'\n")
+    _write_stub(
+        bin_dir,
+        "radon",
+        '\n'.join(
+            (
+                'case "${1:-}" in',
+                '  cc) echo "src/core/domain/events.py:1:0 -> funcao (3)" ;;',
+                '  mi) echo "src/core/domain/events.py - A (90.0)" ;;',
+                "  raw) printf 'LOC: 10\\nLLOC: 5\\nSLOC: 8\\n' ;;",
+                "esac",
+            )
+        ),
+    )
     _write_stub(bin_dir, "pytest", 'echo "TOTAL 100%"\n')
+    _write_stub(bin_dir, "lint-imports", "echo 'Contracts: 2 kept, 0 broken.'\n")
+    _write_stub(bin_dir, "bandit", "echo 'No issues identified.'\n")
+    _write_stub(bin_dir, "vulture", "exit 0\n")
+    _write_stub(bin_dir, "pip-audit", "echo 'No known vulnerabilities found'\n")
 
     env = dict(os.environ)
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
@@ -134,7 +152,16 @@ def test_gate_passa_com_documentos_e_marcadores_fieis(tmp_path: Path) -> None:
     assert "Validação de rastreabilidade passou" in output
     assert "Verificação passou: matriz RF01–RF08 fiel" in output
     assert "Validação docs-as-code passou" in output
+    assert "contratos hexagonais ARQ-1 e ARQ-2" in output
+    assert "pip-audit" in output
+    assert "collect_quality_metrics.py" in output
     assert "Quality gate PASSED" in output
+
+    metrics_path = root / "reports/quality-metrics.json"
+    assert metrics_path.is_file()
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    assert metrics["mode"] == "fast"
+    assert metrics["standards"]["iso_25010"]["confiabilidade"]["mutacao"]["status"] == "not run"
 
 
 def test_gate_falha_com_marcador_de_rf_inexistente(tmp_path: Path) -> None:

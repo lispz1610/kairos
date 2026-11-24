@@ -22,6 +22,10 @@ dev = [
     "ruff>=0.17.5",
     "radon>=6.0.1",
     "mutmut>=3.0.0",
+    "import-linter>=2.0",
+    "bandit>=1.7.5",
+    "pip-audit>=2.6.0",
+    "vulture>=2.10",
 ]
 
 [tool.pytest.ini_options]
@@ -37,11 +41,53 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "D"]
+select = ["E", "F", "W", "I", "D", "C901", "PLR0911", "PLR0912", "PLR0913"]
 ignore = ["D100", "D104"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 9
+
+# Limites alinhados à base legada; C901 usa o mesmo teto numérico do radon (< 10).
+[tool.ruff.lint.pylint]
+max-args = 10
+max-branches = 12
+max-returns = 6
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
+
+[tool.importlinter]
+root_package = "src"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "ARQ-1: camadas hexagonais"
+type = "layers"
+containers = ["src"]
+layers = ["adapters", "core"]
+
+[[tool.importlinter.contracts]]
+name = "ARQ-2: núcleo sem dependências de I/O web"
+type = "forbidden"
+source_modules = ["src.core"]
+forbidden_modules = [
+    "fastapi",
+    "uvicorn",
+    "jinja2",
+    "httpx",
+    "httpcore",
+    "requests",
+    "sqlite3",
+    "socket",
+]
+allow_indirect_imports = false
+
+[tool.vulture]
+paths = ["src"]
+min_confidence = 80
+# `host` faz parte da assinatura de httpcore.SyncBackend.connect_tcp e é
+# deliberadamente ignorado: o backend fixa o IP validado na conexão.
+ignore_names = ["host"]
 
 [tool.mypy]
 python_version = "3.12"
