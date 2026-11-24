@@ -5,6 +5,62 @@ from src.adapters.web.app import app
 
 client = TestClient(app)
 
+_RF14_PAYLOAD: dict[str, object] = {
+    "start_location": {"latitude": 0.0, "longitude": 0.0},
+    "end_location": {"latitude": 0.0, "longitude": 0.0},
+    "window": {"start_time": "09:00:00", "end_time": "23:59:00"},
+    "candidates": [
+        {
+            "id": "poi-um-grau",
+            "name": "POI a um grau de latitude",
+            "location": {"latitude": 1.0, "longitude": 0.0},
+            "window": {"start_time": "00:00:00", "end_time": "23:59:00"},
+            "stay_duration_minutes": 30,
+            "utility_score": 10.0,
+        }
+    ],
+}
+
+_RF14_SHORT_PAYLOAD: dict[str, object] = {
+    "start_location": {"latitude": 0.0, "longitude": 0.0},
+    "end_location": {"latitude": 0.0, "longitude": 0.0},
+    "window": {"start_time": "09:00:00", "end_time": "23:59:00"},
+    "candidates": [
+        {
+            "id": "poi-proximo",
+            "name": "POI a 0,01 grau de latitude",
+            "location": {"latitude": 0.01, "longitude": 0.0},
+            "window": {"start_time": "00:00:00", "end_time": "23:59:00"},
+            "stay_duration_minutes": 30,
+            "utility_score": 10.0,
+        }
+    ],
+}
+
+_RF14_WINDOW_PAYLOAD: dict[str, object] = {
+    "start_location": {"latitude": 0.0, "longitude": 0.0},
+    "end_location": {"latitude": 0.0, "longitude": 0.0},
+    "window": {"start_time": "09:00:00", "end_time": "23:59:00"},
+    "candidates": [
+        {
+            "id": "poi-proximo",
+            "name": "POI próximo",
+            "location": {"latitude": 0.005, "longitude": 0.0},
+            "window": {"start_time": "00:00:00", "end_time": "23:59:00"},
+            "stay_duration_minutes": 30,
+            "utility_score": 10.0,
+        },
+        {
+            "id": "poi-distante",
+            "name": "POI distante",
+            "location": {"latitude": 0.5, "longitude": 0.0},
+            "window": {"start_time": "00:00:00", "end_time": "23:59:00"},
+            "stay_duration_minutes": 30,
+            "utility_score": 10.0,
+        },
+    ],
+}
+
 
 def test_optimize_endpoint_returns_valid_itinerary() -> None:
     """Verifica que o endpoint retorna um Roteiro válido dentro da Janela de Disponibilidade."""
@@ -90,3 +146,79 @@ def test_optimize_endpoint_respects_reserved_slots() -> None:
             assert not overlap, (
                 f"Stop {stop['poi']['name']} colidiu com slot reservado {r_start}-{r_end}"
             )
+
+
+@pytest.mark.requirement("RF14")
+def test_optimize_omitted_and_driving_modal_have_same_25_kmh_displacement() -> None:
+    """Verifica que omissão e driving produzem o mesmo Deslocamento, a 25 km/h."""
+    default_response = client.post("/api/trip/optimize", json=_RF14_PAYLOAD)
+    driving_response = client.post(
+        "/api/trip/optimize", json={**_RF14_PAYLOAD, "urban_mode": "driving"}
+    )
+
+    assert default_response.status_code == 200
+    assert driving_response.status_code == 200
+    default_displacement = [
+        stop["transit_duration_minutes"] for stop in default_response.json()["stops"]
+    ]
+    driving_displacement = [
+        stop["transit_duration_minutes"] for stop in driving_response.json()["stops"]
+    ]
+    assert default_displacement == driving_displacement == [267]
+
+
+@pytest.mark.requirement("RF14")
+def test_optimize_walking_displacement_exceeds_driving() -> None:
+    """Verifica que walking reserva mais Deslocamento que driving no mesmo Roteiro."""
+    driving_response = client.post(
+        "/api/trip/optimize", json={**_RF14_SHORT_PAYLOAD, "urban_mode": "driving"}
+    )
+    walking_response = client.post(
+        "/api/trip/optimize", json={**_RF14_SHORT_PAYLOAD, "urban_mode": "walking"}
+    )
+
+    assert driving_response.status_code == 200
+    assert walking_response.status_code == 200
+    driving_displacement = [
+        stop["transit_duration_minutes"] for stop in driving_response.json()["stops"]
+    ]
+    walking_displacement = [
+        stop["transit_duration_minutes"] for stop in walking_response.json()["stops"]
+    ]
+    assert driving_displacement == [3]
+    assert walking_displacement == [14]
+    assert walking_displacement[0] > driving_displacement[0]
+
+
+@pytest.mark.requirement("RF14")
+def test_optimize_walking_drops_poi_that_no_longer_fits_the_window() -> None:
+    """Verifica que walking descarta POI que cabe a 25 km/h, mantendo Roteiro viável."""
+    driving_response = client.post(
+        "/api/trip/optimize", json={**_RF14_WINDOW_PAYLOAD, "urban_mode": "driving"}
+    )
+    walking_response = client.post(
+        "/api/trip/optimize", json={**_RF14_WINDOW_PAYLOAD, "urban_mode": "walking"}
+    )
+
+    assert driving_response.status_code == 200
+    assert walking_response.status_code == 200
+    driving = driving_response.json()
+    walking = walking_response.json()
+    assert {stop["poi"]["id"] for stop in driving["stops"]} == {
+        "poi-proximo",
+        "poi-distante",
+    }
+    assert {stop["poi"]["id"] for stop in walking["stops"]} == {"poi-proximo"}
+    assert walking["total_utility"] < driving["total_utility"]
+    assert 0 < walking["total_duration_minutes"] <= 899
+    assert all(stop["departure_time"] <= "23:59:00" for stop in walking["stops"])
+
+
+@pytest.mark.requirement("RF14")
+@pytest.mark.parametrize("non_urban_mode", ["flying", "transit"])
+def test_optimize_rejects_flying_and_transit(non_urban_mode: str) -> None:
+    """Verifica que flying e transit são recusados, sem coerção para driving."""
+    response = client.post(
+        "/api/trip/optimize", json={**_RF14_PAYLOAD, "urban_mode": non_urban_mode}
+    )
+    assert response.status_code == 422

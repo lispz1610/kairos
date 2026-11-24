@@ -38,6 +38,10 @@ _Avoid_: Janela de partida, tempo de espera, intervalo de embarque
 Meio físico utilizado para locomoção, distinguindo-se entre transporte urbano (`walking`, `driving`) e interurbano (`flying`, `transit`).
 _Avoid_: Tipo de locomoção, meio de transporte
 
+**Modal Urbano**:
+Modal de Transporte de um Dia de Viagem, restrito a `walking` e `driving`, usado no Deslocamento do Roteiro daquele dia e distinto do modal de uma Conexão Interurbana.
+_Avoid_: Modal interurbano, modal de voo, tipo de locomoção
+
 ### Roteiro Urbano e Pontos de Interesse
 
 **Ponto de Interesse (POI)**:

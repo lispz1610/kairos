@@ -6,7 +6,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import List, Optional, Tuple
+from typing import Final, List, Optional, Tuple
 
 from src.core.domain.models import (
     POI,
@@ -16,11 +16,26 @@ from src.core.domain.models import (
     PreferencesProfile,
     RouteStop,
     TimeWindow,
+    UrbanMode,
 )
 from src.core.services.schedule import ScheduleService
 
-__all__ = ["OPTWSolver", "haversine_distance_km", "estimate_transit_minutes"]
+__all__ = [
+    "OPTWSolver",
+    "estimate_transit_minutes",
+    "haversine_distance_km",
+    "urban_mode_speed_kmh",
+]
 
+_URBAN_MODE_SPEED_KMH: Final[Mapping[UrbanMode, float]] = {
+    UrbanMode.WALKING: 5.0,
+    UrbanMode.DRIVING: 25.0,
+}
+
+
+def urban_mode_speed_kmh(mode: UrbanMode) -> float:
+    """Retorna a velocidade média, em km/h, do Deslocamento no Modal Urbano informado."""
+    return _URBAN_MODE_SPEED_KMH[mode]
 
 def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
     """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
