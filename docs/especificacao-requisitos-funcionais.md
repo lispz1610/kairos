@@ -149,6 +149,7 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
   2. `flying` e `transit` pertencem à Conexão Interurbana e são recusados no Dia de Viagem e no pedido de otimização, sem conversão para `driving`.
   3. O ``POST /api/trip/optimize`` aceita ``urban_mode`` opcional; omiti-lo equivale a informar `driving`.
   4. Sem ``urban_mode`` ou com ``urban_mode: driving``, o Deslocamento do Roteiro permanece estimado a 25 km/h; ambos os pedidos produzem o mesmo Deslocamento.
+  5. Com ``urban_mode: walking``, o Deslocamento do Roteiro é estimado a 5 km/h; para os mesmos Pontos de Interesse e Janela de Disponibilidade, um Ponto de Interesse que deixa de caber na janela é descartado, mantendo o Roteiro viável.
 
 ---
 

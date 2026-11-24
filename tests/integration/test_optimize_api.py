@@ -21,6 +21,46 @@ _RF14_PAYLOAD: dict[str, object] = {
     ],
 }
 
+_RF14_SHORT_PAYLOAD: dict[str, object] = {
+    "start_location": {"latitude": 0.0, "longitude": 0.0},
+    "end_location": {"latitude": 0.0, "longitude": 0.0},
+    "window": {"start_time": "09:00:00", "end_time": "23:59:00"},
+    "candidates": [
+        {
+            "id": "poi-proximo",
+            "name": "POI a 0,01 grau de latitude",
+            "location": {"latitude": 0.01, "longitude": 0.0},
+            "window": {"start_time": "00:00:00", "end_time": "23:59:00"},
+            "stay_duration_minutes": 30,
+            "utility_score": 10.0,
+        }
+    ],
+}
+
+_RF14_WINDOW_PAYLOAD: dict[str, object] = {
+    "start_location": {"latitude": 0.0, "longitude": 0.0},
+    "end_location": {"latitude": 0.0, "longitude": 0.0},
+    "window": {"start_time": "09:00:00", "end_time": "23:59:00"},
+    "candidates": [
+        {
+            "id": "poi-proximo",
+            "name": "POI próximo",
+            "location": {"latitude": 0.005, "longitude": 0.0},
+            "window": {"start_time": "00:00:00", "end_time": "23:59:00"},
+            "stay_duration_minutes": 30,
+            "utility_score": 10.0,
+        },
+        {
+            "id": "poi-distante",
+            "name": "POI distante",
+            "location": {"latitude": 0.5, "longitude": 0.0},
+            "window": {"start_time": "00:00:00", "end_time": "23:59:00"},
+            "stay_duration_minutes": 30,
+            "utility_score": 10.0,
+        },
+    ],
+}
+
 
 def test_optimize_endpoint_returns_valid_itinerary() -> None:
     """Verifica que o endpoint retorna um Roteiro válido dentro da Janela de Disponibilidade."""
@@ -128,13 +168,50 @@ def test_optimize_omitted_and_driving_modal_have_same_25_kmh_displacement() -> N
 
 
 @pytest.mark.requirement("RF14")
-def test_optimize_accepts_walking_urban_modal() -> None:
-    """Verifica que walking é aceito como Modal Urbano no pedido de otimização."""
-    response = client.post(
-        "/api/trip/optimize", json={**_RF14_PAYLOAD, "urban_mode": "walking"}
+def test_optimize_walking_displacement_exceeds_driving() -> None:
+    """Verifica que walking reserva mais Deslocamento que driving no mesmo Roteiro."""
+    driving_response = client.post(
+        "/api/trip/optimize", json={**_RF14_SHORT_PAYLOAD, "urban_mode": "driving"}
     )
-    assert response.status_code == 200
-    assert len(response.json()["stops"]) == 1
+    walking_response = client.post(
+        "/api/trip/optimize", json={**_RF14_SHORT_PAYLOAD, "urban_mode": "walking"}
+    )
+
+    assert driving_response.status_code == 200
+    assert walking_response.status_code == 200
+    driving_displacement = [
+        stop["transit_duration_minutes"] for stop in driving_response.json()["stops"]
+    ]
+    walking_displacement = [
+        stop["transit_duration_minutes"] for stop in walking_response.json()["stops"]
+    ]
+    assert driving_displacement == [3]
+    assert walking_displacement == [14]
+    assert walking_displacement[0] > driving_displacement[0]
+
+
+@pytest.mark.requirement("RF14")
+def test_optimize_walking_drops_poi_that_no_longer_fits_the_window() -> None:
+    """Verifica que walking descarta POI que cabe a 25 km/h, mantendo Roteiro viável."""
+    driving_response = client.post(
+        "/api/trip/optimize", json={**_RF14_WINDOW_PAYLOAD, "urban_mode": "driving"}
+    )
+    walking_response = client.post(
+        "/api/trip/optimize", json={**_RF14_WINDOW_PAYLOAD, "urban_mode": "walking"}
+    )
+
+    assert driving_response.status_code == 200
+    assert walking_response.status_code == 200
+    driving = driving_response.json()
+    walking = walking_response.json()
+    assert {stop["poi"]["id"] for stop in driving["stops"]} == {
+        "poi-proximo",
+        "poi-distante",
+    }
+    assert {stop["poi"]["id"] for stop in walking["stops"]} == {"poi-proximo"}
+    assert walking["total_utility"] < driving["total_utility"]
+    assert 0 < walking["total_duration_minutes"] <= 899
+    assert all(stop["departure_time"] <= "23:59:00" for stop in walking["stops"])
 
 
 @pytest.mark.requirement("RF14")
