@@ -119,6 +119,8 @@ def test_janela_de_disponibilidade_limitante_bloqueia_visita():
     start_time = datetime(2026, 11, 20, 8, 0)
     poi_a = _make_poi("POI-01", time(8, 0), time(23, 0), utility_score=10.0)
     poi_b = _make_poi("POI-02", time(8, 0), time(23, 0), utility_score=1.0)
+    poi_a.stay_duration_minutes = 15
+    poi_b.stay_duration_minutes = 15
 
     itinerary = OPTWSolver.replan_remaining(
         [poi_a, poi_b], availability, travel_time_minutes=30, start_time=start_time

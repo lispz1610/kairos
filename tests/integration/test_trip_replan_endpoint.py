@@ -10,6 +10,7 @@ Roteiro replanejado com os metadados de impacto — ``preserved_pois``,
 from datetime import datetime, time
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.web.app import app
@@ -228,6 +229,31 @@ def test_reserved_future_stops_are_preserved() -> None:
     assert data["preserved_pois"] == ["POI-A", "POI-C"]
     assert data["itinerary"][1]["start"] == "2026-11-20T11:00:00"
     assert data["itinerary"][1]["duration_minutes"] == 30
+
+
+@pytest.mark.requirement("RF03", "RF12", "RF13")
+def test_future_meal_slot_blocks_replanned_visit_without_selected_place() -> None:
+    """A janela do Slot de Refeição bloqueia visitas mesmo sem restaurante escolhido."""
+    poi = _poi("POI-A", time(9, 0), time(14, 0))
+    poi.stay_duration_minutes = 90
+    day = Itinerary(stops=[_stop(poi, datetime(2026, 11, 20, 12, 0), 90)])
+    meal_window = TimeWindow(start=time(11, 0), end=time(11, 30))
+
+    response = client.post(
+        "/api/trip/replan",
+        json=_payload(
+            day,
+            datetime(2026, 11, 20, 10, 0),
+            TimeWindow(start=time(9, 0), end=time(14, 0)),
+            [],
+            reserved_meal_slots=[meal_window.model_dump(mode="json")],
+            travel_time_minutes=0,
+        ),
+    )
+
+    assert response.status_code == 200
+    candidate = response.json()["itinerary"][0]
+    assert candidate["start"] >= "2026-11-20T11:30:00"
 
 
 def test_intercity_risk_alert_reported_when_boarding_does_not_fit():

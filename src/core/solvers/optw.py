@@ -27,8 +27,6 @@ __all__ = [
     "urban_mode_speed_kmh",
 ]
 
-_VISIT_DURATION_MINUTES = 0
-
 _URBAN_MODE_SPEED_KMH: Final[Mapping[UrbanMode, float]] = {
     UrbanMode.WALKING: 5.0,
     UrbanMode.DRIVING: 25.0,
@@ -38,7 +36,6 @@ _URBAN_MODE_SPEED_KMH: Final[Mapping[UrbanMode, float]] = {
 def urban_mode_speed_kmh(mode: UrbanMode) -> float:
     """Retorna a velocidade média, em km/h, do Deslocamento no Modal Urbano informado."""
     return _URBAN_MODE_SPEED_KMH[mode]
-
 
 def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
     """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
@@ -619,7 +616,7 @@ def _simulate(
     stops: list[RouteStop] = []
     cursor = start_time
     for poi in sequence:
-        duration_minutes = durations.get(poi.id, _VISIT_DURATION_MINUTES)
+        duration_minutes = durations.get(poi.id, poi.stay_duration_minutes)
         stops.append(
             RouteStop(poi=poi, start=cursor, duration_minutes=duration_minutes)
         )

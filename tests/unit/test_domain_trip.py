@@ -267,3 +267,31 @@ def test_legacy_trip_backup_without_urban_mode_loads_as_driving() -> None:
     trip.stages[0].days[0].urban_mode = UrbanMode.WALKING
     restored = Trip.model_validate_json(trip.model_dump_json())
     assert restored.stages[0].days[0].urban_mode == UrbanMode.WALKING
+
+
+@pytest.mark.requirement("RF14")
+def test_trip_stage_preserves_distinct_urban_modes_across_days_in_round_trip() -> None:
+    """Dois Dias de Viagem da mesma etapa mantêm Modais Urbanos distintos no round-trip."""
+    hotel = Accommodation(
+        id="hotel-stage",
+        name="Hotel Etapa",
+        location=Coordinates(latitude=-23.55, longitude=-46.66),
+    )
+    stage = TripStage.create(
+        id="stage-mixed",
+        city_name="São Paulo",
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 3),
+        base_accommodation=hotel,
+    )
+    stage.days[0].urban_mode = UrbanMode.WALKING
+    stage.days[1].urban_mode = UrbanMode.DRIVING
+
+    restored = Trip.model_validate_json(
+        Trip(id="trip-mixed", title="Etapa Mista", stages=[stage]).model_dump_json()
+    )
+
+    assert [day.urban_mode for day in restored.stages[0].days] == [
+        UrbanMode.WALKING,
+        UrbanMode.DRIVING,
+    ]

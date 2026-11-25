@@ -144,8 +144,8 @@ def orchestrate_trip_replan(
     current_coordinate: Coordinates,
     events: Sequence[ContingencyEventInput] = (),
     reserved_future_stops: Sequence[RouteStop | ItineraryStop] = (),
-    closed_pois: Sequence[str] = (),
-    skipped_pois: Sequence[str] = (),
+    reserved_meal_slots: Sequence[TimeWindow] = (),
+    excluded_pois: Sequence[str] = (),
     intercity_connection: InterCityConnection | None = None,
     travel_time_minutes: float = 15.0,
 ) -> ReplanResult:
@@ -172,11 +172,11 @@ def orchestrate_trip_replan(
         coordinates=current_coordinate,
         intercity_connection=intercity_connection,
         excluded_pois=[
-            *closed_pois,
+            *excluded_pois,
             *event_closed_pois,
-            *skipped_pois,
             *event_skipped_pois,
         ],
         reserved_future_stops=reserved_future_stops,
+        reserved_meal_slots=reserved_meal_slots,
         duration_adjustments=duration_adjustments,
     )

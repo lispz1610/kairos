@@ -222,3 +222,44 @@ def test_optimize_rejects_flying_and_transit(non_urban_mode: str) -> None:
         "/api/trip/optimize", json={**_RF14_PAYLOAD, "urban_mode": non_urban_mode}
     )
     assert response.status_code == 422
+
+
+@pytest.mark.requirement("RF14")
+def test_optimize_walking_respects_reserved_slots() -> None:
+    """Verifica que Slots de Refeição reservados continuam bloqueando intervalos em walking."""
+    payload = {
+        "start_location": {"latitude": 0.0, "longitude": 0.0},
+        "end_location": {"latitude": 0.0, "longitude": 0.0},
+        "window": {"start_time": "09:00:00", "end_time": "16:00:00"},
+        "urban_mode": "walking",
+        "reserved_slots": [{"start_time": "10:00:00", "end_time": "12:00:00"}],
+        "candidates": [
+            {
+                "id": "poi-manha",
+                "name": "Café Próximo",
+                "location": {"latitude": 0.005, "longitude": 0.0},
+                "window": {"start_time": "09:00:00", "end_time": "16:00:00"},
+                "stay_duration_minutes": 30,
+                "utility_score": 10.0,
+            },
+            {
+                "id": "poi-tarde",
+                "name": "Museu Próximo",
+                "location": {"latitude": 0.008, "longitude": 0.0},
+                "window": {"start_time": "09:00:00", "end_time": "16:00:00"},
+                "stay_duration_minutes": 45,
+                "utility_score": 10.0,
+            },
+        ],
+    }
+
+    response = client.post("/api/trip/optimize", json=payload)
+
+    assert response.status_code == 200
+    stops = response.json()["stops"]
+    assert len(stops) >= 2
+    for stop in stops:
+        overlap = max(stop["arrival_time"], "10:00:00") < min(
+            stop["departure_time"], "12:00:00"
+        )
+        assert not overlap, f"Stop {stop['poi']['id']} colidiu com slot reservado"

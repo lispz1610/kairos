@@ -99,6 +99,7 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
      - **Quadro Orçamentário**: Tabela consolidada de estimativas financeiras;
      - **Caderno Diário**: Cronograma horário detalhado dia a dia, com hospedagens, paradas em POIs (com tempo de permanência), tempos de deslocamento e slots de refeição com sugestões curadas e faixas de preço;
      - **Apêndice de Curadoria**: Relação de estabelecimentos premiados e notas do usuário.
+  5. O guia usa o Tempo de Permanência efetivo das paradas do Roteiro replanejado e o `modal` efetivo da Conexão Interurbana.
 
 ### RF09 — Conexão Interurbana: Departure Datetime e Margem de Embarque
 - **Descrição**: O sistema deve representar a *Conexão Interurbana* com partida obrigatória com data e hora e um limite de embarque configurável por modal, alinhado ao modelo temporal do Dia de Viagem.
@@ -124,7 +125,7 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
   1. Heurística construtiva de inserção gulosa — em cada ciclo escolhe-se o POI com maior Pontuação de Utilidade por Custo Marginal de Tempo em qualquer posição onde a inserção se mantém viável (viabilidade validada via ``ScheduleService``).
   2. Busca local: swaps de paradas e 2-opt — a move é aceita quando o Roteiro permanece viável e seu término se antecipa, mantendo a Pontuação de Utilidade acumulada.
   3. Paradas são emitidas em ordem cronológica, descendo ``cursor`` do horário de início pelo Custo de Deslocamento entre Paradas.
-  4. Tempo de Permanência por POI: ``visit_durations`` (``Mapping[str, int]``) fornece o Tempo de Permanência ajustado de um POI nas simulações do Roteiro — padrão ``_VISIT_DURATION_MINUTES`` quando não informado.
+  4. Tempo de Permanência por POI: ``visit_durations`` (``Mapping[str, int]``) fornece o Tempo de Permanência ajustado de um POI nas simulações do Roteiro; sem ajuste explícito, usa-se ``POI.stay_duration_minutes``.
 
 ### RF12 — Replanejamento Dinâmico do Dia de Viagem (#37)
 - **Descrição**: O ``ReplanningService.replan`` reotimiza a janela restante do Roteiro a partir do horário efetivo pós-evento, preservando o histórico até ``current_time`` e as Paradas futuras reservadas.
@@ -132,7 +133,8 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
   1. Paradas até ``current_time`` permanecem travadas como histórico do Roteiro; Paradas futuras já reservadas (``reserved_future_stops``) permanecem preservadas no Roteiro replanejado.
   2. A janela restante — ``[horário efetivo pós-evento, fim da Janela de Disponibilidade]`` — é reotimizada via ``OPTWSolver`` a partir do horário efetivo, excluindo POIs fechados/pulados (``excluded_pois``) e aplicando o teto seguro da Conexão Interurbana quando o Dia de Viagem replanejado é o último dia da Etapa de Viagem com partida interurbana.
   3. Ajustes de Tempo de Permanência (``duration_adjustments``) são aplicados às Paradas preservadas e reservadas e passados ao ``OPTWSolver`` (``visit_durations``) — Paradas agendadas pelo solver usam o Tempo de Permanência ajustado.
-  4. Metadados de impacto: POIs preservados (``preserved_pois``), removidos/substituídos (``removed_pois``) e Alerta de Risco da Conexão Interurbana com déficit em minutos quando o retorno/embarque não couber antes do limite operacional.
+  4. Paradas futuras reservadas e janelas de Slots de Refeição dividem a Janela de Disponibilidade restante em intervalos livres; o Replanejamento só agenda visitas inteiramente dentro desses intervalos.
+  5. Metadados de impacto: POIs preservados (``preserved_pois``), removidos/substituídos (``removed_pois``) e Alerta de Risco da Conexão Interurbana com déficit em minutos quando o retorno/embarque não couber antes do limite operacional.
 
 ### RF13 — Endpoint ``POST /api/trip/replan`` e Controles de Contingência na Timeline (#38)
 - **Descrição**: O endpoint ``POST /api/trip/replan`` aplica os Eventos de Contingência ao Roteiro do Dia de Viagem; a interface expõe controles de contingência na timeline do Dia de Viagem.
@@ -141,6 +143,7 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
   2. ``ReplanRequest`` aceita ``reserved_future_stops: list[RouteStop]`` — Paradas futuras já reservadas que devem permanecer no Roteiro replanejado.
   3. Interface (timeline do Dia de Viagem): controles ``+ Atraso (min)`` (envia ``[{"type": "delay", "delay_minutes": ...}]`` e adianta ``current_time``), ``Fechou`` (envia ``[{"type": "closure", "poi_id": ...}]``), ``Pular parada`` (envia ``[{"type": "skip", "poi_id": ...}]``) e ``Ajustar permanência`` (envia ``[{"type": "duration_adjustment", "poi_id": ..., "new_duration_minutes": ...}]``).
   4. O endpoint constrói os Eventos de Domínio via ``_to_domain_event`` (``DelayEvent`` com ``current_time``/``coordinates`` do pedido) e acumula ``duration_adjustments`` a partir dos ``DurationAdjustmentEvent``, repassando ``reserved_future_stops`` e ``duration_adjustments`` a ``ReplanningService.replan``.
+  5. A interface associa a timeline ao Dia de Viagem pela data, alimenta ``reserved_future_stops`` com as paradas já reservadas e os estabelecimentos selecionados nos Slots de Refeição, e envia ``reserved_meal_slots`` dos Slots futuros desse dia. O Roteiro replanejado é persistido no Dia de Viagem original para a exportação, mesmo quando o Evento de Contingência altera a data do relógio da timeline.
 
 ### RF14 — Modal Urbano do Dia de Viagem no Deslocamento do Roteiro
 - **Descrição**: O Dia de Viagem passa a guardar o Modal Urbano escolhido e o ``POST /api/trip/optimize`` aceita o mesmo modal, de forma opcional.
@@ -154,7 +157,6 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
 ---
 
 ## 3. Diretrizes de Qualidade e Casos de Teste (ISO/IEC 25010 & 29119)
-
 
 1. **Adequação Funcional (OPTW com Hospedagens Variáveis)**:
    - Teste de propriedade (`hypothesis`): Provar que para qualquer combinação de Hotel A (partida) e Hotel B (retorno), a soma dos tempos de deslocamento, permanências nos POIs e slots de refeição nunca ultrapassa a Janela de Disponibilidade diária.
