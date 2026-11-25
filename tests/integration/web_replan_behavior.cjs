@@ -143,3 +143,44 @@ test("post-delay wall-clock time keeps TripDay and future meal slots in non-UTC 
     stdio: "pipe",
   });
 });
+
+test("updateMapRoute and currentCoordinate accept backend poi.location and poi.coordinates", () => {
+  let latLngs = null;
+  let fitted = null;
+  const context = vm.createContext({
+    map: {
+      getCenter: () => null,
+      fitBounds: (bounds) => { fitted = bounds; },
+    },
+    routeLine: {
+      setLatLngs: (coords) => { latLngs = coords; },
+    },
+    L: {
+      latLngBounds: (coords) => coords,
+    },
+  });
+  for (const name of ["poiLatLng", "updateMapRoute", "currentCoordinate"]) {
+    install(context, name);
+  }
+  context.state = {
+    selectedIndex: 0,
+    itinerary: [
+      { poi: { id: "a", location: { latitude: -23.56, longitude: -46.65 } } },
+      { poi: { id: "b", coordinates: [-23.58, -46.66] } },
+      { poi: { id: "c" } },
+    ],
+  };
+  vm.runInContext("updateMapRoute(state)", context);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(latLngs)),
+    [[-23.56, -46.65], [-23.58, -46.66]]
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(fitted)),
+    [[-23.56, -46.65], [-23.58, -46.66]]
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(vm.runInContext("currentCoordinate(state)", context))),
+    [-23.56, -46.65]
+  );
+});

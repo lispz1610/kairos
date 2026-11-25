@@ -734,6 +734,23 @@ function addMinutes(iso, minutes) {
 let map = null;
 let routeLine = null;
 
+function poiLatLng(poi) {
+  if (!poi) {
+    return null;
+  }
+  if (Array.isArray(poi.coordinates) && poi.coordinates.length === 2) {
+    return poi.coordinates;
+  }
+  if (
+    poi.location &&
+    typeof poi.location.latitude === "number" &&
+    typeof poi.location.longitude === "number"
+  ) {
+    return [poi.location.latitude, poi.location.longitude];
+  }
+  return null;
+}
+
 function initMap(state) {
   if (typeof L === "undefined") {
     return;
@@ -742,9 +759,7 @@ function initMap(state) {
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap contributors",
   }).addTo(map);
-  const first = state.itinerary[0]
-    ? state.itinerary[0].poi.coordinates
-    : [-23.5505, -46.6333];
+  const first = (state.itinerary[0] && poiLatLng(state.itinerary[0].poi)) || [-23.5505, -46.6333];
   map.setView(first, 10);
   routeLine = L.polyline([], { color: "#0b4f4a", weight: 4 }).addTo(map);
   updateMapRoute(state);
@@ -754,7 +769,9 @@ function updateMapRoute(state) {
   if (!map || !routeLine) {
     return;
   }
-  const coords = state.itinerary.map((item) => item.poi.coordinates);
+  const coords = (state.itinerary || [])
+    .map((item) => poiLatLng(item && item.poi))
+    .filter(Boolean);
   routeLine.setLatLngs(coords);
   if (coords.length > 1) {
     map.fitBounds(L.latLngBounds(coords), { padding: [10, 10] });
@@ -786,7 +803,7 @@ function currentCoordinate(state) {
     return [center.lat, center.lng];
   }
   const item = state.itinerary[state.selectedIndex] || state.itinerary[0];
-  return item ? item.poi.coordinates : [-23.5505, -46.6333];
+  return (item && poiLatLng(item.poi)) || [-23.5505, -46.6333];
 }
 
 function targetPoiId(state) {
@@ -917,8 +934,8 @@ async function replan(events, afterReplanned) {
   selectUpcoming(state, state.itinerary);
   saveState(state);
   renderTimeline(state);
-  updateMapRoute(state);
   showBanner(data);
+  updateMapRoute(state);
   return data;
 }
 

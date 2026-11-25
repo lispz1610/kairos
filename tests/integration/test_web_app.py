@@ -247,3 +247,13 @@ def test_index_page_declares_user_facing_error_messages() -> None:
     assert "Não foi possível ler o arquivo de Backup JSON" in messages["restoreReadError"]
     assert element_attributes(html, "impact-banner")["role"] == "status"
     assert "alert(" not in html
+
+
+def test_openapi_schema_endpoint_returns_valid_json() -> None:
+    """O schema OpenAPI do FastAPI serializa Coordinates sem AttributeError."""
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200, response.text
+    schema = response.json()
+    assert "paths" in schema
+    assert "/api/trip/replan" in schema["paths"]
