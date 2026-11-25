@@ -74,7 +74,7 @@ test("replanning sends reservations and saves the matching TripDay", async () =>
     },
     API_URL: "/api/trip/replan",
   });
-  for (const name of ["tripDay", "futureMealSlots", "futureReservedStops", "selectUpcoming", "replan"]) {
+  for (const name of ["tripDay", "slotWindowBounds", "futureMealSlots", "futureReservedStops", "selectUpcoming", "replan"]) {
     install(context, name);
   }
   await vm.runInContext(
@@ -88,4 +88,58 @@ test("replanning sends reservations and saves the matching TripDay", async () =>
   assert.deepEqual(savedTrip.stages[0].days[0].itinerary.stops, [visit]);
   assert.equal(savedTrip.stages[1].days[0].itinerary, undefined);
   assert.deepEqual(vm.runInContext("futureReservedStops(loadState())", context), []);
+});
+
+test("post-delay wall-clock time keeps TripDay and future meal slots in non-UTC timezones", () => {
+  const { execFileSync } = require("node:child_process");
+  const script = `
+    const assert = require("node:assert/strict");
+    const fs = require("node:fs");
+    const vm = require("node:vm");
+    const html = fs.readFileSync(${JSON.stringify(
+      path.join(__dirname, "../../src/adapters/web/templates/index.html")
+    )}, "utf8").replace(/\\r\\n/g, "\\n");
+    function install(context, name) {
+      const match = new RegExp("(?:async )?function " + name + "\\\\(").exec(html);
+      assert.ok(match, name + " should exist");
+      const end = html.indexOf("\\n}\\n", match.index);
+      vm.runInContext(html.slice(match.index, end + 2), context);
+    }
+    const restaurant = { id: "dinner", name: "Jantar", coordinates: [-23.55, -46.63] };
+    const day = {
+      date: "2026-11-01",
+      meal_slots: [
+        { window: null, selected_place: restaurant },
+        { window: { start_time: "22:30:00", end_time: "23:30:00" }, selected_place: restaurant },
+      ],
+    };
+    const trip = { stages: [{ id: "stage-a", days: [day, { date: "2026-11-02", meal_slots: [] }] }] };
+    const state = {
+      current_time: "2026-11-01T21:15:00",
+      reserved_future_stops: [],
+    };
+    const context = vm.createContext({ loadTrip: () => trip });
+    for (const name of ["addMinutes", "tripDay", "slotWindowBounds", "futureMealSlots", "futureReservedStops"]) {
+      install(context, name);
+    }
+    state.current_time = context.addMinutes(state.current_time, 30);
+    assert.equal(state.current_time, "2026-11-01T21:45:00");
+    assert.equal(context.tripDay(trip, state).date, "2026-11-01");
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(context.futureMealSlots(state))),
+      [day.meal_slots[1].window]
+    );
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(context.futureReservedStops(state))),
+      [{
+        poi: restaurant,
+        start: "2026-11-01T22:30:00",
+        duration_minutes: 60,
+      }]
+    );
+  `;
+  execFileSync(process.execPath, ["-e", script], {
+    env: { ...process.env, TZ: "America/Sao_Paulo" },
+    stdio: "pipe",
+  });
 });

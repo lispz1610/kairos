@@ -724,7 +724,11 @@ function fmt(iso) {
 function addMinutes(iso, minutes) {
   const date = new Date(iso);
   date.setMinutes(date.getMinutes() + minutes);
-  return date.toISOString();
+  const pad = (value) => String(value).padStart(2, "0");
+  return (
+    date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) +
+    "T" + pad(date.getHours()) + ":" + pad(date.getMinutes()) + ":" + pad(date.getSeconds())
+  );
 }
 
 let map = null;
@@ -825,35 +829,48 @@ function tripDay(trip, state) {
   );
 }
 
+function slotWindowBounds(slot) {
+  if (!slot || !slot.window) {
+    return null;
+  }
+  const start = slot.window.start_time || slot.window.start;
+  const end = slot.window.end_time || slot.window.end;
+  if (!start || !end) {
+    return null;
+  }
+  return { start, end };
+}
+
 function futureMealSlots(state) {
   const trip = loadTrip();
   const day = tripDay(trip, state);
   const slots = day && Array.isArray(day.meal_slots) ? day.meal_slots : [];
   const currentHour = state.current_time.slice(11, 16);
   return slots.filter((slot) => {
-    const end = slot.window && (slot.window.end_time || slot.window.end);
-    return end && end.slice(0, 5) > currentHour;
+    const bounds = slotWindowBounds(slot);
+    return bounds && bounds.end.slice(0, 5) > currentHour;
   }).map((slot) => slot.window);
 }
 
 function futureReservedStops(state) {
   const day = tripDay(loadTrip(), state);
   const slots = day && Array.isArray(day.meal_slots) ? day.meal_slots : [];
+  const currentHour = state.current_time.slice(11, 16);
   const reserved = (state.reserved_future_stops || []).filter((stop) =>
     stop.start.slice(0, 10) === state.current_time.slice(0, 10) &&
     new Date(stop.start).getTime() + stop.duration_minutes * 60000 >
       new Date(state.current_time).getTime()
   );
-  slots.filter((slot) => slot.selected_place &&
-    (slot.window.end_time || slot.window.end) > state.current_time.slice(11, 19)
-  ).forEach((slot) => {
-    const start = slot.window.start_time || slot.window.start;
-    const end = slot.window.end_time || slot.window.end;
-    const minutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+  const minutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+  slots.forEach((slot) => {
+    const bounds = slotWindowBounds(slot);
+    if (!slot || !slot.selected_place || !bounds || bounds.end.slice(0, 5) <= currentHour) {
+      return;
+    }
     const stop = {
       poi: slot.selected_place,
-      start: day.date + "T" + start,
-      duration_minutes: minutes(end) - minutes(start),
+      start: day.date + "T" + bounds.start,
+      duration_minutes: minutes(bounds.end) - minutes(bounds.start),
     };
     if (!reserved.some((item) => item.poi.id === stop.poi.id && item.start === stop.start)) {
       reserved.push(stop);

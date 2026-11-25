@@ -51,6 +51,38 @@ def test_markdown_uses_effective_stop_duration_and_connection_modal() -> None:
     assert "Modal: `transit`" in markdown
 
 
+@pytest.mark.requirement("RF08")
+def test_markdown_uses_effective_itinerary_stop_duration() -> None:
+    """O guia calcula a duração efetiva de ``ItineraryStop`` fora do padrão do POI."""
+    hotel = Accommodation(
+        id="hotel", name="Hospedagem", location=Coordinates(latitude=0, longitude=0)
+    )
+    stage = TripStage.create(
+        id="stage",
+        city_name="Cidade",
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 21),
+        base_accommodation=hotel,
+    )
+    poi = POI(id="poi", name="Museu", location=hotel.location, stay_duration_minutes=60)
+    stage.days[0].itinerary = Itinerary(
+        stops=[
+            ItineraryStop(
+                poi=poi,
+                arrival_time=time(10, 0),
+                departure_time=time(10, 40),
+                transit_duration_minutes=10,
+            )
+        ]
+    )
+
+    markdown = MarkdownExportService().export_trip_markdown(
+        Trip(id="trip", title="Viagem", stages=[stage])
+    )
+
+    assert "**Museu** (40 min)" in markdown
+
+
 @pytest.mark.requirement("RF02", "RF08")
 def test_markdown_export_service_structure() -> None:
     """Verifica a estrutura completa do Markdown exportado de uma Viagem."""

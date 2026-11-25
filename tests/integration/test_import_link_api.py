@@ -1,11 +1,29 @@
+import importlib
+from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from src.adapters.places.cached_adapter import CachedPlacesAdapter
 from src.adapters.web.app import app
+from src.core.services.curation import CurationService
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolated_places_adapter(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
+    """Isolar o cache SQLite durante os testes de importação de link."""
+    web_module = importlib.import_module("src.adapters.web.app")
+    adapter = CachedPlacesAdapter(api_key="", cache_path=tmp_path / "places.db")
+    service = CurationService(places_port=adapter)
+    monkeypatch.setattr(web_module, "places_adapter", adapter)
+    monkeypatch.setattr(web_module, "curation_service", service)
+    monkeypatch.setattr(web_module.link_parser_service, "curation_service", service)
+    yield
+    adapter._conn.close()
 
 
 @pytest.mark.parametrize(

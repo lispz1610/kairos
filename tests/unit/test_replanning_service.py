@@ -95,6 +95,26 @@ def test_replan_does_not_overlap_future_reserved_meal_slot() -> None:
     assert candidate.start >= meal.end or candidate.end <= meal.start
 
 
+@pytest.mark.requirement("RF03", "RF12")
+def test_replan_blocks_reserved_meal_slots_directly() -> None:
+    """``reserved_meal_slots`` sem estabelecimento selecionado bloqueia a janela."""
+    poi = _make_poi("POI-A", time(9, 0), time(14, 0))
+    poi.stay_duration_minutes = 90
+    meal_slot = TimeWindow(start_time=time(11, 0), end_time=time(11, 30))
+    result = _replan(
+        itinerary=Itinerary(stops=[_stop(poi, datetime(2026, 11, 20, 12, 0), 90)]),
+        availability_window=TimeWindow(start=time(9, 0), end=time(14, 0)),
+        current_time=datetime(2026, 11, 20, 10, 0),
+        reserved_meal_slots=[meal_slot],
+        travel_time_minutes=0,
+    )
+
+    candidate = next(stop for stop in result.itinerary.stops if stop.poi.id == "POI-A")
+    slot_start = datetime(2026, 11, 20, 11, 0)
+    slot_end = datetime(2026, 11, 20, 11, 30)
+    assert candidate.start >= slot_end or candidate.end <= slot_start
+
+
 def test_ac1_paradas_ate_current_time_preservadas_como_historico():
     """Valida preservação de paradas até o horário atual como histórico."""
     availability = TimeWindow(start=time(8, 0), end=time(20, 0))
