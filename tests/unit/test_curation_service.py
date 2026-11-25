@@ -75,10 +75,10 @@ def test_curation_service_with_injected_port() -> None:
 def test_curation_service_requires_places_port() -> None:
     """Verifica que o serviço exige PlacesPort e funciona com OfflineReplayPlacesAdapter."""
     with pytest.raises(TypeError):
-        CurationService()  # type: ignore[call-arg]
+        CurationService()
 
     with pytest.raises(ValueError, match="places_port é obrigatório."):
-        CurationService(places_port=None)  # type: ignore[arg-type]
+        CurationService(places_port=None)
 
     service = CurationService(places_port=OfflineReplayPlacesAdapter())
     assert isinstance(service.places_port, PlacesPort)

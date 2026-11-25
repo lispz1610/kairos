@@ -199,7 +199,16 @@ def arbitrary_trips(draw: st.DrawFn) -> Trip:
         stages.append(stage)
 
         if i > 0:
-            mode = draw(st.sampled_from(list(TransportMode)))
+            mode = draw(
+                st.sampled_from(
+                    [
+                        TransportMode.WALKING,
+                        TransportMode.DRIVING,
+                        TransportMode.FLYING,
+                        TransportMode.TRANSIT,
+                    ]
+                )
+            )
             connections.append(
                 InterCityConnection(
                     id=f"conn_{i-1}_{i}",

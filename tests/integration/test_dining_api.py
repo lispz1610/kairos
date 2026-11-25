@@ -245,3 +245,32 @@ def test_contextual_dining_slots_endpoint() -> None:
 
     # Jantar deve recomendar primeiro o gourmet próximo ao Ibirapuera (último POI da tarde)
     assert dinner_slot["recommended_places"][0]["id"] == "rest-near-park"
+
+
+@pytest.mark.requirement("RF03", "RF04")
+def test_contextual_dining_slots_includes_thematic_slots_at_intensity_five() -> None:
+    """Verifica a fronteira inclusiva de intensidade dos Slots temáticos de Café e Vinho."""
+    payload = {
+        "departure_location": {"latitude": -23.55, "longitude": -46.63},
+        "return_location": {"latitude": -23.57, "longitude": -46.67},
+        "restaurant_candidates": [
+            {
+                "id": "rest-central",
+                "name": "Restaurante Central",
+                "location": {"latitude": -23.56, "longitude": -46.65},
+                "category": "restaurant",
+            }
+        ],
+        "preferences": {
+            "intensities": {
+                "Coffee Lover": 5.0,
+                "Wine Lover": 5.0,
+            }
+        },
+    }
+
+    response = client.post("/api/dining/contextual-slots", json=payload)
+    assert response.status_code == 200
+    slot_ids = [slot["id"] for slot in response.json()]
+    assert "slot-coffee" in slot_ids
+    assert "slot-wine" in slot_ids

@@ -261,8 +261,6 @@ def test_intercity_risk_alert_reported_when_boarding_does_not_fit():
     availability_window = TimeWindow(start=time(8, 0), end=time(18, 0))
     poi_a = _poi("POI-A", time(14, 0), time(18, 0), utility_score=9.0)
     connection = InterCityConnection(
-        origin="A",
-        destination="B",
         departure_datetime=datetime(2026, 11, 20, 15, 0),
         boarding_cutoff_minutes=30,
     )

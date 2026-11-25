@@ -23,6 +23,7 @@ import pytest
 from hypothesis import given
 
 from src.core.domain.models import POI, Accommodation, Coordinates, Itinerary, TimeWindow
+from src.core.services.preferences import PreferencesService
 from src.core.services.schedule import ScheduleService
 from src.core.solvers.optw import OPTWSolver
 
@@ -240,7 +241,7 @@ def test_optw_solver_respects_time_budget_and_depots() -> None:
         utility_score=1.0,
     )
 
-    solver = OPTWSolver()
+    solver = OPTWSolver(preferences_service=PreferencesService())
     itinerary = solver.solve(
         start_location=hotel_a.location,
         end_location=hotel_b.location,
@@ -304,7 +305,9 @@ def test_optw_solver_local_search_2opt_and_swap_optimization() -> None:
         utility_score=10.0,
     )
 
-    solver = OPTWSolver(transit_speed_kmh=20.0)
+    solver = OPTWSolver(
+        preferences_service=PreferencesService(), transit_speed_kmh=20.0
+    )
     itinerary = solver.solve(
         start_location=start_loc,
         end_location=end_loc,
@@ -346,7 +349,7 @@ def test_optw_solver_blocks_attractions_during_reserved_slots() -> None:
         for i in range(6)
     ]
 
-    solver = OPTWSolver()
+    solver = OPTWSolver(preferences_service=PreferencesService())
     itinerary = solver.solve(
         start_location=start_loc,
         end_location=end_loc,

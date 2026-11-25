@@ -242,8 +242,6 @@ def test_ac3_teto_seguro_da_conexao_interurbana_aplicado_no_ultimo_dia():
         )
     ]
     connection = InterCityConnection(
-        origin="A",
-        destination="B",
         departure_datetime=datetime(2026, 11, 20, 15, 30),
         modal="flying",
     )
@@ -284,8 +282,6 @@ def test_ac4_alerta_de_risco_com_deficit_em_minutos_quando_embarque_nao_cabe():
     availability = TimeWindow(start=time(8, 0), end=time(18, 0))
     poi_a = _make_poi("POI-A", time(9, 0), time(12, 0), utility_score=9.0)
     connection = InterCityConnection(
-        origin="A",
-        destination="B",
         departure_datetime=datetime(2026, 11, 20, 15, 0),
         boarding_cutoff_minutes=30,
     )
