@@ -142,16 +142,11 @@ run_mutation() {
   # mutmut 3.x rejects trampolines whose runtime __module__ starts with `src.`
   # (record_trampoline_hit asserts `not name.startswith("src.")`), and its
   # also_copy step dereferences symlinks into unmutated copies. In the isolated
-  # workspace, promote `core` and `adapters` to top-level packages and rewrite
-  # `from src.` / `import src.` imports to match, while preserving non-Python
-  # template assets under `src/adapters/web/templates` for contract tests.
-  mv "$mutmut_dir/src/core" "$mutmut_dir/core"
-  mv "$mutmut_dir/src/adapters" "$mutmut_dir/adapters"
-  rm -rf "$mutmut_dir/src"
-  if [[ -d "$mutmut_dir/adapters/web/templates" ]]; then
-    mkdir -p "$mutmut_dir/src/adapters/web"
-    cp -R "$mutmut_dir/adapters/web/templates" "$mutmut_dir/src/adapters/web/templates"
-  fi
+  # workspace, copy `core` and `adapters` as top-level packages and rewrite
+  # `from src.` / `import src.` imports in `core`, `adapters`, and `tests`,
+  # while preserving `src/` so template assets and AST inventory tests pass.
+  cp -R "$mutmut_dir/src/core" "$mutmut_dir/core"
+  cp -R "$mutmut_dir/src/adapters" "$mutmut_dir/adapters"
 
   "$python_bin" - "$mutmut_dir" <<'PY'
 import pathlib

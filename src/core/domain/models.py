@@ -212,7 +212,7 @@ class Coordinates(KairosModel):
     longitude: float
 
     @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema: Any, handler: Any) -> Any:
+    def __get_pydantic_json_schema__(cls, _core_schema: Any, handler: Any) -> Any:
         """Personalizar o schema OpenAPI/JSON gerado para representar tupla de floats."""
         return handler(
             core_schema.tuple_schema(
