@@ -145,6 +145,15 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
   4. O endpoint constrói os Eventos de Domínio via ``_to_domain_event`` (``DelayEvent`` com ``current_time``/``coordinates`` do pedido) e acumula ``duration_adjustments`` a partir dos ``DurationAdjustmentEvent``, repassando ``reserved_future_stops`` e ``duration_adjustments`` a ``ReplanningService.replan``.
   5. A interface associa a timeline ao Dia de Viagem pela data, alimenta ``reserved_future_stops`` com as paradas já reservadas e os estabelecimentos selecionados nos Slots de Refeição, e envia ``reserved_meal_slots`` dos Slots futuros desse dia. O Roteiro replanejado é persistido no Dia de Viagem original para a exportação, mesmo quando o Evento de Contingência altera a data do relógio da timeline.
 
+### RF14 — Modal Urbano do Dia de Viagem no Deslocamento do Roteiro
+- **Descrição**: O Dia de Viagem passa a guardar o Modal Urbano escolhido e o ``POST /api/trip/optimize`` aceita o mesmo modal, de forma opcional.
+- **Comportamento**:
+  1. ``TripDay.urban_mode`` aceita `walking` e `driving`; quando omitido, o Dia de Viagem fica em `driving`, inclusive em backup JSON escrito antes da existência do campo.
+  2. `flying` e `transit` pertencem à Conexão Interurbana e são recusados no Dia de Viagem e no pedido de otimização, sem conversão para `driving`.
+  3. O ``POST /api/trip/optimize`` aceita ``urban_mode`` opcional; omiti-lo equivale a informar `driving`.
+  4. Sem ``urban_mode`` ou com ``urban_mode: driving``, o Deslocamento do Roteiro permanece estimado a 25 km/h; ambos os pedidos produzem o mesmo Deslocamento.
+  5. Com ``urban_mode: walking``, o Deslocamento do Roteiro é estimado a 5 km/h; para os mesmos Pontos de Interesse e Janela de Disponibilidade, um Ponto de Interesse que deixa de caber na janela é descartado, mantendo o Roteiro viável.
+
 ---
 
 ## 3. Diretrizes de Qualidade e Casos de Teste (ISO/IEC 25010 & 29119)

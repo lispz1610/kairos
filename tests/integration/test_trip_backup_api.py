@@ -101,3 +101,24 @@ def test_backup_validate_rejects_non_object_body() -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"]
+
+
+@pytest.mark.requirement("RF14")
+def test_backup_validate_preserves_urban_mode_and_defaults_legacy_day() -> None:
+    """Backup JSON preserva walking, assume driving quando omitido e recusa flying."""
+    payload = restorable_trip_payload()
+    payload["stages"][0]["days"][0]["urban_mode"] = "walking"
+    payload["stages"][1]["days"][0].pop("urban_mode", None)
+    assert "urban_mode" not in payload["stages"][1]["days"][0]
+
+    response = client.post(BACKUP_VALIDATE_URL, json=payload)
+
+    assert response.status_code == 200, response.text
+    validated = response.json()
+    assert validated["stages"][0]["days"][0]["urban_mode"] == "walking"
+    assert validated["stages"][1]["days"][0]["urban_mode"] == "driving"
+
+    invalid = restorable_trip_payload()
+    invalid["stages"][0]["days"][0]["urban_mode"] = "flying"
+    rejected = client.post(BACKUP_VALIDATE_URL, json=invalid)
+    assert rejected.status_code == 422

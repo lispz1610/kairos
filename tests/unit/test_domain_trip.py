@@ -1,6 +1,7 @@
 from datetime import date
 
 import pytest
+from pydantic import ValidationError
 
 from src.core.domain.models import (
     Accommodation,
@@ -8,7 +9,9 @@ from src.core.domain.models import (
     InterCityConnection,
     TransportMode,
     Trip,
+    TripDay,
     TripStage,
+    UrbanMode,
 )
 
 
@@ -194,3 +197,101 @@ def test_deserialized_trip_relinks_previous_day_accommodations_for_transition_de
     assert restored.stages[0].days[2].is_transition_day  # switches back to base hotel_a
     assert restored.stages[0].days[2].departure_accommodation.id == "h-b"
     assert restored.stages[0].days[2].return_accommodation.id == "h-a"
+
+
+@pytest.mark.requirement("RF14")
+def test_trip_day_urban_mode_defaults_to_driving_and_keeps_urban_values() -> None:
+    """Verifica o padrão driving e a preservação dos valores urbanos no Dia de Viagem."""
+    hotel = Accommodation(
+        id="hotel-urban",
+        name="Hotel Urbano",
+        location=Coordinates(latitude=-23.55, longitude=-46.66),
+    )
+    day_data = {"date": date(2026, 11, 1), "base_accommodation": hotel}
+
+    assert TripDay.model_validate(day_data).urban_mode == UrbanMode.DRIVING
+    assert (
+        TripDay.model_validate({**day_data, "urban_mode": "walking"}).urban_mode
+        == UrbanMode.WALKING
+    )
+    assert (
+        TripDay.model_validate({**day_data, "urban_mode": "driving"}).urban_mode
+        == UrbanMode.DRIVING
+    )
+
+
+@pytest.mark.requirement("RF14")
+@pytest.mark.parametrize("non_urban_mode", ["flying", "transit"])
+def test_trip_day_rejects_flying_and_transit(non_urban_mode: str) -> None:
+    """Verifica que um Modal de Transporte interurbano não vira Modal Urbano do dia."""
+    with pytest.raises(ValidationError):
+        TripDay.model_validate(
+            {
+                "date": date(2026, 11, 1),
+                "base_accommodation": {
+                    "id": "hotel-urban",
+                    "name": "Hotel Urbano",
+                    "location": {"latitude": -23.55, "longitude": -46.66},
+                },
+                "urban_mode": non_urban_mode,
+            }
+        )
+
+
+@pytest.mark.requirement("RF14")
+def test_legacy_trip_backup_without_urban_mode_loads_as_driving() -> None:
+    """Verifica que backup JSON antigo carrega como driving e preserva walking no round-trip."""
+    hotel = {
+        "id": "hotel-legacy",
+        "name": "Hotel Antigo",
+        "location": {"latitude": -23.55, "longitude": -46.66},
+    }
+    raw_trip = {
+        "id": "trip-legacy",
+        "title": "Viagem Antiga",
+        "stages": [
+            {
+                "id": "stage-legacy",
+                "city_name": "São Paulo",
+                "start_date": "2026-11-01",
+                "end_date": "2026-11-02",
+                "base_accommodation": hotel,
+                "days": [{"date": "2026-11-01", "base_accommodation": hotel}],
+            }
+        ],
+    }
+
+    trip = Trip.model_validate(raw_trip)
+    assert trip.stages[0].days[0].urban_mode == UrbanMode.DRIVING
+
+    trip.stages[0].days[0].urban_mode = UrbanMode.WALKING
+    restored = Trip.model_validate_json(trip.model_dump_json())
+    assert restored.stages[0].days[0].urban_mode == UrbanMode.WALKING
+
+
+@pytest.mark.requirement("RF14")
+def test_trip_stage_preserves_distinct_urban_modes_across_days_in_round_trip() -> None:
+    """Dois Dias de Viagem da mesma etapa mantêm Modais Urbanos distintos no round-trip."""
+    hotel = Accommodation(
+        id="hotel-stage",
+        name="Hotel Etapa",
+        location=Coordinates(latitude=-23.55, longitude=-46.66),
+    )
+    stage = TripStage.create(
+        id="stage-mixed",
+        city_name="São Paulo",
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 3),
+        base_accommodation=hotel,
+    )
+    stage.days[0].urban_mode = UrbanMode.WALKING
+    stage.days[1].urban_mode = UrbanMode.DRIVING
+
+    restored = Trip.model_validate_json(
+        Trip(id="trip-mixed", title="Etapa Mista", stages=[stage]).model_dump_json()
+    )
+
+    assert [day.urban_mode for day in restored.stages[0].days] == [
+        UrbanMode.WALKING,
+        UrbanMode.DRIVING,
+    ]

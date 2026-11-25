@@ -31,6 +31,7 @@ from src.core.domain.models import (
     Trip,
     TripDay,
     TripStage,
+    UrbanMode,
 )
 from src.core.services.curation import CurationService
 from src.core.services.dining_and_budget import BudgetSummary, DiningService
@@ -38,7 +39,7 @@ from src.core.services.link_parser import LinkParserService, SSRFValidationError
 from src.core.services.markdown_export import MarkdownExportService
 from src.core.services.replanning import InterCityRiskAlert, ReplanResult
 from src.core.services.schedule import RippleShiftPreview, ScheduleService
-from src.core.solvers.optw import OPTWSolver
+from src.core.solvers.optw import OPTWSolver, urban_mode_speed_kmh
 
 __all__ = [
     "ContingencyEventRequest",
@@ -65,7 +66,6 @@ static_dir = BASE_DIR / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-solver = OPTWSolver()
 schedule_service = ScheduleService()
 dining_service = DiningService()
 markdown_service = MarkdownExportService()
@@ -86,6 +86,7 @@ class OptimizeRequest(BaseModel):
     preferences: Optional[PreferencesProfile] = None
     reserved_slots: Optional[List[TimeWindow]] = None
     curation_lists: Optional[List[CurationList]] = None
+    urban_mode: UrbanMode = UrbanMode.DRIVING
 
 
 class RippleShiftRequest(BaseModel):
@@ -282,6 +283,7 @@ def optimize_trip_day(req: OptimizeRequest) -> Itinerary:
         candidates = curation_service.apply_curation_boost(
             candidates, req.curation_lists
         )
+    solver = OPTWSolver(transit_speed_kmh=urban_mode_speed_kmh(req.urban_mode))
     return solver.solve(
         start_location=req.start_location,
         end_location=req.end_location,
