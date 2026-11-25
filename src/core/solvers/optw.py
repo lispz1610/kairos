@@ -46,6 +46,7 @@ def urban_mode_speed_kmh(mode: UrbanMode) -> float:
     """Retorna a velocidade média, em km/h, do Deslocamento no Modal Urbano informado."""
     return _URBAN_MODE_SPEED_KMH[mode]
 
+
 def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
     """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
     r = 6371.0

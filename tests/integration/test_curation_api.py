@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -11,17 +10,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.places.cached_adapter import CachedPlacesAdapter
-from src.adapters.web.app import app
+from src.adapters.web import app as web_module
 from src.core.domain.models import POI, Coordinates
 from src.core.services.curation import CurationService
 
-client = TestClient(app)
+client = TestClient(web_module.app)
 
 
 @pytest.fixture(autouse=True)
 def isolated_places_adapter(monkeypatch, tmp_path: Path) -> Iterator[CachedPlacesAdapter]:
     """Usar um cache SQLite exclusivo por caso de integração."""
-    web_module = importlib.import_module("src.adapters.web.app")
     adapter = CachedPlacesAdapter(api_key="", cache_path=tmp_path / "places.db")
     monkeypatch.setattr(web_module, "places_adapter", adapter)
     monkeypatch.setattr(web_module, "curation_service", CurationService(places_port=adapter))
@@ -33,7 +31,6 @@ def isolated_places_adapter(monkeypatch, tmp_path: Path) -> Iterator[CachedPlace
 @pytest.mark.parametrize("name", ["primeira execução", "segunda execução"])
 def test_places_cache_is_independent_between_cases(monkeypatch, name: str) -> None:
     """Consultas idênticas em casos distintos recebem seus próprios dados."""
-    web_module = importlib.import_module("src.adapters.web.app")
     poi = POI(id="isolated", name=name, location=Coordinates(latitude=0, longitude=0))
     fallback = SimpleNamespace(search_places=lambda query, city: [poi])
     monkeypatch.setattr(web_module.places_adapter, "fallback_adapter", fallback)

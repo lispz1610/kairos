@@ -32,35 +32,21 @@ from pydantic import (
 from pydantic.fields import FieldInfo
 from pydantic_core import core_schema
 
-
-def _parse_iso_date(value: Any) -> Any:
-    """Aceitar datas ISO mesmo quando a validação está em modo estrito."""
-    if isinstance(value, str):
-        try:
-            return date.fromisoformat(value)
-        except ValueError:
-            return value
-    return value
+_TParsed = TypeVar("_TParsed")
 
 
-def _parse_iso_datetime(value: Any) -> Any:
-    """Aceitar data/hora ISO mesmo quando a validação está em modo estrito."""
-    if isinstance(value, str):
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError:
-            return value
-    return value
+def _parse_iso(parser: Callable[[str], _TParsed]) -> Callable[[Any], Any]:
+    """Aceitar valores ISO em texto mesmo quando a validação está em modo estrito."""
 
+    def convert(value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                return parser(value)
+            except ValueError:
+                return value
+        return value
 
-def _parse_iso_time(value: Any) -> Any:
-    """Aceitar horário ISO mesmo quando a validação está em modo estrito."""
-    if isinstance(value, str):
-        try:
-            return time.fromisoformat(value)
-        except ValueError:
-            return value
-    return value
+    return convert
 
 
 _TEnum = TypeVar("_TEnum", bound=Enum)
@@ -80,9 +66,9 @@ def _parse_enum(enum_type: type[_TEnum]) -> Callable[[Any], Any]:
     return convert
 
 
-IsoDate = Annotated[date, BeforeValidator(_parse_iso_date)]
-IsoDatetime = Annotated[datetime, BeforeValidator(_parse_iso_datetime)]
-IsoTime = Annotated[time, BeforeValidator(_parse_iso_time)]
+IsoDate = Annotated[date, BeforeValidator(_parse_iso(date.fromisoformat))]
+IsoDatetime = Annotated[datetime, BeforeValidator(_parse_iso(datetime.fromisoformat))]
+IsoTime = Annotated[time, BeforeValidator(_parse_iso(time.fromisoformat))]
 
 
 def _field_input_names(field: FieldInfo) -> set[str]:
@@ -390,8 +376,8 @@ class ItineraryStop(KairosModel):
     """Ponto de Interesse de um Roteiro com chegada, partida e Deslocamento."""
 
     poi: POI
-    arrival_time: time
-    departure_time: time
+    arrival_time: IsoTime
+    departure_time: IsoTime
     transit_duration_minutes: int = 0
 
     @property
@@ -409,7 +395,7 @@ class RouteStop(KairosModel):
     """Visita a um Ponto de Interesse: ``poi``, ``start`` e Tempo de Permanência."""
 
     poi: POI = Field(description="Ponto de Interesse visitado.")
-    start: datetime = Field(description="Horário de início da visita ao POI.")
+    start: IsoDatetime = Field(description="Horário de início da visita ao POI.")
     duration_minutes: int = Field(
         ge=0, description="Tempo de Permanência no POI, em minutos."
     )
@@ -602,22 +588,20 @@ class InterCityConnection(KairosModel):
         """Normaliza departure_datetime legado e aplica Margem de Embarque padrão do modal."""
         if not isinstance(data, dict):
             return data
-        if data.get("departure_datetime") is None:
-            parsed_departure = cls._parse_departure_value(data.get("departure_time"))
+        normalized = dict(data)
+        if normalized.get("departure_datetime") is None:
+            parsed_departure = cls._parse_departure_value(normalized.get("departure_time"))
             if parsed_departure is not None:
-                data = {**data, "departure_datetime": parsed_departure}
-        if "mode" in data:
-            if data.get("modal") is None:
-                data = {**data, "modal": data["mode"]}
-            data = {key: value for key, value in data.items() if key != "mode"}
-        if data.get("boarding_cutoff_minutes") is None:
-            raw_modal = data.get("modal")
+                normalized["departure_datetime"] = parsed_departure
+        if "mode" in normalized:
+            legacy_mode = normalized.pop("mode")
+            if normalized.get("modal") is None:
+                normalized["modal"] = legacy_mode
+        if normalized.get("boarding_cutoff_minutes") is None:
+            raw_modal = normalized.get("modal")
             modal = raw_modal if isinstance(raw_modal, str) else None
-            data = {
-                **data,
-                "boarding_cutoff_minutes": cls._resolve_boarding_cutoff(modal),
-            }
-        return data
+            normalized["boarding_cutoff_minutes"] = cls._resolve_boarding_cutoff(modal)
+        return normalized
 
     @model_validator(mode="after")
     def _set_departure_time_from_datetime(self) -> Self:
@@ -677,7 +661,7 @@ class Trip(KairosModel):
 
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
-    travelers: int = 1
+    travelers: int = Field(default=1, ge=1)
     notes: Optional[str] = None
     stages: list[TripStage] = Field(default_factory=list)
     connections: list[InterCityConnection] = Field(default_factory=list)

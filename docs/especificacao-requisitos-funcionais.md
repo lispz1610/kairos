@@ -158,7 +158,6 @@ Esta especificação define os requisitos funcionais detalhados construídos a p
 
 ## 3. Diretrizes de Qualidade e Casos de Teste (ISO/IEC 25010 & 29119)
 
-
 1. **Adequação Funcional (OPTW com Hospedagens Variáveis)**:
    - Teste de propriedade (`hypothesis`): Provar que para qualquer combinação de Hotel A (partida) e Hotel B (retorno), a soma dos tempos de deslocamento, permanências nos POIs e slots de refeição nunca ultrapassa a Janela de Disponibilidade diária.
 2. **Confiabilidade (Ripple Shift Invariants)**:
