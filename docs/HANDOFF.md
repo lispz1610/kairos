@@ -1,10 +1,10 @@
 # Handoff — Projeto Kairos (Traçador Dinâmico de Rotas Turísticas)
 
-**Data**: 2026-11-07 (atualizado em 2026-11-25)  
-**Repositório Remoto**: `git@github.com:lispz1610/kairos.git` (branch `main`)  
-**Disciplina**: DCC061 - Engenharia de Software (UFJF) — Prof. Fabrício Martins Mendonça  
-**Documentação Relacionada**: [README.md](../README.md) · [GLOSSARY.md](../GLOSSARY.md) · [Especificação de Requisitos (RF01–RF14)](./especificacao-requisitos-funcionais.md) · [Plano de Testes 29119](./testing/test-plan-29119.md) · [Freshness](./documentation-freshness.md)  
-**Status**: Sistema implementado, consolidado e verificado ponta a ponta. Concepção, glossário ubíquo e ADRs `0001`–`0007` concluídos; requisitos `RF01`–`RF14` entregues (incluindo `RF14` **Modal Urbano**), arquitetura hexagonal consolidada (`#103` / PR `#118`), correções de **Replanejamento** e isolamento de cache SQLite entregues (`#104` / PR `#117`), guia didático reestruturado no [README.md](../README.md), [Plano de Testes ISO/IEC/IEEE 29119](./testing/test-plan-29119.md) sincronizado e revisão auditável de frescor documental registrada para encerramento pós-merge das pendências `#50`, `#52` e `#53`. Restam declaradas apenas lacunas parciais de interação visual em navegador real (ver §8 do Plano de Testes, conforme [ADR 0002](./adr/0002-stack-backend-python-fastapi.md)).
+- **Data**: 2026-11-07 (atualizado em 2026-11-25)
+- **Repositório Remoto**: `git@github.com:lispz1610/kairos.git` (branch `main`)
+- **Disciplina**: DCC061 - Engenharia de Software (UFJF) — Prof. Fabrício Martins Mendonça
+- **Documentação Relacionada**: [README.md](../README.md) · [GLOSSARY.md](../GLOSSARY.md) · [Especificação de Requisitos (RF01–RF14)](./especificacao-requisitos-funcionais.md) · [Plano de Testes 29119](./testing/test-plan-29119.md) · [Freshness](./documentation-freshness.md)
+- **Status**: Sistema implementado, consolidado e verificado ponta a ponta. Concepção, glossário ubíquo e ADRs `0001`–`0007` concluídos; requisitos `RF01`–`RF14` entregues (incluindo `RF14` **Modal Urbano**), arquitetura hexagonal consolidada (`#103` / PR `#118`), correções de **Replanejamento** e isolamento de cache SQLite entregues (`#104` / PR `#117`), guia didático reestruturado no [README.md](../README.md), [Plano de Testes ISO/IEC/IEEE 29119](./testing/test-plan-29119.md) sincronizado e revisão auditável de frescor documental registrada para encerramento pós-merge das pendências `#50`, `#52` e `#53`. Restam declaradas apenas lacunas parciais de interação visual em navegador real (ver §8 do Plano de Testes, conforme [ADR 0002](./adr/0002-stack-backend-python-fastapi.md)).
 
 ---
 
