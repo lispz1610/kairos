@@ -205,6 +205,10 @@ class ReplanRequest(BaseModel):
             "preservadas no Roteiro replanejado."
         ),
     )
+    reserved_meal_slots: list[TimeWindow] = Field(
+        default_factory=list,
+        description="Janelas de Slots de Refeição futuros reservados no Dia de Viagem.",
+    )
     closed_pois: list[str] = Field(
         default_factory=list,
         description="POIs já fechados — excluídos do Replanejamento.",
@@ -257,8 +261,8 @@ def trip_replan(request: ReplanRequest) -> ReplanResponse:
         current_coordinate=request.current_coordinate,
         events=request.events,
         reserved_future_stops=request.reserved_future_stops,
-        closed_pois=request.closed_pois,
-        skipped_pois=request.skipped_pois,
+        reserved_meal_slots=request.reserved_meal_slots,
+        excluded_pois=[*request.closed_pois, *request.skipped_pois],
         intercity_connection=request.intercity_connection,
         travel_time_minutes=request.travel_time_minutes,
     )

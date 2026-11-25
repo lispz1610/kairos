@@ -21,8 +21,6 @@ from src.core.services.schedule import ScheduleService
 
 __all__ = ["OPTWSolver", "haversine_distance_km", "estimate_transit_minutes"]
 
-_VISIT_DURATION_MINUTES = 0
-
 
 def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
     """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
@@ -603,7 +601,7 @@ def _simulate(
     stops: list[RouteStop] = []
     cursor = start_time
     for poi in sequence:
-        duration_minutes = durations.get(poi.id, _VISIT_DURATION_MINUTES)
+        duration_minutes = durations.get(poi.id, poi.stay_duration_minutes)
         stops.append(
             RouteStop(poi=poi, start=cursor, duration_minutes=duration_minutes)
         )

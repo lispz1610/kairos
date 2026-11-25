@@ -11,7 +11,7 @@ aplicando a proteção do teto seguro da Conexão Interurbana.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Union
 
 from pydantic import BaseModel, Field
@@ -90,6 +90,7 @@ class ReplanningService:
         excluded_pois: Sequence[str] = (),
         reserved_future_stops: Sequence[StopUnion] = (),
         duration_adjustments: Mapping[str, int] | None = None,
+        reserved_meal_slots: Sequence[TimeWindow] = (),
     ) -> ReplanResult:
         """Reotimizar o Roteiro restante do Dia de Viagem.
 
@@ -151,12 +152,13 @@ class ReplanningService:
                 itinerary=itinerary,
                 prefix_ids=prefix_ids,
                 excluded_pois=excluded_pois,
-                availability_window=availability_window,
                 window_end=window_end,
                 travel_time_minutes=travel_time_minutes,
                 replan_start=replan_start,
                 duration_adjustments=duration_adjustments,
                 coordinates=coordinates,
+                reserved_stops=prefix,
+                reserved_meal_slots=reserved_meal_slots,
             )
             if ReplanningService._can_solve(
                 alert, replan_start, availability_window, intercity_connection
@@ -205,12 +207,13 @@ class ReplanningService:
         itinerary: Itinerary,
         prefix_ids: set[str],
         excluded_pois: Sequence[str],
-        availability_window: TimeWindow,
         window_end: time,
         travel_time_minutes: float,
         replan_start: datetime,
         duration_adjustments: Mapping[str, int] | None,
         coordinates: Coordinates,
+        reserved_stops: Sequence[StopUnion],
+        reserved_meal_slots: Sequence[TimeWindow],
     ) -> Itinerary:
         """Filtrar POIs elegíveis e reotimizar a janela restante via ``OPTWSolver``."""
         excluded_ids = set(excluded_pois)
@@ -219,16 +222,63 @@ class ReplanningService:
             for stop in itinerary.stops
             if stop.poi.id not in prefix_ids and stop.poi.id not in excluded_ids
         ]
-        solver_window = TimeWindow(
-            start_time=availability_window.start, end_time=window_end
+        selected: list[StopUnion] = []
+        for start, end in ReplanningService._free_windows(
+            replan_start, window_end, reserved_stops, reserved_meal_slots
+        ):
+            solver_window = TimeWindow(start_time=start.time(), end_time=end.time())
+            segment = OPTWSolver.replan_remaining(
+                candidates,
+                solver_window,
+                travel_time_minutes,
+                start_time=start,
+                visit_durations=duration_adjustments,
+                start_location=coordinates,
+            )
+            selected.extend(segment.stops)
+            selected_ids = {stop.poi.id for stop in segment.stops}
+            candidates = [poi for poi in candidates if poi.id not in selected_ids]
+        return Itinerary(stops=selected, start_location=coordinates)
+
+    @staticmethod
+    def _free_windows(
+        replan_start: datetime,
+        window_end: time,
+        reserved_stops: Sequence[StopUnion],
+        reserved_meal_slots: Sequence[TimeWindow],
+    ) -> list[tuple[datetime, datetime]]:
+        """Obter intervalos livres entre paradas futuras reservadas."""
+        limit = datetime.combine(replan_start.date(), window_end)
+        cursor = replan_start
+        free_windows: list[tuple[datetime, datetime]] = []
+        reserved_ranges = [
+            ReplanningService._stop_interval(stop, cursor.date()) for stop in reserved_stops
+        ]
+        reserved_ranges.extend(
+            (
+                datetime.combine(cursor.date(), slot.start),
+                datetime.combine(cursor.date(), slot.end),
+            )
+            for slot in reserved_meal_slots
         )
-        return OPTWSolver.replan_remaining(
-            candidates,
-            solver_window,
-            travel_time_minutes,
-            start_time=replan_start,
-            visit_durations=duration_adjustments,
-            start_location=coordinates,
+        for reserved_start, reserved_end in sorted(reserved_ranges):
+            if reserved_end <= cursor or reserved_start >= limit:
+                continue
+            if reserved_start > cursor:
+                free_windows.append((cursor, reserved_start))
+            cursor = max(cursor, reserved_end)
+        if cursor < limit:
+            free_windows.append((cursor, limit))
+        return free_windows
+
+    @staticmethod
+    def _stop_interval(stop: StopUnion, day: date) -> tuple[datetime, datetime]:
+        """Obter intervalo da parada reservada no Dia de Viagem atual."""
+        start = stop.start
+        end = stop.end
+        return (
+            start if isinstance(start, datetime) else datetime.combine(day, start),
+            end if isinstance(end, datetime) else datetime.combine(day, end),
         )
 
     @staticmethod
