@@ -18,24 +18,34 @@ from src.core.domain.models import (
     TimeWindow,
     UrbanMode,
 )
+from src.core.services.preferences import PreferencesService
 from src.core.services.schedule import ScheduleService
 
 __all__ = [
+    "DEFAULT_TRAVEL_TIME_MINUTES",
+    "DEFAULT_URBAN_SPEED_KMH",
     "OPTWSolver",
     "estimate_transit_minutes",
     "haversine_distance_km",
     "urban_mode_speed_kmh",
 ]
 
+DEFAULT_TRAVEL_TIME_MINUTES: Final[float] = 15.0
+"""Custo de Deslocamento padrão entre Pontos de Interesse do Roteiro, em minutos."""
+
+DEFAULT_URBAN_SPEED_KMH: Final[float] = 25.0
+"""Velocidade média padrão dos Deslocamentos urbanos, em km/h."""
+
 _URBAN_MODE_SPEED_KMH: Final[Mapping[UrbanMode, float]] = {
     UrbanMode.WALKING: 5.0,
-    UrbanMode.DRIVING: 25.0,
+    UrbanMode.DRIVING: DEFAULT_URBAN_SPEED_KMH,
 }
 
 
 def urban_mode_speed_kmh(mode: UrbanMode) -> float:
     """Retorna a velocidade média, em km/h, do Deslocamento no Modal Urbano informado."""
     return _URBAN_MODE_SPEED_KMH[mode]
+
 
 def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
     """Calcula a distância ortodrômica entre duas coordenadas geográficas em quilômetros."""
@@ -54,7 +64,7 @@ def haversine_distance_km(coord1: Coordinates, coord2: Coordinates) -> float:
 
 
 def estimate_transit_minutes(
-    coord1: Coordinates, coord2: Coordinates, speed_kmh: float = 25.0
+    coord1: Coordinates, coord2: Coordinates, speed_kmh: float = DEFAULT_URBAN_SPEED_KMH
 ) -> int:
     """Estima o tempo de deslocamento em minutos considerando velocidade média urbana."""
     dist = haversine_distance_km(coord1, coord2)
@@ -100,8 +110,13 @@ class OPTWSolver:
     janela diária e slots reservados para refeições e pausas temáticas.
     """
 
-    def __init__(self, transit_speed_kmh: float = 25.0) -> None:
-        """Inicializar o solver com a velocidade média usada nos Deslocamentos urbanos."""
+    def __init__(
+        self,
+        preferences_service: PreferencesService,
+        transit_speed_kmh: float = DEFAULT_URBAN_SPEED_KMH,
+    ) -> None:
+        """Inicializar o solver com o serviço de preferências e a velocidade injetados."""
+        self.preferences_service = preferences_service
         self.transit_speed_kmh = transit_speed_kmh
 
     def solve(
@@ -150,7 +165,7 @@ class OPTWSolver:
     def replan_remaining(
         candidate_pois: list[POI],
         availability_window: TimeWindow,
-        travel_time_minutes: float = 15.0,
+        travel_time_minutes: float = DEFAULT_TRAVEL_TIME_MINUTES,
         start_time: datetime | None = None,
         visit_durations: Mapping[str, int] | None = None,
         start_location: Coordinates | None = None,
@@ -185,11 +200,9 @@ class OPTWSolver:
     def _prepare_candidates(
         self, candidates: List[POI], preferences: Optional[PreferencesProfile]
     ) -> List[POI]:
-        if preferences is not None:
-            from src.core.services.preferences import PreferencesService
-
-            return PreferencesService().apply_preference_weights(candidates, preferences)
-        return candidates
+        if preferences is None:
+            return candidates
+        return self.preferences_service.apply_preference_weights(candidates, preferences)
 
     def _convert_reserved_slots(
         self, reserved_slots: Optional[List[TimeWindow]]

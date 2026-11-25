@@ -52,9 +52,9 @@ class PinnedIPBackend(httpcore.SyncBackend):
 class PinnedIPTransport(httpx.HTTPTransport):
     """Transporte HTTP com pinning de endereço IP para prevenir TOCTOU / DNS rebinding."""
 
-    def __init__(self, pinned_ip: str, **kwargs: object) -> None:
+    def __init__(self, pinned_ip: str) -> None:
         """Inicializa o transporte substituindo o pool padrão por um backend com IP fixado."""
-        super().__init__(**kwargs)  # type: ignore[arg-type]
+        super().__init__()
         self._pool = httpcore.ConnectionPool(
             ssl_context=self._pool._ssl_context,
             network_backend=PinnedIPBackend(pinned_ip),

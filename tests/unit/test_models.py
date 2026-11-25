@@ -22,7 +22,7 @@ DEPARTURE_DATETIME = datetime(2026, 11, 20, 8, 0, tzinfo=timezone.utc)
 def test_intercityconnection_requires_departure_datetime():
     """Garante que departure_datetime é obrigatório para InterCityConnection."""
     with pytest.raises(ValidationError):
-        InterCityConnection(origin="A", destination="B", modal="flying")
+        InterCityConnection(modal="flying")
 
 
 @pytest.mark.parametrize(
@@ -40,8 +40,6 @@ def test_intercityconnection_requires_departure_datetime():
 def test_intercityconnection_defaults_boarding_cutoff_per_modal(modal, expected_cutoff):
     """Valida o valor default de margem de embarque por modal."""
     connection = InterCityConnection(
-        origin="A",
-        destination="B",
         modal=modal,
         departure_datetime=DEPARTURE_DATETIME,
     )
@@ -64,14 +62,27 @@ def test_intercityconnection_defaults_boarding_cutoff_when_modal_omitted_or_none
 def test_intercityconnection_respects_explicit_boarding_cutoff():
     """Verifica que a margem de embarque explícita é respeitada."""
     connection = InterCityConnection(
-        origin="A",
-        destination="B",
         modal="flying",
         departure_datetime=DEPARTURE_DATETIME,
         boarding_cutoff_minutes=45,
     )
 
     assert connection.boarding_cutoff_minutes == 45
+
+
+@pytest.mark.requirement("RF09")
+def test_intercityconnection_canonical_modal_wins_over_legacy_mode() -> None:
+    """O modal canônico prevalece sobre o campo legado sem duplicar estado."""
+    connection = InterCityConnection(
+        departure_datetime=DEPARTURE_DATETIME,
+        mode=TransportMode.FLYING,
+        modal="transit",
+    )
+
+    assert connection.modal == "transit"
+    assert connection.mode == "transit"
+    assert connection.boarding_cutoff_minutes == 30
+    assert "mode" not in connection.__dict__
 
 
 @pytest.mark.parametrize(

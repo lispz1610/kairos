@@ -11,6 +11,7 @@ from src.adapters.http.safe_fetcher import (
 )
 from src.adapters.places import OfflineReplayPlacesAdapter
 from src.core.ports.fetcher import SSRFValidationError, UrlFetcherPort
+from src.core.services.curation import CurationService
 from src.core.services.link_parser import LinkParserService
 
 # ---------------------------------------------------------------------------
@@ -19,15 +20,13 @@ from src.core.services.link_parser import LinkParserService
 
 
 @pytest.mark.requirement("RF05")
-def test_link_parser_service_requires_fetcher_for_network_calls() -> None:
-    """Verifica que operações de rede falham sem um buscador configurado."""
-    parser = LinkParserService(fetcher=None)
+def test_link_parser_service_requires_explicit_dependencies() -> None:
+    """Verifica que o construtor exige as dependências, sem estados parcialmente nulos."""
+    with pytest.raises(TypeError):
+        LinkParserService()
 
-    with pytest.raises(RuntimeError, match="Fetcher não configurado"):
-        parser.validate_url_safety("https://example.com")
-
-    with pytest.raises(RuntimeError, match="Fetcher não configurado"):
-        parser.fetch_url_content("https://example.com")
+    with pytest.raises(TypeError):
+        LinkParserService(fetcher=MagicMock(spec=UrlFetcherPort))
 
 
 @pytest.mark.requirement("RF05")
@@ -36,7 +35,9 @@ def test_link_parser_service_delegates_to_fetcher_port() -> None:
     mock_fetcher = MagicMock(spec=UrlFetcherPort)
     mock_fetcher.fetch_url.return_value = "<html>Content with Coffee Lab</html>"
 
-    parser = LinkParserService(fetcher=mock_fetcher)
+    parser = LinkParserService(
+        fetcher=mock_fetcher, curation_service=MagicMock(spec=CurationService)
+    )
     parser.validate_url_safety("https://example.com/guide")
     mock_fetcher.validate_url_safety.assert_called_once_with("https://example.com/guide")
 
@@ -81,7 +82,9 @@ def test_ssrf_validator_blocks_forbidden_urls(
 ) -> None:
     """Verifica que o validador SSRF rejeita URLs proibidas com a mensagem esperada."""
     fetcher = SafeHttpFetcher()
-    parser = LinkParserService(fetcher=fetcher)
+    parser = LinkParserService(
+        fetcher=fetcher, curation_service=MagicMock(spec=CurationService)
+    )
 
     with pytest.raises(SSRFValidationError, match=expected_error_fragment):
         parser.validate_url_safety(invalid_url)
@@ -113,7 +116,9 @@ def test_fetch_url_content_valid_simulation(
 ) -> None:
     """Verifica que o conteúdo buscado contém o trecho esperado."""
     fetcher = SafeHttpFetcher()
-    parser = LinkParserService(fetcher=fetcher)
+    parser = LinkParserService(
+        fetcher=fetcher, curation_service=MagicMock(spec=CurationService)
+    )
 
     safe_addr = [(None, None, None, None, ("93.184.216.34", 80))]
     with patch("socket.getaddrinfo", return_value=safe_addr):
@@ -132,7 +137,9 @@ def test_fetch_url_content_valid_simulation(
 def test_fetch_url_content_size_limit_exceeded() -> None:
     """Verifica que conteúdo acima do limite máximo é rejeitado."""
     fetcher = SafeHttpFetcher(max_content_bytes=1_000_000)
-    parser = LinkParserService(fetcher=fetcher)
+    parser = LinkParserService(
+        fetcher=fetcher, curation_service=MagicMock(spec=CurationService)
+    )
 
     safe_addr = [(None, None, None, None, ("93.184.216.34", 80))]
     with patch("socket.getaddrinfo", return_value=safe_addr):
@@ -156,7 +163,9 @@ def test_fetch_url_content_size_limit_exceeded() -> None:
 def test_dns_rebinding_simulation_dual_homed_host_is_rejected() -> None:
     """Se o DNS responder com múltiplos IPs e um deles for privado, deve rejeitar."""
     fetcher = SafeHttpFetcher()
-    parser = LinkParserService(fetcher=fetcher)
+    parser = LinkParserService(
+        fetcher=fetcher, curation_service=MagicMock(spec=CurationService)
+    )
 
     # DNS retorna IP público E IP privado (tentativa de DNS rebinding)
     mixed_addr = [
@@ -227,18 +236,14 @@ def test_fetch_url_rejects_http_redirects() -> None:
 
 
 @pytest.mark.requirement("RF05")
-def test_link_parser_service_requires_curation_service_for_extraction() -> None:
-    """Verifica que a extração falha sem CurationService ou PlacesPort configurados."""
-    parser = LinkParserService()
-
-    with pytest.raises(RuntimeError, match="CurationService não configurado"):
-        parser.extract_places_from_text("Coffee Lab em São Paulo")
-
-
-@pytest.mark.requirement("RF05")
 def test_text_extraction_identifies_matching_places() -> None:
     """Verifica a extração de Pontos de Interesse mencionados em texto livre."""
-    parser = LinkParserService(places_port=OfflineReplayPlacesAdapter())
+    parser = LinkParserService(
+        fetcher=MagicMock(spec=UrlFetcherPort),
+        curation_service=CurationService(
+            places_port=OfflineReplayPlacesAdapter()
+        ),
+    )
     sample_article = """
     Guia de São Paulo:
     Não deixe de visitar o Coffee Lab na Vila Madalena para provar cafés incríveis.

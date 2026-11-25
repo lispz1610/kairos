@@ -6,6 +6,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, List, Optional
 
+import httpx
+
 from src.adapters.places.offline_adapter import OfflineReplayPlacesAdapter
 from src.core.domain.models import POI, Coordinates, CurationList
 from src.core.ports.places import PlacesPort
@@ -107,8 +109,6 @@ class CachedPlacesAdapter(PlacesPort):
         self, query: str, city_name: Optional[str] = None
     ) -> List[POI]:
         try:
-            import httpx
-
             search_text = f"{query} {city_name}".strip() if city_name else query
             url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
             params = {"query": search_text, "key": self.api_key}

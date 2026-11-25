@@ -31,6 +31,7 @@ from src.core.domain.models import (
     TimeWindow,
 )
 from src.core.services.replanning import ReplanningService, ReplanResult
+from src.core.solvers.optw import DEFAULT_TRAVEL_TIME_MINUTES
 
 __all__ = [
     "ContingencyEvent",
@@ -147,7 +148,7 @@ def orchestrate_trip_replan(
     reserved_meal_slots: Sequence[TimeWindow] = (),
     excluded_pois: Sequence[str] = (),
     intercity_connection: InterCityConnection | None = None,
-    travel_time_minutes: float = 15.0,
+    travel_time_minutes: float = DEFAULT_TRAVEL_TIME_MINUTES,
 ) -> ReplanResult:
     """Aplicar sequência de Eventos de Contingência e executar o Replanejamento."""
     effective_time = current_time

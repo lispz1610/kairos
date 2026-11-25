@@ -5,6 +5,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from src.core.domain.models import POI, Coordinates, TimeWindow
+from src.core.services.preferences import PreferencesService
 from src.core.solvers.optw import OPTWSolver
 
 
@@ -43,7 +44,7 @@ def test_optw_itinerary_never_exceeds_availability_window(
         for i in range(num_pois)
     ]
 
-    solver = OPTWSolver()
+    solver = OPTWSolver(preferences_service=PreferencesService())
     itinerary = solver.solve(
         start_location=start_loc,
         end_location=end_loc,
@@ -107,7 +108,7 @@ def test_optw_itinerary_never_collides_with_reserved_slots(
         for i in range(num_pois)
     ]
 
-    solver = OPTWSolver()
+    solver = OPTWSolver(preferences_service=PreferencesService())
     itinerary = solver.solve(
         start_location=start_loc,
         end_location=end_loc,
