@@ -310,17 +310,140 @@ O resultado da consolidação arquitetural (`#103` / `PR #118`) demonstra com ev
 
 ---
 
-<!-- section:vv-iso:start -->
 ## Verificação & Validação, Pirâmide de Testes e Normas ISO
 
-> **Nota:** Esta seção preserva os mecanismos automatizados de qualidade vigentes no repositório e será expandida com o guia didático completo de Verificação & Validação (V&V), Pirâmide de Testes, visões Caixa-Branca/Caixa-Preta, princípios FIRST e padrão AAA pela entrega `#121`.
+No contexto da **Unidade 11 de DCC061**, a estratégia de qualidade do Kairos articula **Verificação & Validação (V&V)**, **Pirâmide de Testes**, técnicas de **Caixa-Branca** e **Caixa-Preta**, **Princípios FIRST**, padrão **AAA (*Arrange–Act–Assert*)** e automação contínua alinhada às normas **ISO/IEC 25010**, **ISO/IEC 5055** e **ISO/IEC/IEEE 29119**.
 
-O projeto adota práticas alinhadas a padrões internacionais de engenharia de software:
-- **ISO/IEC 25010**: Avaliação de qualidade de produto (Adequação Funcional, Confiabilidade, Segurança, Manutenibilidade e Testabilidade via Ports & Adapters). Contratos `ARQ-1` (camadas hexagonais) e `ARQ-2` (núcleo sem dependências de I/O/web) são verificados por `import-linter`.
-- **ISO/IEC/IEEE 29119**: Estruturação de processos e casos de testes formais (Unitários, Integração e Property-Based Testing com `hypothesis`); o gate `./verify_quality.sh` verifica a rastreabilidade RF × teste, a matriz com `--check` e a coerência docs-as-code em cada execução, local e no CI.
-- **ISO/IEC 5055**: Métricas estáticas automatizadas (cobertura `pytest-cov ≥ 85%`, complexidade sintática `< 10` calculada por AST em `scripts/quality_cli_common.py`, complexidade ciclomática reportada por `radon`, `C901`/`PLR0911`/`PLR0912`/`PLR0913` no `ruff`, tipagem estática rigorosa com `mypy --strict`, segurança com `bandit`/`pip-audit`, volume e índice de manutenibilidade com `radon raw`/`radon mi`, código morto com `vulture` e teste de mutação com `mutmut` em `src/core/`). Inventário AST, parsers de saídas e limiares têm implementação única no módulo compartilhado; o coletor é a única fonte de cálculo.
+### Verificação vs. Validação no Ciclo do Kairos
 
-O gate grava as saídas das ferramentas em um diretório temporário e o coletor `scripts/collect_quality_metrics.py` produz `reports/quality-metrics.json` e `reports/quality-metrics.md`, agrupando as evidências por característica da ISO/IEC 25010 e pelas métricas da ISO/IEC 5055 (quando executado isoladamente, o coletor usa `reports/tool-output/` como diretório padrão de entradas). O gate invoca o coletor com `--check`: o mesmo relatório alimenta o resumo de console e a verificação de limiares, sem parsers em `awk` ou cálculo duplicado em shell. No modo rápido o campo de mutação é registrado como **não executado**; `bash ./verify_quality.sh --full` mede o *mutation score* sem impor meta mínima nesta entrega. `pip-audit` segue política de aviso (não bloqueia o gate) para funcionar também em runner `self-hosted` com conectividade restrita; `vulture` é informativo. Os workflows de quality gate e o job `status-check` do CI Python executam em runners `[self-hosted, Linux, X64]`.
+Embora complementares, **Verificação** e **Validação** respondem a perguntas distintas sobre os artefatos do projeto:
 
-Os quatro CLIs de qualidade (`scripts/validate_traceability.py`, `scripts/generate_traceability_matrix.py`, `scripts/validate_docs_as_code.py` e `scripts/collect_quality_metrics.py`) importam `scripts/quality_cli_common.py` por importação normal: leitura UTF-8, seções `##`, resolução de caminhos, coleta de marcadores `requirement`/títulos RFxx, inventário estrutural por AST (módulos, classes, funções/métodos, docstrings e complexidade por camada), parsers das saídas estáticas, resumo e limiares têm uma única implementação, sem mutar o path de imports nem suprimir avisos de lint. Cada CLI continua disponível como `python scripts/<cli>.py ...` e também como `python -m scripts.<cli> ...`.
-<!-- section:vv-iso:end -->
+| Dimensão | Pergunta-Guia | Foco no Kairos | Evidências Verificáveis no Repositório |
+| --- | --- | --- | --- |
+| **Verificação** | *"Estamos construindo o produto corretamente?"* | Conformidade técnica frente à especificação (`RF01`–`RF14`), contratos arquiteturais (`ARQ-1`/`ARQ-2`), invariantes temporais e limiares estáticos/dinâmicos. | Suíte automatizada (`275` testes `pytest` + `3` testes `node:test`), `ruff`, `mypy --strict`, `import-linter`, `radon`, `bandit`, validadores de rastreabilidade/`docs-as-code`, `mutmut` (`--full`) e [`./verify_quality.sh`](./verify_quality.sh). |
+| **Validação** | *"Estamos construindo o produto certo?"* | Adequação real às necessidades do viajante multicidades e aos critérios acadêmicos da banca da disciplina DCC061 em ambiente reproduzível. | Execução interativa da aplicação web em **Modo Offline Replay** ([ADR 0005](./docs/adr/0005-modo-offline-replay-credenciais.md)) com catálogos de São Paulo e Lima, simulação de **Eventos de Contingência**, prévia visual do **Deslocamento em Cascata**, exportação em Markdown e aderência ao [`GLOSSARY.md`](./GLOSSARY.md). |
+
+Na prática dos fluxos centrais do Kairos, essa distinção torna-se concreta:
+- **Otimização e Replanejamento**: a *Verificação* comprova via `tests/unit/test_optw_solver.py`, `tests/unit/test_replanning_service.py` e `tests/property/test_optw_properties.py` que nenhum **Ponto de Interesse (POI)** viola a **Janela de Disponibilidade**, a **Janela de Funcionamento** ou um **Slot de Refeição** reservado; a *Validação* confirma com o usuário/banca que, ao acionar um atraso ou fechamento na linha do tempo da interface web, o **Roteiro** restante se reorganiza preservando visitas já concluídas e alertando riscos sobre a **Conexão Interurbana** (`InterCityRiskAlert`).
+- **Curadoria e Modo Offline Replay**: a *Verificação* assegura que [`CachedPlacesAdapter`](./src/adapters/places/cached_adapter.py) e [`SafeHttpFetcher`](./src/adapters/http/safe_fetcher.py) respeitam contratos `PlacesPort`/`UrlFetcherPort`, bloqueiam URLs privadas (SSRF) e mantêm caches SQLite isolados; a *Validação* permite que qualquer avaliador execute o servidor sem `GOOGLE_MAPS_API_KEY` e percorra **Viagens** reais em São Paulo e Lima a partir de [`src/adapters/places/fixtures/catalog.json`](./src/adapters/places/fixtures/catalog.json).
+
+---
+
+### Pirâmide de Testes do Kairos
+
+A suíte automatizada conta com **`275` testes `pytest`** distribuídos em **`38` arquivos Python** sob [`tests/`](./tests/), complementados por **`3` verificações JavaScript** (`node:test` via `node:vm` em [`tests/integration/web_replan_behavior.cjs`](./tests/integration/web_replan_behavior.cjs)), pela etapa de **Mutação** (`mutmut` restrito a `src/core/` no modo `--full`) e pela **Validação Alfa** em **Modo Offline Replay**:
+
+```mermaid
+flowchart TD
+    ALPHA["Validação Alfa (Offline Replay — ADR 0005)<br/>Avaliação acadêmica ponta a ponta com catalog.json (São Paulo e Lima) sem credenciais"]
+    MUT["Mutação (src/core/ via mutmut --full)<br/>Avalia a eficácia das asserções com KAIROS_MUTATION=1"]
+    PROP["Sistema / Propriedade e Especificação (3 arquivos / 5 propriedades + 2 specs / 13 testes)<br/>tests/property/ (hypothesis) + tests/test_requirement_marker_spec.py + tests/test_ticket_34_spec.py"]
+    INT["Integração (10 arquivos Python / 74 testes pytest + 3 testes node:test)<br/>tests/integration/ (FastAPI TestClient + web_replan_behavior.cjs via node:vm)"]
+    UNIT["Unidade (23 arquivos / 183 testes pytest)<br/>tests/unit/ (domínio, serviços, eventos, solver OPTW, contratos AST/CLI/glossário)"]
+
+    ALPHA --> MUT
+    MUT --> PROP
+    PROP --> INT
+    INT --> UNIT
+```
+
+| Camada da Pirâmide | Localização e Volume | Escopo e Exemplos Concretos no Repositório |
+| --- | --- | --- |
+| **Unidade** | [`tests/unit/`](./tests/unit/) — **23 arquivos, 183 testes** | Modelos e regras de domínio em [`tests/unit/test_domain_trip.py`](./tests/unit/test_domain_trip.py) (**Dia de Troca de Hospedagem**, **Modal Urbano** `walking`/`driving`), [`tests/unit/test_models.py`](./tests/unit/test_models.py) (`InterCityConnection`, **Margem de Embarque** `120`/`30` e `modal` canônico sobre `mode`), eventos (`test_events.py`), serviços (`test_curation_service.py`, `test_dining_and_budget.py`, `test_link_parser_service.py`, `test_markdown_export.py`, `test_preferences_service.py`, `test_replanning_service.py`, `test_schedule_service.py`), solver `OPTWSolver` (`test_optw_solver.py`, incluindo invariantes internos), contratos hexagonais (`test_hexagonal_contracts.py`), perfil do Hypothesis (`test_hypothesis_profile.py`), aderência estrita da interface ao [`GLOSSARY.md`](./GLOSSARY.md) ([`tests/unit/test_index_html_vocabulary.py`](./tests/unit/test_index_html_vocabulary.py)) e validadores/CLIs de qualidade (`test_collect_quality_metrics.py`, `test_docs_as_code_validator.py`, `test_quality_cli_shared_imports.py`, `test_quality_gate_validators.py`, `test_quality_metric_contracts.py`, `test_traceability_matrix_generator.py`, `test_traceability_validator.py`). |
+| **Integração** | [`tests/integration/`](./tests/integration/) — **10 arquivos Python (`74` testes `pytest`) + `web_replan_behavior.cjs` (`3` testes `node:test`)** | Contratos HTTP ponta a ponta via FastAPI `TestClient` compondo controllers, serviços, `OPTWSolver` e adaptadores: `test_optimize_api.py`, `test_trip_replan_endpoint.py`, `test_schedule_api.py`, `test_trip_backup_api.py`, [`tests/integration/test_curation_api.py`](./tests/integration/test_curation_api.py), `test_dining_api.py`, `test_import_link_api.py`, `test_export_markdown_api.py` e `test_web_app.py` (contratos HTML/DTO). Em JavaScript, [`tests/integration/test_web_replan_behavior.py`](./tests/integration/test_web_replan_behavior.py) aciona `node --test` sobre [`tests/integration/web_replan_behavior.cjs`](./tests/integration/web_replan_behavior.cjs) (`node:vm`), validando o `TripDay` inicial, o envio de `reserved_meal_slots`/`reserved_future_stops` no **Replanejamento** e a preservação de horário local sob `TZ=America/Sao_Paulo`. |
+| **Sistema / Propriedade e Especificação** | [`tests/property/`](./tests/property/) — **3 arquivos, 5 testes `hypothesis`** + **2 arquivos na raiz (`13` testes)** | [`tests/property/test_optw_properties.py`](./tests/property/test_optw_properties.py) (`2` propriedades: extensão temporal e visitas contidas na **Janela de Disponibilidade**; ausência formal de colisão com slots reservados), [`tests/property/test_preferences_properties.py`](./tests/property/test_preferences_properties.py) (`1` propriedade: monotonicidade da **Pontuação de Utilidade** no **Perfil de Preferência**) e [`tests/property/test_ripple_shift_properties.py`](./tests/property/test_ripple_shift_properties.py) (`2` propriedades: preservação de extensão relativa e sequência futura de **POIs** no **Deslocamento em Cascata**; idempotência de round-trip JSON da **Viagem** e do **Dia de Troca de Hospedagem**). Na raiz, `tests/test_requirement_marker_spec.py` (`6` testes do marcador `@pytest.mark.requirement`) e `tests/test_ticket_34_spec.py` (`7` testes de contrato documental de `InterCityConnection` e `ScheduleService`). |
+| **Mutação** | Alvo: `src/core/` (`bash ./verify_quality.sh --full`) | Executa `mutmut` sobre o núcleo hexagonal em workspace isolado com `KAIROS_MUTATION=1`, medindo a sensibilidade das asserções unitárias e de propriedade frente a mutantes injetados (sem meta mínima automática nesta entrega; no gate rápido registra `"not run"` / `"não executado"`). |
+| **Validação Alfa** | **Modo Offline Replay** ([ADR 0005](./docs/adr/0005-modo-offline-replay-credenciais.md)) | Sem `GOOGLE_MAPS_API_KEY`, `create_places_adapter()` acopla `OfflineReplayPlacesAdapter` ao catálogo determinístico [`src/adapters/places/fixtures/catalog.json`](./src/adapters/places/fixtures/catalog.json) (São Paulo e Lima), permitindo avaliação ponta a ponta da banca DCC061 sem dependências externas. |
+
+> **Escopo declarado de interface web**: conforme o [ADR 0002](./docs/adr/0002-stack-backend-python-fastapi.md) e o [Plano de Testes ISO/IEC/IEEE 29119](./docs/testing/test-plan-29119.md), o projeto evita a sobrecarga de automação de navegador (Selenium/Playwright), cobrindo o frontend por contratos HTTP (`TestClient`), inspeção estrutural/vocabular do HTML servido e execução isolada da lógica JavaScript via `node:vm`.
+
+---
+
+### Visões Caixa-Branca e Caixa-Preta
+
+| Perspectiva | Técnicas e Ferramentas no Kairos | Exemplos Verificados e Limiares |
+| --- | --- | --- |
+| **Caixa-Branca (*White-Box*)** | Análise estrutural interna de fluxos, cobertura de instruções, tipagem, contratos entre camadas e mutação. | • **Cobertura (`pytest-cov`)**: mínimo bloqueante `≥ 85%`, medição observada de **`96,0%`** no coletor consolidado (`1692` de `1768` instruções em `src/`).<br/>• **Complexidade (`radon cc` + AST)**: teto sintático e ciclomático **`< 10`** (máxima medida `9` em `src/core/` e `7` em `src/adapters/`, média `2.9`, `0` funções em `10+`), reforçado pelo `ruff` (`C901`, `PLR0911`, `PLR0912`, `PLR0913`).<br/>• **Tipagem e Estilo**: `mypy --strict src` (`0` erros em `30` módulos) e `ruff check src tests` (`0` violações).<br/>• **Contratos Hexagonais (`import-linter`)**: `ARQ-1` e `ARQ-2` (`2` contratos mantidos, `0` rompidos sobre `53` arquivos / `136` dependências).<br/>• **Segurança, Código Morto e Mutação**: `bandit -q -r src -ll -s B104` (`0` achados), `vulture` informativo (`0` achados) e `mutmut` em `src/core/` (`--full`). |
+| **Caixa-Preta (*Black-Box*)** | Derivação de casos pela especificação e interfaces públicas sem acoplamento à implementação interna. | • **Particionamento em Classes de Equivalência**: perfis alimentares (`budget`, `moderate`, `fine_dining` em `test_budget_calculation_varies_by_food_profile`), seis categorias temáticas do **Perfil de Preferência** (`test_all_six_preference_categories_modulate_utility`), URLs proibidas contra SSRF (`file://`, `ftp://`, `127.0.0.1`, redes privadas em `test_ssrf_validator_blocks_forbidden_urls` e `test_import_link_ssrf_protection_returns_400`), e os quatro tipos de **Evento de Contingência** (`delay`, `closure`, `skip`, `duration_adjustment`).<br/>• **Análise de Valor Limite**: limiar inclusivo `>= 5` na escala `0`–`10` do **Perfil de Preferência** para disparar **Slots de Refeição** temáticos (`test_contextual_dining_slots_includes_thematic_slots_at_intensity_five` em `tests/integration/test_dining_api.py`), **Margem de Embarque** padrão (`120` min para `flying` vs. `30` min para `driving`/`transit` e fallback em `tests/unit/test_models.py`), limites da **Janela de Disponibilidade** (`start_time`, `end_time`, `duration_minutes`), contagem de viajantes (`{1, 2, 4}`) e fronteira de **Modal Urbano** (`walking`/`driving` aceitos; `flying`/`transit` rejeitados com HTTP `422` em `test_optimize_rejects_flying_and_transit` e `test_trip_day_rejects_flying_and_transit`).<br/>• **Contratos HTTP/HTML e Invariantes**: validação estrita de backup em `POST /api/trip/backup/validate` (`test_trip_backup_api.py`), contratos do HTML (`test_web_app.py`, `test_index_html_vocabulary.py`) e propriedades universais em `tests/property/`. |
+
+---
+
+### Princípios FIRST na Prática
+
+Cada camada da suíte materializa os cinco critérios **FIRST** para manter feedback confiável em desenvolvimento local e CI:
+
+- **F — *Fast* (Rápido)**: os `275` testes `pytest` e `3` testes `node:test` executam integralmente em memória e SQLite efêmero, sem chamadas à Google Maps API ou navegador real; o estágio pesado de mutação (`mutmut`) fica segregado em `--full`.
+- **I — *Isolated / Independent* (Isolado / Independente)**:
+  - Em [`tests/integration/test_curation_api.py`](./tests/integration/test_curation_api.py), a *fixture* `isolated_places_adapter(monkeypatch, tmp_path)` com `autouse=True` instancia um banco SQLite exclusivo por teste (`tmp_path / "places.db"`) e fecha `_conn` no *teardown*; a independência entre execuções e entre *threads* concorrentes é comprovada por `test_places_cache_is_independent_between_cases` e `test_concurrent_places_caches_remain_isolated` (`ThreadPoolExecutor(max_workers=2)` com `Barrier(2)`).
+  - Os testes de contrato e CLI (`test_hexagonal_contracts.py`, `test_quality_gate_validators.py`, `test_collect_quality_metrics.py`) operam sobre árvores sintéticas em `tmp_path` sem alterar o repositório.
+  - Em [`tests/conftest.py`](./tests/conftest.py), o perfil `kairos_sem_prazo` (`deadline=None` do Hypothesis) é registrado e carregado **somente** quando `KAIROS_MUTATION=1`, preservando prazos normais nas execuções locais e no gate rápido (contrato garantido por `test_hypothesis_profile.py`).
+- **R — *Repeatable* (Repetível)**: o **Modo Offline Replay** (`OfflineReplayPlacesAdapter` + `catalog.json`), o isolamento de `GOOGLE_MAPS_API_KEY` e a fixação explícita de fuso horário (`TZ=America/Sao_Paulo` em `web_replan_behavior.cjs`) garantem os mesmos resultados em qualquer máquina ou *runner*.
+- **S — *Self-Validating* (Auto-validável)**: todo teste termina com asserções determinísticas (`assert`, `pytest.raises`) e o gate consolida pass/fail objetivo via `check_quality_thresholds` em [`scripts/collect_quality_metrics.py`](./scripts/collect_quality_metrics.py) (`--check`).
+- **T — *Timely* (Oportuno)**: casos de teste e marcadores `@pytest.mark.requirement("RFxx")` acompanham cada requisito implementado (`RF01`–`RF14`), com execução obrigatória via `./verify_quality.sh` antes de commits e PRs.
+
+---
+
+### Padrão AAA (*Arrange–Act–Assert*)
+
+Os testes de unidade e integração seguem explicitamente a anatomia **Arrange–Act–Assert (AAA)** — separando preparação do cenário, execução da operação sob teste e verificação das pós-condições. O exemplo abaixo espelha diretamente `test_budget_calculation_consolidates_lodging_and_food` (`tests/unit/test_dining_and_budget.py`):
+
+```python
+def test_budget_calculation_consolidates_lodging_and_food() -> None:
+    # Arrange: prepara Hospedagem, Etapa de Viagem (3 dias) e Viagem
+    hotel_sp = Accommodation(
+        id="h-sp",
+        name="Hotel SP",
+        location=Coordinates(latitude=-23.55, longitude=-46.66),
+        real_daily_rate=400.0,
+    )
+    stage_sp = TripStage.create(
+        id="stage-sp",
+        city_name="São Paulo",
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 4),
+        base_accommodation=hotel_sp,
+    )
+    trip = Trip(id="trip-1", title="Viagem SP", stages=[stage_sp])
+    service = DiningService()
+
+    # Act: executa o cálculo da Estimativa de Gastos sob perfil alimentar moderado
+    budget = service.calculate_trip_budget(trip, food_profile="moderate")
+
+    # Assert: valida totais de Hospedagem, alimentação e decomposição por Etapa de Viagem
+    assert budget.total_accommodation_cost == 1200.0
+    assert budget.total_dining_cost == 540.0
+    assert budget.total_trip_cost == 1740.0
+    assert "stage-sp" in budget.stage_breakdowns
+```
+
+O mesmo padrão orienta testes de integração HTTP (ex.: `test_two_delay_events_are_applied_from_the_accumulated_current_time` em `tests/integration/test_trip_replan_endpoint.py`, que prepara o `Itinerary` e dois **Eventos de Contingência** `delay`, envia `POST /api/trip/replan` via `TestClient` e valida `preserved_pois`, horários recalculados, `removed_pois` e `intercity_risk_alert`).
+
+---
+
+### Mapeamento às Normas ISO (25010, 5055 e 29119) e Gate Consolidado
+
+O projeto concretiza três normas internacionais de engenharia de software diretamente nos scripts e relatórios do pipeline:
+
+| Norma | Dimensão / Processo | Como é Concretizada e Verificada no Kairos |
+| --- | --- | --- |
+| **ISO/IEC 25010** *(Qualidade de Produto)* | **Adequação Funcional** | Cobertura `pytest-cov ≥ 85%` (medida **`96,0%`**), invariantes `hypothesis` e rastreabilidade `RF01`–`RF08` obrigatória + `RF09`–`RF14` (`validate_traceability.py`, `generate_traceability_matrix.py --check`). |
+| **ISO/IEC 25010** *(Qualidade de Produto)* | **Confiabilidade** *(Maturidade e Tolerância a Falhas)* | `mypy --strict src` (`0` erros em `30` módulos), **Modo Offline Replay** sem credenciais ([ADR 0005](./docs/adr/0005-modo-offline-replay-credenciais.md)), preservação de histórico/reservas no **Replanejamento** e avaliação por mutação (`mutmut` em `src/core/` no modo `--full`). |
+| **ISO/IEC 25010** *(Qualidade de Produto)* | **Segurança** | Proteção anti-SSRF e fixação de IP em `SafeHttpFetcher` (`PinnedIPTransport`/`PinnedIPBackend`), `bandit -q -r src -ll -s B104` (`0` achados, com `B104` justificado para a *denylist* anti-SSRF) e `pip-audit` (política de aviso). |
+| **ISO/IEC 25010** *(Qualidade de Produto)* | **Manutenibilidade** *(Modularidade, Analisabilidade, Modificabilidade e Testabilidade)* | Contratos hexagonais `ARQ-1` (camadas `adapters` → `core`) e `ARQ-2` (`src.core` sem I/O/web) verificados por `import-linter` (`0` violações), `ruff` (`0` violações), `vulture` informativo (`0` achados), `radon mi`/`radon raw`, inventário estrutural AST e cobertura de docstrings (`68.9%`). |
+| **ISO/IEC 5055** *(Qualidade Estrutural de Código)* | **Complexidade, Volume, Tipagem, Segurança e Arquitetura** | Complexidade sintática `< 10` calculada por AST em [`scripts/quality_cli_common.py`](./scripts/quality_cli_common.py) (máxima medida `9` em `src/core/`, `7` em `src/adapters/`, média `2.9`, `0` funções em `10+`), complexidade ciclomática reportada por `radon cc` (máxima `9`) e regras `C901`/`PLR0911`/`PLR0912`/`PLR0913` no `ruff`; inventário AST (`29` módulos, `58` classes, `50` funções, `143` métodos), índice de manutenibilidade (`radon mi`: média `68.92`, mínimo `7.46`), volume bruto (`radon raw`: `3130` SLOC, `4053` LOC, `2223` LLOC), cobertura (`96.0%`), `mypy --strict`, `bandit`, `import-linter`, `vulture` e `mutmut` (`--full`). |
+| **ISO/IEC/IEEE 29119** *(Processos e Documentação de Teste)* | **29119-2 (Processos) e 29119-3 (Documentação e Técnicas)** | Estratégia em camadas, critérios formais de entrada e saída no gate [`./verify_quality.sh`](./verify_quality.sh), especificação de casos por Classes de Equivalência, Valor Limite e Property-Based Testing em [`docs/testing/test-plan-29119.md`](./docs/testing/test-plan-29119.md), matriz de rastreabilidade sincronizada via `generate_traceability_matrix.py --check` e coerência documental via `validate_docs_as_code.py`. |
+
+#### Operação Unificada do Gate, Coletor e CLIs de Qualidade
+
+- **Gate rápido (`bash ./verify_quality.sh`, 13 etapas)** e **gate completo (`bash ./verify_quality.sh --full`, 14 etapas)**:
+  - O modo rápido executa `ruff check src tests`, `mypy --strict src`, `radon cc -s src`, `pytest --cov=src --cov-report=term-missing --cov-fail-under=85`, `validate_traceability.py`, `generate_traceability_matrix.py --check`, `validate_docs_as_code.py`, `lint-imports` (`ARQ-1` e `ARQ-2`), `bandit -q -r src -ll -s B104`, `vulture` (informativo), `radon mi -s src` / `radon raw -s src`, `pip-audit` (política de aviso, não bloqueia o gate) e `collect_quality_metrics.py --check`.
+  - No modo `--full`, antes da coleta final, executa-se `mutmut` restrito a `src/core/` (em workspace isolado com `KAIROS_MUTATION=1`), medindo o *mutation score* sem impor meta mínima automática nesta entrega.
+- **Coletor unificado ([`scripts/collect_quality_metrics.py`](./scripts/collect_quality_metrics.py))**:
+  - O gate grava as saídas das ferramentas em um diretório temporário e o coletor produz `reports/quality-metrics.json` e `reports/quality-metrics.md`, agrupando as evidências por característica da ISO/IEC 25010 e pelas métricas da ISO/IEC 5055 (quando executado isoladamente, o coletor usa `reports/tool-output/` como diretório padrão de entradas; saídas ausentes são registradas como `"unavailable"` sem inventar zeros).
+  - O gate invoca o coletor com `--check`: o mesmo relatório alimenta o resumo de console e a verificação de limiares (`check_quality_thresholds`), sem parsers em `awk` ou cálculo duplicado em shell. No modo rápido o campo de mutação é registrado como **não executado** (`"not run"`).
+- **Políticas de ambiente e CI**:
+  - `pip-audit` segue política de aviso (não bloqueia o gate) para funcionar também em runner `self-hosted` com conectividade restrita; `vulture` é informativo.
+  - Os workflows [`.github/workflows/quality.yml`](./.github/workflows/quality.yml) e o job `status-check` de [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) executam em runners `[self-hosted, Linux, X64]`.
+- **Módulo compartilhado ([`scripts/quality_cli_common.py`](./scripts/quality_cli_common.py)) e os quatro CLIs**:
+  - Os quatro CLIs de qualidade ([`scripts/validate_traceability.py`](./scripts/validate_traceability.py), [`scripts/generate_traceability_matrix.py`](./scripts/generate_traceability_matrix.py), [`scripts/validate_docs_as_code.py`](./scripts/validate_docs_as_code.py) e [`scripts/collect_quality_metrics.py`](./scripts/collect_quality_metrics.py)) importam `scripts/quality_cli_common.py` por importação normal: leitura UTF-8, seções `##`, resolução de caminhos, coleta de marcadores `requirement`/títulos `RFxx`, inventário estrutural por AST (módulos, classes, funções/métodos, docstrings e complexidade por camada), parsers das saídas estáticas, resumo e limiares têm uma única implementação, sem mutar `sys.path` nem suprimir avisos de lint.
+  - Cada CLI permanece executável diretamente como `python scripts/<cli>.py ...` e como módulo via `python -m scripts.<cli> ...`.
